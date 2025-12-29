@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KickBot Premium Market</title>
+    <link rel="stylesheet" href="shop.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="glow-bg"></div>
+
+    <div id="auth-container" class="glass-panel">
+        <div class="logo">KICK<span>BOT</span></div>
+        <h2>Market Erişimi</h2>
+        <p>Bakiyeni harcamak için hesabını doğrula.</p>
+
+        <div id="step-1">
+            <input type="text" id="username-input" placeholder="Kick Kullanıcı Adın" spellcheck="false">
+            <button id="generate-code-btn" class="primary-btn">Kod Al</button>
+        </div>
+
+        <div id="step-2" class="hidden">
+            <div class="verification-box">
+                <span class="label">Doğrulama Kodu:</span>
+                <div id="auth-code" class="code-display">000000</div>
+            </div>
+            <p class="instruction">Chat'e şunu yaz: <br> <code id="cmd-example">!doğrulama 000000</code></p>
+            <div class="loader"></div>
+            <p class="waiting-text">Onay bekleniyor...</p>
+            <button id="back-btn" class="secondary-btn">Geri Git</button>
+        </div>
+    </div>
+
+    <div id="main-content" class="hidden">
+        <header>
+            <div class="user-profile">
+                <div class="avatar" id="user-avatar">?</div>
+                <div class="user-meta">
+                    <span id="display-name">Misafir</span>
+                    <span id="user-balance" class="balance-pill">0 💰</span>
+                </div>
+            </div>
+            <div class="logo-mini">KICK<span>BOT</span></div>
+            <button id="logout-btn" class="logout-btn">Çıkış</button>
+        </header>
+
+        <section class="hero">
+            <h1>Hoş Geldin, <span id="hero-name">Savaşçı</span></h1>
+            <p>Kazandığın paraları efsanevi güçlere dönüştürme vakti.</p>
+        </section>
+
+        <div class="market-grid">
+            <!-- Market öğeleri JS ile yüklenecek -->
+        </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+    <script src="shop.js"></script>
+</body>
+
+</html>
