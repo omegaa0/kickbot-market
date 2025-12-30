@@ -31,7 +31,7 @@ async function refreshAccessToken() {
         params.append('grant_type', 'client_credentials');
         params.append('client_id', process.env.KICK_CLIENT_ID);
         params.append('client_secret', process.env.KICK_CLIENT_SECRET);
-        params.append('scope', 'chat.message:write chat.message:read');
+        params.append('scope', 'chat:write events:subscribe');
 
         const response = await axios.post('https://id.kick.com/oauth/token', params, {
             headers: {
