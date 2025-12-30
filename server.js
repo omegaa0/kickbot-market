@@ -77,10 +77,16 @@ app.get('/auth/kick/callback', async (req, res) => {
         params.append('client_id', KICK_CLIENT_ID);
         params.append('client_secret', KICK_CLIENT_SECRET);
         params.append('redirect_uri', REDIRECT_URI);
-        params.append('code_verifier', tempAuth.verifier); // PKCE doğrulaması burada yapılıyor
+        params.append('code_verifier', tempAuth.verifier);
+
+        // Bazı Kick API sürümleri Client Secret'ı hem body'de hem de header'da bekleyebilir.
+        const authHeader = Buffer.from(`${KICK_CLIENT_ID}:${KICK_CLIENT_SECRET}`).toString('base64');
 
         const response = await axios.post('https://id.kick.com/oauth/token', params, {
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Authorization': `Basic ${authHeader}`
+            }
         });
 
         const { access_token, refresh_token } = response.data;
