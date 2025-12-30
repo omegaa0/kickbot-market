@@ -31,9 +31,7 @@ function generatePKCE() {
     return { verifier, challenge };
 }
 
-// ---------------------------------------------------------
-// 2. AUTH & DİNAMİK KANAL TESPİTİ (YÜKLENİYOR...)
-// ---------------------------------------------------------
+// 2. AUTH & CALLBACK
 app.get('/login', async (req, res) => {
     const state = crypto.randomBytes(16).toString('hex');
     const { verifier, challenge } = generatePKCE();
@@ -59,12 +57,10 @@ app.get('/auth/kick/callback', async (req, res) => {
         const response = await axios.post('https://id.kick.com/oauth/token', params);
         const { access_token, refresh_token } = response.data;
 
-        // 🔥 DÜZELTİLEN KISIM: 'users' (çoğul) ve veri yolu
         const userRes = await axios.get('https://api.kick.com/public/v1/users', {
             headers: { 'Authorization': `Bearer ${access_token}` }
         });
 
-        // Kick API, users endpointinden bir DİZİ (Array) döndürür.
         const userData = userRes.data.data[0];
         const broadcasterId = userData.user_id;
         const username = userData.name;
@@ -80,14 +76,10 @@ app.get('/auth/kick/callback', async (req, res) => {
         await subscribeToChat(access_token, broadcasterId);
 
         res.send(`<body style='background:#111;color:lime;text-align:center;padding-top:100px;font-family:sans-serif;'>
-            <h1 style='font-size:4rem'>✅ BAŞARILI!</h1>
-            <p style='font-size:1.5rem'>Bot <b>@${username}</b> hesabıyla bağlandı.</p>
-            <p style='color:#888'>Artık kanaldaki chat mesajlarını dinliyor.</p>
+            <h1>✅ BAŞARILI!</h1>
+            <p>Bot <b>@${username}</b> hesabıyla bağlandı.</p>
         </body>`);
-    } catch (e) {
-        console.error("KRİTİK HATA:", e.response?.data || e.message);
-        res.status(500).json({ error: "Giriş başarısız", detay: e.response?.data || e.message });
-    }
+    } catch (e) { res.status(500).json({ error: "Hata", msg: e.message }); }
 });
 
 async function subscribeToChat(token, broadcasterId) {
@@ -103,9 +95,7 @@ async function subscribeToChat(token, broadcasterId) {
     } catch (e) { console.error("Abonelik hatası:", e.response?.data || e.message); }
 }
 
-// ---------------------------------------------------------
-// 3. MESAJ MOTORU
-// ---------------------------------------------------------
+// 3. MESAJ GÖNDERME
 async function sendChatMessage(content) {
     const snap = await db.ref('bot_tokens').once('value');
     const data = snap.val();
@@ -118,44 +108,34 @@ async function sendChatMessage(content) {
         }, {
             headers: { 'Authorization': `Bearer ${data.access_token}` }
         });
-    } catch (e) {
-        if (e.response?.status === 401) {
-            await refreshMyToken();
-            return sendChatMessage(content);
-        }
-    }
+        console.log(`📤 Gönderildi: ${content}`);
+    } catch (e) { console.error("Gönderme Hatası:", e.response?.data || e.message); }
 }
 
-async function refreshMyToken() {
-    const snap = await db.ref('bot_tokens').once('value');
-    const tokenData = snap.val();
-    if (!tokenData) return;
-    const params = new URLSearchParams();
-    params.append('grant_type', 'refresh_token');
-    params.append('refresh_token', tokenData.refresh_token);
-    params.append('client_id', KICK_CLIENT_ID);
-    params.append('client_secret', KICK_CLIENT_SECRET);
-    const res = await axios.post('https://id.kick.com/oauth/token', params);
-    await db.ref('bot_tokens').update({ access_token: res.data.access_token, refresh_token: res.data.refresh_token });
-}
-
-// ---------------------------------------------------------
-// 4. WEBHOOK (KOMUTLAR)
-// ---------------------------------------------------------
+// 4. WEBHOOK (DÜZELTİLEN KISIM)
 app.post('/kick/webhook', async (req, res) => {
-    const event = req.body;
+    const payload = req.body;
     res.status(200).send('OK');
 
-    if (event.type === 'chat.message.sent') {
-        const user = event.data.sender.username;
-        const msg = event.data.content.trim().toLowerCase();
+    // Kick bazen veriyi 'data' içinde, bazen direkt root'ta gönderir.
+    // İki durumu da kapsayan esnek bir yapı kuruyoruz:
+    const event = payload.data ? payload.data : payload;
+    const type = payload.type || "chat.message.sent"; // Eğer type yoksa varsayılan chat'tir
+
+    if (type === 'chat.message.sent' || event.content) {
+        const user = event.sender?.username;
+        const msg = event.content?.trim().toLowerCase();
+
+        if (!user || !msg) return; // Geçersiz mesaj
+
+        console.log(`📩 [WEBHOOK] ${user}: ${msg}`);
 
         if (msg === '!selam' || msg === 'sa') {
-            await sendChatMessage(`Aleyküm selam @${user}! Sunucu botu emrinde. 🦾`);
+            await sendChatMessage(`Aleyküm selam @${user}! Sunucu botu 7/24 aktif. 🦾`);
         }
     }
 });
 
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'shop.html')); });
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Akıllı Bot v16.1 Yayında!`));
+app.listen(PORT, () => console.log(`🚀 MASTER BOT GÜNCELLENDİ!`));
