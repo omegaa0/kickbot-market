@@ -191,26 +191,42 @@ async function timeoutUser(broadcasterId, targetUsername, duration) {
 
         console.log(`✅ User ID bulundu: ${targetUsername} -> ${targetUserId}`);
 
-        // Timeout uygula (Slug yoksa username, o da yoksa ID dene)
-        const channelIdentifier = channelData.slug || channelData.username || broadcasterId;
-        const banUrl = `https://api.kick.com/public/v1/channels/${channelIdentifier}/bans`;
+        // Timeout uygula (Çoklu Endpoint Denemesi)
+        const endpoints = [
+            `https://api.kick.com/public/v1/channels/${channelData.slug || channelData.username}/bans`, // 1. Slug (Resmi)
+            `https://api.kick.com/public/v1/channels/${broadcasterId}/bans`,                         // 2. ID
+            `https://kick.com/api/v2/channels/${channelData.slug || channelData.username}/bans`      // 3. V2 (Internal)
+        ];
 
-        console.log(`Sending ban request to: ${banUrl}`);
+        let lastError = null;
+        for (const url of endpoints) {
+            if (url.includes('undefined') || url.includes('null')) continue;
 
-        const banRes = await axios.post(banUrl, {
-            banned_user_id: targetUserId,
-            duration: duration,
-            reason: "Bot tarafından susturuldu"
-        }, {
-            headers: {
-                'Authorization': `Bearer ${channelData.access_token}`,
-                'Content-Type': 'application/json',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            console.log(`Trying Ban Endpoint: ${url}`);
+            try {
+                const banRes = await axios.post(url, {
+                    banned_user_id: parseInt(targetUserId), // Integer zorla
+                    duration: parseInt(duration),           // Integer zorla
+                    reason: "Bot tarafından susturuldu",
+                    type: "timeout" // Bazı endpointler type isteyebilir
+                }, {
+                    headers: {
+                        'Authorization': `Bearer ${channelData.access_token}`,
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Accept': 'application/json'
+                    }
+                });
+                console.log("✅ Ban başarılı! Status:", banRes.status);
+                return { success: true }; // Başarılıysa çık
+            } catch (e) {
+                console.log(`❌ Endpoint failed (${url}):`, e.response?.status, e.response?.data?.message || e.message);
+                lastError = e;
             }
-        });
+        }
 
-        console.log("✅ Ban başarılı:", banRes.status);
-        return { success: true };
+        // Hiçbiri çalışmazsa
+        return { success: false, error: lastError?.response?.data?.message || lastError?.message || 'Tüm endpointler başarısız' };
     } catch (e) {
         console.log("❌ Timeout Error:", e.response?.status, e.response?.data || e.message);
         return { success: false, error: e.response?.data?.message || e.message };
