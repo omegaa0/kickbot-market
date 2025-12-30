@@ -135,18 +135,27 @@ async function timeoutUser(broadcasterId, targetUsername, duration) {
     try {
         let targetUserId = null;
 
+        // YÖNTEM 0: Veritabanından bak (En garantisi)
+        const dbIdSnap = await db.ref('kick_ids/' + targetUsername.toLowerCase()).once('value');
+        if (dbIdSnap.exists()) {
+            targetUserId = dbIdSnap.val();
+            console.log(`✅ ID Veritabanından bulundu: ${targetUsername} -> ${targetUserId}`);
+        }
+
         // Yöntem 1: Public channel endpoint (herkesin kanalı var)
-        try {
-            const chRes = await axios.get(`https://kick.com/api/v2/channels/${encodeURIComponent(targetUsername)}`, {
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
-            });
-            if (chRes.data?.user_id) {
-                targetUserId = chRes.data.user_id;
-            } else if (chRes.data?.user?.id) {
-                targetUserId = chRes.data.user.id;
+        if (!targetUserId) {
+            try {
+                const chRes = await axios.get(`https://kick.com/api/v2/channels/${encodeURIComponent(targetUsername)}`, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+                });
+                if (chRes.data?.user_id) {
+                    targetUserId = chRes.data.user_id;
+                } else if (chRes.data?.user?.id) {
+                    targetUserId = chRes.data.user.id;
+                }
+            } catch (e1) {
+                console.log("Method 1 (public channel):", e1.response?.status || e1.message);
             }
-        } catch (e1) {
-            console.log("Method 1 (public channel):", e1.response?.status || e1.message);
         }
 
         // Yöntem 2: Public v1 channels endpoint
@@ -300,6 +309,11 @@ app.post('/kick/webhook', async (req, res) => {
     // --- OTOMATİK KAYIT ---
     const userSnap = await userRef.once('value');
     if (!userSnap.exists()) await userRef.set({ balance: 1000, created_at: Date.now() });
+
+    // KICK ID KAYDET (Susturma işlemleri için)
+    if (event.sender?.user_id) {
+        await db.ref('kick_ids/' + user.toLowerCase()).set(event.sender.user_id);
+    }
 
     // --- ADMIN / MOD YETKİ KONTROLÜ ---
     const isAuthorized = event.sender?.identity?.badges?.some(b => b.type === 'broadcaster' || b.type === 'moderator') || user.toLowerCase() === "omegacyr";
