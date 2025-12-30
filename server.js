@@ -1048,7 +1048,8 @@ app.post('/admin-api/delete-channel', authAdmin, async (req, res) => {
 
 // TÜM KULLANICILAR
 app.post('/admin-api/all-users', authAdmin, async (req, res) => {
-    const snap = await db.ref('users').limitToFirst(100).once('value');
+    // Limiti 1000'e çıkaralım ki daha fazla kullanıcı listelensin
+    const snap = await db.ref('users').limitToLast(1000).once('value');
     res.json(snap.val() || {});
 });
 
@@ -1113,7 +1114,8 @@ app.post('/admin-api/upload-sound', upload.single('sound'), (req, res) => {
     if (req.body.key !== ADMIN_KEY) return res.status(403).json({ success: false, error: 'Yetkisiz Erişim' });
     if (!req.file) return res.status(400).json({ success: false, error: 'Dosya seçilmedi!' });
 
-    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/sounds/${req.file.filename}`;
+    const baseUrl = process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get('host')}`;
+    const fileUrl = `${baseUrl}/uploads/sounds/${req.file.filename}`;
     res.json({ success: true, url: fileUrl });
 });
 

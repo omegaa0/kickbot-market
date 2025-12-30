@@ -302,27 +302,27 @@
 
         <!-- USERS MANAGEMENT -->
         <div id="users" class="section">
-            <div style="display:flex; gap:10px; margin-bottom:20px; align-items:center;">
-                <input type="text" id="userSearch" class="inp" placeholder="Kullanıcı Ara..."
-                    style="margin:0; width:300px">
-                <button class="btn" style="width:auto" onclick="filterUsers()">ARA</button>
-                <button class="btn" style="width:auto; background:#333; margin-left:auto;" onclick="loadUsers()">🔄
-                    YENİLE</button>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; gap:10px;">
+                <h2 style="margin:0;">👤 Kullanıcı Yönetimi (Son 1000)</h2>
+                <div style="display:flex; gap:10px; flex:1; max-width:400px;">
+                    <input type="text" id="usersearch" placeholder="Kullanıcı Ara..." class="inp"
+                        style="margin:0; height:35px;" oninput="filterUsers()">
+                    <button class="btn" style="width: auto; height:35px;" onclick="loadUsers()">🔄 Yenile</button>
+                </div>
             </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Kullanıcı</th>
-                        <th>Bakiye</th>
-                        <th>Slot Sayısı</th>
-                        <th>Kayıt Tarihi</th>
-                        <th>Son Günlük</th>
-                        <th>İşlemler</th>
-                    </tr>
-                </thead>
-                <tbody id="user-table-body">
-                </tbody>
-            </table>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Kullanıcı</th>
+                            <th>Bakiye</th>
+                            <th>Son Görülme</th>
+                            <th>İşlem</th>
+                        </tr>
+                    </thead>
+                    <tbody id="user-list"></tbody>
+                </table>
+            </div>
         </div>
 
         <!-- TROLL & ACTION -->
@@ -413,6 +413,53 @@
             event.target.classList.add('active');
         }
 
+        let cachedUsers = {};
+
+        async function loadUsers() {
+            const res = await fetch('/admin-api/all-users', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey })
+            });
+            cachedUsers = await res.json();
+            renderUsers(cachedUsers);
+        }
+
+        function filterUsers() {
+            const search = document.getElementById('usersearch').value.toLowerCase().trim();
+            if (!search) {
+                renderUsers(cachedUsers);
+                return;
+            }
+            const filtered = {};
+            Object.entries(cachedUsers).forEach(([username, data]) => {
+                if (username.toLowerCase().includes(search)) {
+                    filtered[username] = data;
+                }
+            });
+            renderUsers(filtered);
+        }
+
+        function renderUsers(users) {
+            const list = document.getElementById('user-list');
+            list.innerHTML = "";
+
+            // Bakiyeye göre sırala (Azalan)
+            const sortedUsers = Object.entries(users).sort((a, b) => (b[1].balance || 0) - (a[1].balance || 0));
+
+            sortedUsers.forEach(([username, data]) => {
+                const date = data.last_seen ? new Date(data.last_seen).toLocaleDateString('tr-TR') : '-';
+                list.innerHTML += `
+                    <tr>
+                        <td>${username}</td>
+                        <td>${(data.balance || 0).toLocaleString()} 💰</td>
+                        <td>${date}</td>
+                        <td>
+                            <button class="btn" style="padding:4px 8px; font-size:0.7rem;" onclick="editUser('${username}', ${data.balance || 0})">Düzenle</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
         async function loadChannels() {
             const res = await fetch('/admin-api/channels', {
                 method: 'POST',
@@ -464,6 +511,9 @@
                 const muteCost = data.settings && data.settings.mute_cost ? data.settings.mute_cost : 10000;
                 const dailyRew = data.settings && data.settings.daily_reward ? data.settings.daily_reward : 500;
                 const passiveRew = data.settings && data.settings.passive_reward ? data.settings.passive_reward : 100;
+
+                const ttsVol = data.settings && data.settings.tts_volume !== undefined ? data.settings.tts_volume : 100;
+                const soundVol = data.settings && data.settings.sound_volume !== undefined ? data.settings.sound_volume : 80;
 
                 const mSlot3 = data.settings && data.settings.slot_mult_3 ? data.settings.slot_mult_3 : 5;
                 const mSlot2 = data.settings && data.settings.slot_mult_2 ? data.settings.slot_mult_2 : 1.5;
@@ -629,6 +679,23 @@
                                     <input type="number" class="inp" value="${passiveRew}" step="10"
                                         style="height:35px; background:#000; border-color:#333;"
                                         onchange="toggleCmd('${id}', 'passive_reward', parseInt(this.value))">
+                                </div>
+                            </div>
+
+                            <h4 style="margin: 15px 0 10px 0; color:#333; font-size:0.9rem;">🔊 Ses Seviyeleri</h4>
+                            
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px;">
+                                <div>
+                                    <label style="font-size:0.75rem;">TTS Sesi: %<span id="val-tts-vol-${id}">${ttsVol}</span></label>
+                                    <input type="range" min="0" max="100" value="${ttsVol}" 
+                                        oninput="document.getElementById('val-tts-vol-${id}').innerText = this.value"
+                                        onchange="toggleCmd('${id}', 'tts_volume', parseInt(this.value))" style="width:100%;">
+                                </div>
+                                <div>
+                                    <label style="font-size:0.75rem;">Ses Efekti: %<span id="val-snd-vol-${id}">${soundVol}</span></label>
+                                    <input type="range" min="0" max="100" value="${soundVol}" 
+                                        oninput="document.getElementById('val-snd-vol-${id}').innerText = this.value"
+                                        onchange="toggleCmd('${id}', 'sound_volume', parseInt(this.value))" style="width:100%;">
                                 </div>
                             </div>
 

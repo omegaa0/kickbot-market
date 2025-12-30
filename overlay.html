@@ -112,52 +112,66 @@
                 const db = firebase.database();
                 console.log("✅ Firebase Bağlandı");
 
-                // TTS Dinle (Sadece sayfayı açtıktan sonrakileri dinle)
-                db.ref('stream_events/tts').orderByChild('timestamp').startAt(startTime).on('child_added', (snap) => {
-                    const data = snap.val();
-                    if (!data || data.played) return;
+                // URL'den key'i al
+                const params = new URLSearchParams(window.location.search);
+                const overlayKey = params.get('key');
 
-                    // Çift okunmayı önlemek için hemen işaretle
-                    db.ref('stream_events/tts/' + snap.key).update({ played: true });
+                if (!overlayKey) {
+                    showNotification("HATA", "Overlay anahtarı eksik!", "❌", 999999);
+                    return;
+                }
 
-                    console.log("🎙️ TTS Okunuyor:", data.text);
+                // Kanallardan bu key'e sahip olanı bul
+                db.ref('channels').once('value').then(snap => {
+                    const channels = snap.val() || {};
+                    let targetBroadcasterId = null;
 
-                    // Görsel Bildirim
-                    showNotification("TTS MESAJI", data.text, "🎙️");
-
-                    // Sesli Okuma
-                    const utterance = new SpeechSynthesisUtterance(data.text);
-                    utterance.lang = 'tr-TR';
-                    utterance.volume = 1.0;
-                    utterance.rate = 1.0;
-                    utterance.pitch = 1.0;
-
-                    // Önceki sesleri iptal etme (opsiyonel, kuyruğa girmesi daha iyi)
-                    window.speechSynthesis.speak(utterance);
-                });
-
-                // Ses Dinle (Sadece sayfayı açtıktan sonrakileri dinle)
-                db.ref('stream_events/sound').orderByChild('timestamp').startAt(startTime).on('child_added', (snap) => {
-                    const data = snap.val();
-                    if (!data || data.played) return;
-
-                    db.ref('stream_events/sound/' + snap.key).update({ played: true });
-
-                    const sounds = {
-                        "alkis": "https://actions.google.com/sounds/v1/human_voices/human_applause.ogg",
-                        "gol": "https://cdn.pixabay.com/audio/2022/03/10/audio_c8c8a1670b.mp3",
-                        "korku": "https://actions.google.com/sounds/v1/horror/ghost_ooo.ogg",
-                        "gulme": "https://actions.google.com/sounds/v1/human_voices/child_laugh.ogg"
-                    };
-
-                    const url = sounds[data.soundId.toLowerCase()];
-                    if (url) {
-                        console.log("🎵 Ses Çalınıyor:", data.soundId);
-                        showNotification("SES EFEKTİ", data.soundId.toUpperCase() + " çalınıyor...", "🔊", 3000);
-                        const audio = new Audio(url);
-                        audio.volume = 0.8;
-                        audio.play().catch(e => console.error("Ses çalma hatası:", e));
+                    for (const [id, data] of Object.entries(channels)) {
+                        if (data.overlay_key === overlayKey) {
+                            targetBroadcasterId = id;
+                            break;
+                        }
                     }
+
+                    if (!targetBroadcasterId) {
+                        showNotification("HATA", "Geçersiz veya eski anahtar!", "❌", 999999);
+                        return;
+                    }
+
+                    console.log("🎯 Hedef Kanal:", targetBroadcasterId);
+                    const channelSettings = channels[targetBroadcasterId]?.settings || {};
+                    const ttsVol = (channelSettings.tts_volume !== undefined ? channelSettings.tts_volume : 100) / 100;
+                    const soundVol = (channelSettings.sound_volume !== undefined ? channelSettings.sound_volume : 80) / 100;
+
+                    // TTS Dinle (Sadece bu kanalınkilere bak)
+                    db.ref('stream_events/tts').orderByChild('timestamp').startAt(startTime).on('child_added', (snap) => {
+                        const data = snap.val();
+                        if (!data || data.played || String(data.broadcasterId) !== String(targetBroadcasterId)) return;
+
+                        db.ref('stream_events/tts/' + snap.key).update({ played: true });
+                        showNotification("TTS MESAJI", data.text, "🎙️");
+                        const utterance = new SpeechSynthesisUtterance(data.text);
+                        utterance.lang = 'tr-TR';
+                        utterance.volume = ttsVol;
+                        utterance.rate = 1.0;
+                        utterance.pitch = 1.0;
+                        window.speechSynthesis.speak(utterance);
+                    });
+
+                    // Ses Dinle (Sadece bu kanalınkilere bak)
+                    db.ref('stream_events/sound').orderByChild('timestamp').startAt(startTime).on('child_added', (snap) => {
+                        const data = snap.val();
+                        if (!data || data.played || String(data.broadcasterId) !== String(targetBroadcasterId)) return;
+
+                        db.ref('stream_events/sound/' + snap.key).update({ played: true });
+                        const url = data.url;
+                        if (url) {
+                            showNotification("SES EFEKTİ", data.soundId.toUpperCase() + " çalınıyor...", "🔊", 3000);
+                            const audio = new Audio(url);
+                            audio.volume = soundVol;
+                            audio.play().catch(e => console.error("Ses çalma hatası:", e));
+                        }
+                    });
                 });
             });
     </script>
