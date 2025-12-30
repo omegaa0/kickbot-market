@@ -366,7 +366,7 @@ app.post('/kick/webhook', async (req, res) => {
         const now = Date.now();
 
         if (now > data.slot_reset) { data.slot_count = 0; data.slot_reset = now + 3600000; }
-        if (data.slot_count >= 10) return await reply(`@${user}, 🚨 Slot limitin doldu! (10/saat)`);
+        if (data.slot_count >= 5) return await reply(`@${user}, 🚨 Slot limitin doldu! (5/saat)`);
         if (data.balance < cost) return await reply(`@${user}, Yetersiz bakiye!`);
 
         data.balance -= cost;
