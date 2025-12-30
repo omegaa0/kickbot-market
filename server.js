@@ -72,7 +72,7 @@ app.get('/login', async (req, res) => {
     const state = crypto.randomBytes(16).toString('hex');
     const { verifier, challenge } = generatePKCE();
     await db.ref('temp_auth/' + state).set({ verifier, createdAt: Date.now() });
-    const scopes = "chat:write events:subscribe user:read channel:read moderation:ban";
+    const scopes = "chat:write events:subscribe user:read channel:read moderation:ban channel:subscription:read";
     const authUrl = `https://id.kick.com/oauth/authorize?client_id=${KICK_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(scopes)}&state=${state}&code_challenge=${challenge}&code_challenge_method=S256`;
     res.redirect(authUrl);
 });
@@ -118,7 +118,10 @@ async function subscribeToChat(token, broadcasterId) {
     try {
         await axios.post('https://api.kick.com/public/v1/events/subscriptions', {
             broadcaster_user_id: parseInt(broadcasterId),
-            events: [{ name: "chat.message.sent", version: 1 }],
+            events: [
+                { name: "chat.message.sent", version: 1 },
+                { name: "channel.subscription.new", version: 1 }
+            ],
             method: "webhook"
         }, { headers: { 'Authorization': `Bearer ${token}` } });
     } catch (e) { console.log('Sub Error:', e.response?.data || e.message); }
@@ -354,6 +357,21 @@ app.post('/kick/webhook', async (req, res) => {
 
     if (!channelData) {
         console.log(`❌ Kanal veritabanında yok: ${broadcasterId}`);
+        return;
+    }
+
+    // --- ABONE ÖDÜLÜ SİSTEMİ ---
+    if (payload.event === "channel.subscription.new") {
+        const subUser = event.username;
+        if (subUser) {
+            console.log(`🎊 YENİ ABONE: ${subUser} (${broadcasterId})`);
+            await db.ref('users/' + subUser.toLowerCase()).transaction(u => {
+                if (!u) u = { balance: 1000, last_seen: Date.now(), last_channel: broadcasterId, created_at: Date.now() };
+                u.balance = (u.balance || 0) + 5000;
+                return u;
+            });
+            await sendChatMessage(`🎊 @${subUser} ABONE OLDU! Hoş geldin, hesabına 5.000 💰 bakiye eklendi! ✨`, broadcasterId);
+        }
         return;
     }
 
