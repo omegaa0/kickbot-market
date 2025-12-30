@@ -137,7 +137,9 @@ async function timeoutUser(broadcasterId, targetUsername, duration) {
 
         // Yöntem 1: Public channel endpoint (herkesin kanalı var)
         try {
-            const chRes = await axios.get(`https://kick.com/api/v2/channels/${encodeURIComponent(targetUsername)}`);
+            const chRes = await axios.get(`https://kick.com/api/v2/channels/${encodeURIComponent(targetUsername)}`, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+            });
             if (chRes.data?.user_id) {
                 targetUserId = chRes.data.user_id;
             } else if (chRes.data?.user?.id) {
@@ -350,8 +352,11 @@ app.post('/kick/webhook', async (req, res) => {
     }
 
     // --- OYUNLAR (AYAR KONTROLLÜ) ---
-    // Kumar kazanç oranları (varsayılan: %30 kazanma şansı)
-    const winRate = settings.win_rate || 30; // 0-100 arası
+    // Kumar kazanç oranları (varsayılan değerler)
+    const wrSlot = settings.wr_slot || 30;
+    const wrYazitura = settings.wr_yazitura || 50;
+    const wrKutu = settings.wr_kutu || 40;
+    const wrSoygun = settings.wr_soygun || 40;
 
     if (isEnabled('slot') && lowMsg.startsWith('!slot')) {
         const cost = Math.max(10, parseInt(args[0]) || 100);
@@ -380,11 +385,11 @@ app.post('/kick/webhook', async (req, res) => {
         } else if (rig === 'lose') {
             s = ["🍒", "🍋", "🍇"]; mult = 0;
         } else {
-            // Kazanç oranına göre belirleme
+            // Kazanç oranına göre belirleme (SLOT)
             const roll = Math.random() * 100;
-            if (roll < winRate) {
+            if (roll < wrSlot) {
                 // Kazandır - 2'li veya 3'lü eşleşme
-                const jackpotChance = winRate / 10; // Jackpot şansı daha düşük
+                const jackpotChance = wrSlot / 10; // Jackpot şansı daha düşük
                 if (roll < jackpotChance) {
                     // JACKPOT - 3'lü
                     const winSym = sym[Math.floor(Math.random() * 8)];
@@ -437,9 +442,9 @@ app.post('/kick/webhook', async (req, res) => {
         if (rig === 'win') win = true;
         else if (rig === 'lose') win = false;
         else {
-            // WinRate kontrolü
+            // WinRate kontrolü (YAZI TURA)
             const roll = Math.random() * 100;
-            if (roll < winRate) {
+            if (roll < wrYazitura) {
                 // Kazanması lazım - Seçtiği gelir
                 win = true;
             } else {
@@ -474,9 +479,9 @@ app.post('/kick/webhook', async (req, res) => {
         if (rig === 'win') resultType = 'odul';
         else if (rig === 'lose') resultType = 'bomba';
         else {
-            // WinRate kontrolü (Kutu için: %WinRate ihtimalle ödül/iade, kalanı bomba)
+            // WinRate kontrolü (Kutu: %WinRate ihtimalle ödül/iade, kalanı bomba)
             const roll = Math.random() * 100;
-            if (roll < winRate) {
+            if (roll < wrKutu) {
                 // Kazanma şansı içinde de %20 ihtimalle büyük ödül, %80 iade (kurtarma)
                 resultType = (Math.random() < 0.2) ? 'odul' : 'iade';
             } else {
@@ -533,7 +538,10 @@ app.post('/kick/webhook', async (req, res) => {
             setTimeout(async () => {
                 const h = currentHeist; currentHeist = null;
                 if (!h || h.p.length < 3) return await reply(`❌ Soygun İptal: Yetersiz katılımcı.`);
-                if (Math.random() < 0.4) {
+
+                // WinRate kontrolü (SOYGUN)
+                const roll = Math.random() * 100;
+                if (roll < wrSoygun) {
                     const share = Math.floor((15000 + Math.random() * 10000) / h.p.length);
                     for (let p of h.p) await db.ref('users/' + p.toLowerCase()).transaction(u => { if (u) u.balance += share; return u; });
                     await reply(`💥 BANKA PATLADI! Herkese +${share} 💰 dağıtıldı! 🔥`);

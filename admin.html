@@ -450,8 +450,11 @@
                     `;
                 });
 
-                // WinRate Slider
-                const winRate = data.settings && data.settings.win_rate ? data.settings.win_rate : 30;
+                // WinRate Sliders (Varsayılan değerler)
+                const wrSlot = data.settings && data.settings.wr_slot ? data.settings.wr_slot : 30;
+                const wrYazitura = data.settings && data.settings.wr_yazitura ? data.settings.wr_yazitura : 50;
+                const wrKutu = data.settings && data.settings.wr_kutu ? data.settings.wr_kutu : 40;
+                const wrSoygun = data.settings && data.settings.wr_soygun ? data.settings.wr_soygun : 40;
 
                 const html = `
                     <div class="card">
@@ -459,10 +462,35 @@
                         <p style="font-size:0.8rem; color:#666;">ID: ${id}</p>
                         
                         <div style="margin: 15px 0; padding:10px; background:#f0f0f0; border-radius:8px;">
-                            <label style="display:block; margin-bottom:5px; font-weight:600;">🎰 Kumar Kazanma Oranı: %<span id="wr-val-${id}">${winRate}</span></label>
-                            <input type="range" class="inp" min="0" max="100" value="${winRate}" 
-                                oninput="document.getElementById('wr-val-${id}').innerText = this.value"
-                                onchange="toggleCmd('${id}', 'win_rate', parseInt(this.value))">
+                            <h4 style="margin-bottom:10px; color:#333; font-size:0.9rem;">🎰 Kazanma Oranları (%)</h4>
+                            
+                            <div style="margin-bottom:8px;">
+                                <label style="font-size:0.8rem;">Slot: %<span id="val-slot-${id}">${wrSlot}</span></label>
+                                <input type="range" class="inp" min="0" max="100" value="${wrSlot}" 
+                                    oninput="document.getElementById('val-slot-${id}').innerText = this.value"
+                                    onchange="toggleCmd('${id}', 'wr_slot', parseInt(this.value))">
+                            </div>
+
+                            <div style="margin-bottom:8px;">
+                                <label style="font-size:0.8rem;">Yazı Tura: %<span id="val-yt-${id}">${wrYazitura}</span></label>
+                                <input type="range" class="inp" min="0" max="100" value="${wrYazitura}" 
+                                    oninput="document.getElementById('val-yt-${id}').innerText = this.value"
+                                    onchange="toggleCmd('${id}', 'wr_yazitura', parseInt(this.value))">
+                            </div>
+
+                            <div style="margin-bottom:8px;">
+                                <label style="font-size:0.8rem;">Kutu: %<span id="val-kutu-${id}">${wrKutu}</span></label>
+                                <input type="range" class="inp" min="0" max="100" value="${wrKutu}" 
+                                    oninput="document.getElementById('val-kutu-${id}').innerText = this.value"
+                                    onchange="toggleCmd('${id}', 'wr_kutu', parseInt(this.value))">
+                            </div>
+
+                            <div style="margin-bottom:8px;">
+                                <label style="font-size:0.8rem;">Soygun: %<span id="val-soy-${id}">${wrSoygun}</span></label>
+                                <input type="range" class="inp" min="0" max="100" value="${wrSoygun}" 
+                                    oninput="document.getElementById('val-soy-${id}').innerText = this.value"
+                                    onchange="toggleCmd('${id}', 'wr_soygun', parseInt(this.value))">
+                            </div>
                         </div>
 
                         <div class="toggle-group">
