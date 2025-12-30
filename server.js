@@ -106,7 +106,7 @@ async function refreshMyToken() {
 }
 
 // ---------------------------------------------------------
-// 4. WEBHOOK (KOMUTLAR)
+// 4. WEBHOOK (KOMUTLAR & OTO KAYIT)
 // ---------------------------------------------------------
 app.post('/kick/webhook', async (req, res) => {
     res.status(200).send('OK');
@@ -116,48 +116,106 @@ app.post('/kick/webhook', async (req, res) => {
     const rawMsg = event.content;
     if (!user || !rawMsg) return;
 
+    if (user.toLowerCase() === "aloskegangbot") return;
+
     const lowMsg = rawMsg.trim().toLowerCase();
     const args = rawMsg.trim().split(/\s+/).slice(1);
     const userRef = db.ref('users/' + user.toLowerCase());
 
-    if (user.toLowerCase() === "aloskegangbot") return;
+    // --- OTOMATİK KAYIT ---
+    const userSnap = await userRef.once('value');
+    if (!userSnap.exists()) {
+        // Yeni kullanıcı için başlangıç bakiyesi
+        await userRef.set({ balance: 1000, created_at: Date.now() });
+    }
 
     // --- ADMIN / MOD YETKİ KONTROLÜ ---
     const isAuthorized = event.sender?.identity?.badges?.some(b => b.type === 'broadcaster' || b.type === 'moderator') || user.toLowerCase() === "omegacyr";
 
-    // --- KOMUTLAR ---
+    // --- TEMEL KOMUTLAR ---
     if (lowMsg === 'sa' || lowMsg === 'sea' || lowMsg === '!selam') {
         await sendChatMessage(`Aleyküm selam @${user}! AloskeGangBOT 7/24 aktif. 🦾`);
     }
 
     else if (lowMsg === '!bakiye') {
         const snap = await userRef.once('value');
-        await sendChatMessage(`@${user}, Bakiyeniz: ${(snap.val()?.balance || 1000).toLocaleString()} 💰`);
+        await sendChatMessage(`@${user}, Bakiyeniz: ${(snap.val()?.balance || 0).toLocaleString()} 💰`);
     }
 
     else if (lowMsg === '!günlük') {
         const snap = await userRef.once('value');
         const data = snap.val() || { balance: 1000, lastDaily: 0 };
         const now = Date.now();
-        if (now - data.lastDaily < 86400000) return await sendChatMessage(`@${user}, ⏳ Günlük ödül için beklemelisin.`);
-        data.balance += 500; data.lastDaily = now; await userRef.set(data);
+        if (now - data.lastDaily < 86400000) {
+            const diff = 86400000 - (now - data.lastDaily);
+            const hours = Math.floor(diff / 3600000);
+            const mins = Math.floor((diff % 3600000) / 60000);
+            return await sendChatMessage(`@${user}, ⏳ Günlük ödül için ${hours}sa ${mins}dk beklemelisin.`);
+        }
+        data.balance = (data.balance || 0) + 500;
+        data.lastDaily = now;
+        await userRef.set(data);
         await sendChatMessage(`🎁 @${user}, +500 💰 eklendi! ✅`);
     }
 
+    // --- OYUNLAR (Slot, Yazitura, Kutu) ---
     else if (lowMsg.startsWith('!slot')) {
         const cost = Math.max(10, parseInt(args[0]) || 100);
         const snap = await userRef.once('value');
         const data = snap.val() || { balance: 1000, slot_count: 0, slot_reset: 0 };
         const now = Date.now();
+
         if (now > data.slot_reset) { data.slot_count = 0; data.slot_reset = now + 3600000; }
         if (data.slot_count >= 10) return await sendChatMessage(`@${user}, 🚨 Slot limitin doldu! (10/saat)`);
-        if (data.balance < cost) return await sendChatMessage(`@${user}, Yetersiz bakiye!`);
+
+        if ((data.balance || 0) < cost) return await sendChatMessage(`@${user}, Yetersiz bakiye!`);
+
         data.balance -= cost; data.slot_count++;
         const sym = ["🍒", "🍋", "🍇", "🔔", "💎", "7️⃣", "🍉", "🍀"];
         const s = [sym[Math.floor(Math.random() * 8)], sym[Math.floor(Math.random() * 8)], sym[Math.floor(Math.random() * 8)]];
         let mult = (s[0] === s[1] && s[1] === s[2]) ? 5 : (s[0] === s[1] || s[1] === s[2] || s[0] === s[2]) ? 1.5 : 0.1;
-        const prize = Math.floor(cost * mult); data.balance += prize; await userRef.set(data);
+
+        const prize = Math.floor(cost * mult);
+        data.balance += prize;
+        await userRef.update(data);
+
         await sendChatMessage(`🎰 | ${s[0]} | ${s[1]} | ${s[2]} | @${user} ${mult >= 1.5 ? `KAZANDIN (+${prize})` : `Kaybettin (+${prize} İade)`}`);
+    }
+
+    else if (lowMsg.startsWith('!yazitura')) {
+        const cost = parseInt(args[0]);
+        const pick = args[1]?.toLowerCase();
+        if (isNaN(cost) || !['y', 't', 'yazı', 'tura'].includes(pick)) return await sendChatMessage(`@${user}, Kullanım: !yazitura [miktar] [y/t]`);
+
+        const snap = await userRef.once('value');
+        const data = snap.val() || { balance: 0 };
+        if (data.balance < cost) return await sendChatMessage(`@${user}, Bakiye yetersiz!`);
+
+        data.balance -= cost;
+        const res = Math.random() < 0.5 ? 'yazı' : 'tura';
+        const isYazi = pick.startsWith('y');
+        const win = (isYazi && res === 'yazı') || (!isYazi && res === 'tura');
+
+        if (win) data.balance += cost * 2;
+        await userRef.update({ balance: data.balance });
+        await sendChatMessage(`🪙 Para fırlatıldı... ${res.toUpperCase()}! @${user} ${win ? `KAZANDIN (+${cost * 2})` : 'Kaybettin.'}`);
+    }
+
+    else if (lowMsg.startsWith('!kutu')) {
+        const cost = parseInt(args[0]); const choice = parseInt(args[1]);
+        if (isNaN(cost) || isNaN(choice) || choice < 1 || choice > 3) return await sendChatMessage(`@${user}, Kullanım: !kutu [miktar] [1-3]`);
+
+        const snap = await userRef.once('value');
+        const data = snap.val() || { balance: 0 };
+        if (data.balance < cost) return await sendChatMessage(`@${user}, Bakiye yetersiz!`);
+
+        data.balance -= cost;
+        const prizeBox = Math.floor(Math.random() * 3) + 1;
+        const win = choice === prizeBox;
+
+        if (win) data.balance += cost * 3;
+        await userRef.update({ balance: data.balance });
+        await sendChatMessage(`📦 Kutu ${prizeBox} doluydu! @${user} ${win ? `DOĞRU! (+${cost * 3})` : 'Boş çıktı.'}`);
     }
 
     else if (lowMsg.startsWith('!duello')) {
@@ -172,10 +230,13 @@ app.post('/kick/webhook', async (req, res) => {
         const d = activeDuels[user.toLowerCase()];
         if (!d || Date.now() > d.expire) return;
         delete activeDuels[user.toLowerCase()];
+
         const winner = Math.random() < 0.5 ? d.challenger : user;
         const loser = winner === user ? d.challenger : user;
+
         await db.ref('users/' + winner.toLowerCase()).transaction(u => { if (u) u.balance += d.amount; return u; });
         await db.ref('users/' + loser.toLowerCase()).transaction(u => { if (u) u.balance -= d.amount; return u; });
+
         await sendChatMessage(`🏆 @${winner} düelloyu kazandı ve ${d.amount} 💰 kaptı! ⚔️`);
     }
 
@@ -185,7 +246,7 @@ app.post('/kick/webhook', async (req, res) => {
             await sendChatMessage(`🚨 SOYGUN! Katılmak için !soygun yazın! (90sn)`);
             setTimeout(async () => {
                 const h = currentHeist; currentHeist = null;
-                if (h.p.length < 3) return await sendChatMessage(`❌ Soygun İptal: Yetersiz katılımcı.`);
+                if (!h || h.p.length < 3) return await sendChatMessage(`❌ Soygun İptal: Yetersiz katılımcı.`);
                 if (Math.random() < 0.4) {
                     const share = Math.floor((15000 + Math.random() * 10000) / h.p.length);
                     for (let p of h.p) await db.ref('users/' + p.toLowerCase()).transaction(u => { if (u) u.balance += share; return u; });
@@ -195,6 +256,39 @@ app.post('/kick/webhook', async (req, res) => {
         } else if (!currentHeist.p.includes(user)) { currentHeist.p.push(user); await sendChatMessage(`@${user} ekibe katıldı!`); }
     }
 
+    // --- SOSYAL & DİĞER KOMUTLAR ---
+    else if (lowMsg === '!fal') {
+        const list = ["Geleceğin çok parlak!", "Beklediğin haber yakında gelecek.", "Eski bir dostunla karşılaşacaksın.", "Dikkatli ol, nazar var!", "Aşk hayatın hareketlenecek."];
+        await sendChatMessage(`🔮 @${user}, Falın: ${list[Math.floor(Math.random() * list.length)]}`);
+    }
+
+    else if (lowMsg.startsWith('!ship')) {
+        const target = args[0]?.replace('@', '');
+        if (!target) return;
+        const perc = Math.floor(Math.random() * 101);
+        await sendChatMessage(`❤️ @${user} & @${target} Uyumu: %${perc} ${perc > 80 ? '🔥' : perc > 50 ? '😏' : '💔'}`);
+    }
+
+    else if (lowMsg === '!zenginler') {
+        const snap = await db.ref('users').once('value');
+        const sorted = Object.entries(snap.val() || {}).sort((a, b) => (b[1].balance || 0) - (a[1].balance || 0)).slice(0, 5);
+        let txt = "🏆 EN ZENGİNLER: ";
+        sorted.forEach((u, i) => txt += `${i + 1}. ${u[0]} (${u[1].balance}) | `);
+        await sendChatMessage(txt.slice(0, -3));
+    }
+
+    else if (lowMsg.startsWith('!hava')) {
+        const city = args[0] || "Istanbul";
+        try {
+            const geo = await axios.get(`https://geocoding-api.open-meteo.com/v1/search?name=${city}&count=1&language=tr&format=json`);
+            if (geo.data.results) {
+                const { latitude, longitude, name } = geo.data.results[0];
+                const weather = await axios.get(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`);
+                await sendChatMessage(`☁️ ${name}: ${weather.data.current_weather.temperature}°C | Rüzgar: ${weather.data.current_weather.windspeed} km/s`);
+            } else { await sendChatMessage(`❌ Şehir bulunamadı: ${city}`); }
+        } catch (e) { console.log(e); }
+    }
+
     else if (lowMsg === '!söz') {
         const list = ["Mesafe iyidir, kimin nerede durduğunu hatırlatır.", "Zirveye tek başına çıkılır.", "Kurduğun hayali başkası yaşar.", "Giden gitmiştir."];
         await sendChatMessage(`✍️ @${user}: ${list[Math.floor(Math.random() * list.length)]}`);
@@ -202,15 +296,26 @@ app.post('/kick/webhook', async (req, res) => {
 
     else if (lowMsg === '!efkar') {
         const p = Math.floor(Math.random() * 101);
-        await sendChatMessage(`🚬 @${user} Efkar Seviyesi: %${p} ${p > 70 ? '��🚬' : '🍷'}`);
+        await sendChatMessage(`🚬 @${user} Efkar Seviyesi: %${p} ${p > 70 ? '😭🚬' : '🍷'}`);
     }
 
+    else if (lowMsg.startsWith('!sustur')) {
+        const target = args[0]?.replace('@', '').toLowerCase();
+        if (!target) return;
+        const snap = await userRef.once('value');
+        if ((snap.val()?.balance || 0) < 10000) return await sendChatMessage(`@${user}, 10.000 💰 bakiye lazım!`);
+
+        await userRef.transaction(u => { if (u) u.balance -= 10000; return u; });
+        await sendChatMessage(`/timeout ${target} 10`);
+        await sendChatMessage(`🔇 @${user}, @${target} kullanıcısını 10 saniye susturdu!`);
+    }
+
+    // --- ADMIN / MOD (Tahmin & Piyango) ---
     else if (lowMsg.startsWith('!tahmin')) {
-        if (!isAuthorized) return; // Sadece mod ve yayıncı
+        if (!isAuthorized) return;
         activePrediction = { q: args.join(' '), v1: 0, v2: 0, voters: {} };
         await sendChatMessage(`📊 TAHMİN: ${activePrediction.q} | Oylama: !oyla 1 veya !oyla 2`);
     }
-
     else if (lowMsg.startsWith('!oyla') && activePrediction) {
         const pick = args[0];
         if (activePrediction.voters[user]) return;
@@ -218,9 +323,8 @@ app.post('/kick/webhook', async (req, res) => {
         else if (pick === '2') { activePrediction.v2++; activePrediction.voters[user] = '2'; }
         await sendChatMessage(`🗳️ @${user} oy kullandı.`);
     }
-
     else if (lowMsg.startsWith('!sonuç') && activePrediction) {
-        if (!isAuthorized) return; // Sadece mod ve yayıncı
+        if (!isAuthorized) return;
         await sendChatMessage(`📊 SONUÇ: Seçenek 1: ${activePrediction.v1} oy | Seçenek 2: ${activePrediction.v2} oy.`);
         activePrediction = null;
     }
@@ -228,25 +332,22 @@ app.post('/kick/webhook', async (req, res) => {
     else if (lowMsg.startsWith('!piyango')) {
         const sub = args[0];
         if (sub === "başla") {
-            if (!isAuthorized) return; // Sadece mod ve yayıncı
+            if (!isAuthorized) return;
             const cost = parseInt(args[1]) || 500;
             activePiyango = { participants: [], cost, pool: 0 };
             await sendChatMessage(`🎰 PİYANGO BAŞLADI! Ücret: ${cost} 💰 | Katılmak için: !piyango katıl`);
         } else if (sub === "katıl" && activePiyango) {
             if (activePiyango.participants.includes(user.toLowerCase())) return;
             const snap = await userRef.once('value');
-            const data = snap.val() || { balance: 1000 };
-            if (data.balance < activePiyango.cost) return await sendChatMessage(`@${user}, Yetersiz bakiye!`);
+            if ((snap.val()?.balance || 0) < activePiyango.cost) return await sendChatMessage(`@${user}, Yetersiz bakiye!`);
+
             await userRef.transaction(u => { if (u) { u.balance -= activePiyango.cost; } return u; });
             activePiyango.pool += activePiyango.cost;
             activePiyango.participants.push(user.toLowerCase());
             await sendChatMessage(`🎟️ @${user} katıldı! (Havuz: ${activePiyango.pool} 💰)`);
         } else if (sub === "bitir" && activePiyango) {
-            if (!isAuthorized) return; // Sadece mod ve yayıncı
-            if (activePiyango.participants.length === 0) {
-                activePiyango = null;
-                return await sendChatMessage(`❌ Piyango iptal edildi: Hiç katılımcı yok.`);
-            }
+            if (!isAuthorized) return;
+            if (activePiyango.participants.length === 0) { activePiyango = null; return await sendChatMessage(`❌ Piyango boş.`); }
             const winner = activePiyango.participants[Math.floor(Math.random() * activePiyango.participants.length)];
             const prize = activePiyango.pool;
             await db.ref('users/' + winner).transaction(u => { if (u) u.balance += prize; return u; });
@@ -255,7 +356,7 @@ app.post('/kick/webhook', async (req, res) => {
     }
 
     else if (lowMsg === '!komutlar') {
-        await sendChatMessage(`🎮 !slot, !duello, !soygun, !yazitura, !kutu | 💰 !bakiye, !günlük, !zenginler | 🔮 !fal, ! ship, !efkar, !söz, !hava`);
+        await sendChatMessage(`🎮 !slot, !yazitura, !kutu, !soygun, !duello | 💰 !bakiye, !günlük, !zenginler | 🔮 !fal, !ship, !efkar, !hava`);
     }
 });
 
