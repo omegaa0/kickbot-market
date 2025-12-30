@@ -158,15 +158,27 @@ app.post('/kick/webhook', async (req, res) => {
 
     const event = payload.data || payload;
 
-    // Sağlam Broadcaster ID Bulma
-    let broadcasterId = event.broadcaster_user_id || payload.broadcaster_user_id;
-    if (!broadcasterId && payload.channel) broadcasterId = payload.channel.user_id;
-    if (!broadcasterId && payload.channel_id) broadcasterId = payload.channel_id; // Bazı eventlerde
+    // Sağlam Broadcaster ID Bulma (Tüm olası yerlere bak)
+    let broadcasterId =
+        event.broadcaster_user_id ||
+        payload.broadcaster_user_id ||
+        event.broadcaster?.user_id ||
+        event.broadcaster?.id ||
+        payload.broadcaster?.user_id ||
+        payload.broadcaster?.id ||
+        event.channel?.user_id ||
+        event.channel?.id ||
+        payload.channel?.user_id ||
+        payload.channel?.id ||
+        event.chatroom_id ||
+        payload.chatroom_id;
 
     if (!broadcasterId) {
-        console.log("❌ Broadcaster ID bulunamadı! Payload:", JSON.stringify(payload));
+        console.log("❌ Broadcaster ID bulunamadı! Full Payload:", JSON.stringify(payload));
         return;
     }
+
+    console.log("✅ Broadcaster ID bulundu:", broadcasterId);
 
     const channelRef = await db.ref('channels/' + broadcasterId).once('value');
     const channelData = channelRef.val();
