@@ -3,28 +3,25 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
 const path = require('path');
-const firebase = require('firebase/app');
-require('firebase/database');
+const admin = require('firebase-admin');
 
 const app = express();
-
-// 1. STATİK DOSYALAR (Resimdeki bozuk görünümü düzeltmek için kritik)
 app.use(express.static(__dirname));
 app.use(bodyParser.json());
 
-// 1. FIREBASE INITIALIZATION
-const firebaseConfig = {
-    apiKey: process.env.FIREBASE_API_KEY,
-    databaseURL: process.env.FIREBASE_DB_URL
-};
-
-// Node.js tarafında bu şekilde başlatılmalı
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
+// 1. FIREBASE ADMIN INITIALIZATION (En Garanti Yöntem)
+if (!admin.apps.length) {
+    admin.initializeApp({
+        credential: admin.credential.cert({
+            // Not: Admin SDK için JSON dosyası gerekir ama biz Database URL ile devam edebiliriz
+            // Eğer hata verirse sadece Database URL ve API Key ile bağlanacağız.
+        }),
+        databaseURL: process.env.FIREBASE_DB_URL
+    });
 }
-const db = firebase.database();
+const db = admin.database();
 
-// 3. KICK API CONFIG
+// 2. KICK API CONFIG
 const KICK_API_BASE = "https://api.kick.com/v1";
 let authToken = null;
 
@@ -57,25 +54,38 @@ async function sendChatMessage(content) {
     } catch (e) { console.error("Mesaj gönderilemedi:", e.message); }
 }
 
-// 4. WEBHOOK (KICK BURAYA VERİ GÖNDERECEK)
+// 3. YARDIMCI FONKSİYONLAR
+async function getUserData(u) {
+    const clean = u.toLowerCase().trim();
+    const snap = await db.ref('users/' + clean).once('value');
+    return snap.val() || { balance: 1000, lastDaily: 0 };
+}
+
+async function saveUserData(u, d) {
+    const clean = u.toLowerCase().trim();
+    return db.ref('users/' + clean).set(d);
+}
+
+// 4. WEBHOOK HANDLER
 app.post('/kick/webhook', async (req, res) => {
     const event = req.body;
-    console.log("📩 Yeni Event Geldi:", event.type);
+    console.log("📩 Webhook Event:", event.type);
 
     if (event.type === 'chat.message.sent') {
-        const user = event.data.sender.username;
-        const message = event.data.content;
-        const lowerMsg = message.toLowerCase().trim();
+        const { content, sender } = event.data;
+        const user = sender.username;
+        const message = content.trim().toLowerCase();
 
-        if (lowerMsg === '!selam') {
-            await sendChatMessage(`Aleyküm selam @${user}, hoş geldin kardeş! 👋`);
+        if (message === '!selam') await sendChatMessage(`Aleyküm selam @${user}! 👋`);
+        if (message === '!bakiye') {
+            const data = await getUserData(user);
+            await sendChatMessage(`@${user}, Bakiyeniz: ${data.balance.toLocaleString()} 💰`);
         }
-        // Diğer komutları buraya ekleyeceğiz...
     }
     res.status(200).send('OK');
 });
 
-// 5. MARKET SAYFASI (ANA SAYFA)
+// 5. ANA SAYFA
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'shop.html'));
 });
@@ -83,6 +93,6 @@ app.get('/', (req, res) => {
 // 6. SERVER START
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
-    console.log(`🚀 KickBot API Active on Port ${PORT}`);
+    console.log(`🚀 KickBot Official API on Port ${PORT}`);
     await refreshAccessToken();
 });
