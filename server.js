@@ -1059,6 +1059,28 @@ app.post('/admin-api/update-user', authAdmin, async (req, res) => {
     res.json({ success: true });
 });
 
+// YENİ: Toplu Bakiye Dağıt (O kanaldaki herkese)
+app.post('/admin-api/distribute-balance', authAdmin, async (req, res) => {
+    const { channelId, amount } = req.body;
+    const addAmt = parseInt(amount);
+    if (isNaN(addAmt) || addAmt <= 0) return res.json({ success: false, error: 'Geçersiz miktar' });
+
+    const usersSnap = await db.ref('users').once('value');
+    const allUsers = usersSnap.val() || {};
+    let count = 0;
+
+    for (const [username, data] of Object.entries(allUsers)) {
+        if (data.last_channel && String(data.last_channel) === String(channelId)) {
+            await db.ref('users/' + username).transaction(u => {
+                if (u) u.balance = (parseInt(u.balance) || 0) + addAmt;
+                return u;
+            });
+            count++;
+        }
+    }
+    res.json({ success: true, count });
+});
+
 // KANAL DUYURUSU (Tek kanala mesaj gönder)
 app.post('/admin-api/send-message', authAdmin, async (req, res) => {
     const { channelId, message } = req.body;
