@@ -191,8 +191,10 @@ async function timeoutUser(broadcasterId, targetUsername, duration) {
 
         console.log(`✅ User ID bulundu: ${targetUsername} -> ${targetUserId}`);
 
-        // Timeout uygula
-        const banRes = await axios.post(`https://api.kick.com/public/v1/channels/${broadcasterId}/bans`, {
+        // Timeout uygula (URL'de broadcasterId yerine username/slug kullanılması gerekebilir)
+        console.log(`Sending ban request to: https://api.kick.com/public/v1/channels/${channelData.username || broadcasterId}/bans`);
+
+        const banRes = await axios.post(`https://api.kick.com/public/v1/channels/${channelData.username || broadcasterId}/bans`, {
             banned_user_id: targetUserId,
             duration: duration,
             reason: "Bot tarafından susturuldu"
@@ -219,7 +221,9 @@ async function setSlowMode(broadcasterId, enabled, delay = 10) {
 
     try {
         // Kick API v1 chat-settings endpoint
-        const res = await axios.put(`https://api.kick.com/public/v1/channels/${broadcasterId}/chat-settings`, {
+        const apiPath = `https://api.kick.com/public/v1/channels/${channelData.username || broadcasterId}/chat-settings`;
+
+        const res = await axios.patch(apiPath, {
             slow_mode: enabled,
             slow_mode_interval: delay // saniye
         }, {
@@ -244,7 +248,8 @@ async function clearChat(broadcasterId) {
 
     try {
         // Kick API v1 chat clear endpoint
-        const res = await axios.post(`https://api.kick.com/public/v1/channels/${broadcasterId}/chat/clear`, {}, {
+        const apiPath = `https://api.kick.com/public/v1/channels/${channelData.username || broadcasterId}/chat/clear`;
+        const res = await axios.post(apiPath, {}, {
             headers: { 'Authorization': `Bearer ${channelData.access_token}` }
         });
         console.log("✅ Chat temizlendi:", res.status);
