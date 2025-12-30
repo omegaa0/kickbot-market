@@ -191,17 +191,21 @@ async function timeoutUser(broadcasterId, targetUsername, duration) {
 
         console.log(`✅ User ID bulundu: ${targetUsername} -> ${targetUserId}`);
 
-        // Timeout uygula (URL'de broadcasterId yerine username/slug kullanılması gerekebilir)
-        console.log(`Sending ban request to: https://api.kick.com/public/v1/channels/${channelData.username || broadcasterId}/bans`);
+        // Timeout uygula (Slug yoksa username, o da yoksa ID dene)
+        const channelIdentifier = channelData.slug || channelData.username || broadcasterId;
+        const banUrl = `https://api.kick.com/public/v1/channels/${channelIdentifier}/bans`;
 
-        const banRes = await axios.post(`https://api.kick.com/public/v1/channels/${channelData.username || broadcasterId}/bans`, {
+        console.log(`Sending ban request to: ${banUrl}`);
+
+        const banRes = await axios.post(banUrl, {
             banned_user_id: targetUserId,
             duration: duration,
             reason: "Bot tarafından susturuldu"
         }, {
             headers: {
                 'Authorization': `Bearer ${channelData.access_token}`,
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
         });
 
@@ -298,6 +302,14 @@ app.post('/kick/webhook', async (req, res) => {
     if (!channelData) {
         console.log(`❌ Kanal veritabanında yok: ${broadcasterId}`);
         return;
+    }
+
+    // SLUG GÜNCELLEME (API için kritik)
+    const currentSlug = event.broadcaster?.channel_slug || event.channel?.slug || payload.broadcaster?.channel_slug;
+    if (currentSlug && channelData.slug !== currentSlug) {
+        await db.ref('channels/' + broadcasterId).update({ slug: currentSlug });
+        channelData.slug = currentSlug; // Local memory update
+        console.log(`🔄 Kanal slug güncellendi: ${currentSlug}`);
     }
 
     const settings = channelData.settings || {};
