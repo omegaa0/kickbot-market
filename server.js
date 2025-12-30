@@ -316,7 +316,8 @@ app.post('/kick/webhook', async (req, res) => {
 
     // --- KOMUT ZİNCİRİ ---
     // SELAM - Sadece tam kelime olarak geçiyorsa cevap ver (ve cooldown)
-    const selamRegex = /\b(sa|sea|selam|slm|as|selamün aleyküm|selamünaleyküm)\b/i;
+    // SELAM - Sadece tam kelime olarak geçiyorsa cevap ver (ve cooldown)
+    const selamRegex = /\b(sa|sea|selam|selamlar|slm|as|selamün aleyküm|selamünaleyküm)\b/i;
     const selamCooldowns = global.selamCooldowns || (global.selamCooldowns = {});
     const userCooldownKey = `${broadcasterId}_${user.toLowerCase()}`;
     const now = Date.now();
@@ -355,14 +356,21 @@ app.post('/kick/webhook', async (req, res) => {
     if (isEnabled('slot') && lowMsg.startsWith('!slot')) {
         const cost = Math.max(10, parseInt(args[0]) || 100);
         const snap = await userRef.once('value');
-        const data = snap.val() || { balance: 1000, slot_count: 0, slot_reset: 0 };
+        let data = snap.val() || { balance: 1000, slot_count: 0, slot_reset: 0 };
+
+        // Veri güvenliği (NaN önleme)
+        data.balance = parseInt(data.balance) || 1000;
+        data.slot_count = parseInt(data.slot_count) || 0;
+        data.slot_reset = parseInt(data.slot_reset) || 0;
+
         const now = Date.now();
 
         if (now > data.slot_reset) { data.slot_count = 0; data.slot_reset = now + 3600000; }
         if (data.slot_count >= 10) return await reply(`@${user}, 🚨 Slot limitin doldu! (10/saat)`);
-        if ((data.balance || 0) < cost) return await reply(`@${user}, Yetersiz bakiye!`);
+        if (data.balance < cost) return await reply(`@${user}, Yetersiz bakiye!`);
 
-        data.balance -= cost; data.slot_count++;
+        data.balance -= cost;
+        data.slot_count++;
         const rig = checkRig();
         const sym = ["🍒", "🍋", "🍇", "🔔", "💎", "7️⃣", "🍉", "🍀"];
         let s, mult;
