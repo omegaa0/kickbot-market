@@ -124,6 +124,30 @@ async function refreshChannelToken(broadcasterId) {
     } catch (e) { console.log("Refresh token error", e.message); }
 }
 
+// KICK API TIMEOUT FONKSİYONU (Webhook dışında tanımlandı)
+async function timeoutUser(broadcasterId, username, duration) {
+    const channelRef = await db.ref('channels/' + broadcasterId).once('value');
+    const data = channelRef.val();
+    if (!data) return false;
+    try {
+        const uRes = await axios.get(`https://api.kick.com/public/v1/users/${username}`, {
+            headers: { 'Authorization': `Bearer ${data.access_token}` }
+        });
+        const userId = uRes.data?.user_id;
+        if (!userId) return false;
+        await axios.post(`https://api.kick.com/public/v1/channels/${broadcasterId}/bans`, {
+            banned_user_id: parseInt(userId),
+            duration: duration,
+            reason: "Bot !sustur komutu",
+            permanent: false
+        }, { headers: { 'Authorization': `Bearer ${data.access_token}`, 'Content-Type': 'application/json' } });
+        return true;
+    } catch (e) {
+        console.log("Timeout Error:", e.response?.data || e.message);
+        return false;
+    }
+}
+
 // ---------------------------------------------------------
 // 4. WEBHOOK (KOMUTLAR & OTO KAYIT)
 // ---------------------------------------------------------
@@ -404,34 +428,6 @@ app.post('/kick/webhook', async (req, res) => {
     else if (settings.fal !== false && lowMsg === '!efkar') {
         const p = Math.floor(Math.random() * 101);
         await reply(`🚬 @${user} Efkar Seviyesi: %${p} ${p > 70 ? '😭🚬' : '🍷'}`);
-    }
-
-    // KICK API TIMEOUT FONKSİYONU
-    async function timeoutUser(broadcasterId, username, duration) {
-        const channelRef = await db.ref('channels/' + broadcasterId).once('value');
-        const data = channelRef.val();
-        if (!data) return;
-
-        try {
-            // Kullanıcı ID'sini bulmak gerekiyor (Username -> ID)
-            const uRes = await axios.get(`https://api.kick.com/public/v1/users/${username}`, {
-                headers: { 'Authorization': `Bearer ${data.access_token}` }
-            });
-            const userId = uRes.data?.user_id; // Veya direkt data.id (API yapısına göre değişebilir, user_id genelde doğru)
-            if (!userId) return false;
-
-            // Ban Endpoint (Timeout da buradan veriliyor)
-            await axios.post(`https://api.kick.com/public/v1/channels/${broadcasterId}/bans`, {
-                banned_user_id: parseInt(userId),
-                duration: duration, // Saniye cinsinden
-                reason: "Bot !sustur komutu",
-                permanent: false
-            }, { headers: { 'Authorization': `Bearer ${data.access_token}`, 'Content-Type': 'application/json' } });
-            return true;
-        } catch (e) {
-            console.log("Timeout Error:", e.response?.data || e.message);
-            return false;
-        }
     }
 
     // --- ADMIN / MOD ---
