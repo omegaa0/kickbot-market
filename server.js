@@ -55,7 +55,7 @@ app.get('/login', async (req, res) => {
 app.get('/auth/kick/callback', async (req, res) => {
     const { code, state } = req.query;
     const tempAuth = (await db.ref('temp_auth/' + state).once('value')).val();
-    if (!tempAuth) return res.send("Oturum zaman aÅŸÄ±mÄ±.");
+    if (!tempAuth) return res.send("Oturum zaman aşımı.");
     try {
         const params = new URLSearchParams();
         params.append('grant_type', 'authorization_code');
@@ -85,7 +85,7 @@ app.get('/auth/kick/callback', async (req, res) => {
         });
 
         await subscribeToChat(response.data.access_token, bid);
-        res.send(`<body style='background:#111;color:lime;text-align:center;padding-top:100px;'><h1>âœ… ${userData.name} KANALI EKLENDÄ°!</h1></body>`);
+        res.send(`<body style='background:#111;color:lime;text-align:center;padding-top:100px;'><h1>✅ ${userData.name} KANALI EKLENDİ!</h1></body>`);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -140,7 +140,7 @@ async function timeoutUser(broadcasterId, targetUsername, duration) {
         const dbIdSnap = await db.ref('kick_ids/' + targetUsername.toLowerCase()).once('value');
         if (dbIdSnap.exists()) {
             targetUserId = dbIdSnap.val();
-            console.log(`âœ… ID VeritabanÄ±ndan bulundu: ${targetUsername} -> ${targetUserId}`);
+            console.log(`✅ ID Veritabanından bulundu: ${targetUsername} -> ${targetUserId}`);
         }
 
         // YÃ¶ntem 1: Public channel endpoint (herkesin kanalÄ± var)
@@ -186,15 +186,15 @@ async function timeoutUser(broadcasterId, targetUsername, duration) {
         }
 
         if (!targetUserId) {
-            console.log(`âŒ TÃ¼m yÃ¶ntemler baÅŸarÄ±sÄ±z: ${targetUsername}`);
-            return { success: false, error: 'KullanÄ±cÄ± bulunamadÄ± (Kick API)' };
+            console.log(`❌ Tüm yöntemler başarısız: ${targetUsername}`);
+            return { success: false, error: 'Kullanıcı bulunamadı (Kick API)' };
         }
 
-        console.log(`âœ… User ID bulundu: ${targetUsername} -> ${targetUserId}`);
+        console.log(`✅ User ID bulundu: ${targetUsername} -> ${targetUserId}`);
 
         let lastError = null;
 
-        // Timeout uygula (RESMÄ° V1 MODERATION ENDPOINT)
+        // Timeout uygula (RESMİ V1 MODERATION ENDPOINT)
         try {
             const url = `https://api.kick.com/public/v1/moderation/bans`;
             console.log(`Trying Official Ban Endpoint: ${url}`);
@@ -214,29 +214,29 @@ async function timeoutUser(broadcasterId, targetUsername, duration) {
                     'Accept': 'application/json'
                 }
             });
-            console.log("âœ… Ban/Timeout baÅŸarÄ±lÄ±! Status:", banRes.status);
+            console.log("✅ Ban/Timeout başarılı! Status:", banRes.status);
             return { success: true };
         } catch (e) {
-            console.log(`âŒ Official Endpoint failed:`, e.response?.status, JSON.stringify(e.response?.data) || e.message);
+            console.log(`❌ Official Endpoint failed:`, e.response?.status, JSON.stringify(e.response?.data) || e.message);
 
             if (e.response?.status === 401) {
-                console.log("ğŸ”„ Token tazeleniyor...");
+                console.log("🔄 Token tazeleniyor...");
                 await refreshChannelToken(broadcasterId);
             }
             lastError = e;
         }
 
-        // --- SON Ã‡ARE: CHAT KOMUTU ---
-        console.log(`âš ï¸ API baÅŸarÄ±sÄ±z. Chat komutu deneniyor: /timeout @${targetUsername} ${duration}`);
+        // --- SON ÇARE: CHAT KOMUTU ---
+        console.log(`⚠️ API başarısız. Chat komutu deneniyor: /timeout @${targetUsername} ${duration}`);
         try {
             await sendChatMessage(`/timeout @${targetUsername} ${duration}`, broadcasterId);
             return { success: true, note: "Chat fallback" };
         } catch (chatErr) {
-            console.log("âŒ Chat fallback de baÅŸarÄ±sÄ±z.");
-            return { success: false, error: lastError?.response?.data?.message || lastError?.message || 'TÃ¼m yÃ¶ntemler baÅŸarÄ±sÄ±z' };
+            console.log("❌ Chat fallback de başarısız.");
+            return { success: false, error: lastError?.response?.data?.message || lastError?.message || 'Tüm yöntemler başarısız' };
         }
     } catch (e) {
-        console.log("âŒ Timeout Fatal:", e.message);
+        console.log("❌ Timeout Fatal:", e.message);
         return { success: false, error: e.message };
     }
 }
@@ -245,7 +245,7 @@ async function timeoutUser(broadcasterId, targetUsername, duration) {
 async function setSlowMode(broadcasterId, enabled, delay = 10) {
     const channelRef = await db.ref('channels/' + broadcasterId).once('value');
     const channelData = channelRef.val();
-    if (!channelData) return { success: false, error: 'Kanal bulunamadÄ±' };
+    if (!channelData) return { success: false, error: 'Kanal bulunamadı' };
 
     try {
         const url = 'https://api.kick.com/public/v1/chat-settings';
@@ -262,10 +262,10 @@ async function setSlowMode(broadcasterId, enabled, delay = 10) {
                 'User-Agent': 'Mozilla/5.0'
             }
         });
-        console.log("âœ… SlowMode gÃ¼ncellendi:", url);
+        console.log("✅ SlowMode güncellendi:", url);
         return { success: true };
     } catch (e) {
-        console.log("âŒ SlowMode Error:", e.response?.status, e.response?.data || e.message);
+        console.log("❌ SlowMode Error:", e.response?.status, e.response?.data || e.message);
         return { success: false, error: e.response?.data?.message || e.message };
     }
 }
@@ -274,7 +274,7 @@ async function setSlowMode(broadcasterId, enabled, delay = 10) {
 async function clearChat(broadcasterId) {
     const channelRef = await db.ref('channels/' + broadcasterId).once('value');
     const channelData = channelRef.val();
-    if (!channelData) return { success: false, error: 'Kanal bulunamadÄ±' };
+    if (!channelData) return { success: false, error: 'Kanal bulunamadı' };
 
     try {
         const url = 'https://api.kick.com/public/v1/chat/clear';
@@ -289,10 +289,10 @@ async function clearChat(broadcasterId) {
                 'User-Agent': 'Mozilla/5.0'
             }
         });
-        console.log("âœ… Chat temizlendi:", url);
+        console.log("✅ Chat temizlendi:", url);
         return { success: true };
     } catch (e) {
-        console.log("âŒ ClearChat Error:", e.response?.status, e.response?.data || e.message);
+        console.log("❌ ClearChat Error:", e.response?.status, e.response?.data || e.message);
         return { success: false, error: e.response?.data?.message || e.message };
     }
 }
@@ -327,16 +327,16 @@ app.post('/kick/webhook', async (req, res) => {
     const channelData = channelRef.val();
 
     if (!channelData) {
-        console.log(`âŒ Kanal veritabanÄ±nda yok: ${broadcasterId}`);
+        console.log(`❌ Kanal veritabanında yok: ${broadcasterId}`);
         return;
     }
 
-    // SLUG GÃœNCELLEME (API iÃ§in kritik)
+    // SLUG GÜNCELLEME (API için kritik)
     const currentSlug = event.broadcaster?.channel_slug || event.channel?.slug || payload.broadcaster?.channel_slug;
     if (currentSlug && channelData.slug !== currentSlug) {
         await db.ref('channels/' + broadcasterId).update({ slug: currentSlug });
         channelData.slug = currentSlug; // Local memory update
-        console.log(`ğŸ”„ Kanal slug gÃ¼ncellendi: ${currentSlug}`);
+        console.log(`🔄 Kanal slug güncellendi: ${currentSlug}`);
     }
 
     const settings = channelData.settings || {};
@@ -350,7 +350,7 @@ app.post('/kick/webhook', async (req, res) => {
     const args = rawMsg.trim().split(/\s+/).slice(1);
     const userRef = db.ref('users/' + user.toLowerCase());
 
-    // --- OTOMATÄ°K KAYIT & AKTÄ°FLÄ°K TAKÄ°BÄ° ---
+    // --- OTOMATİK KAYIT & AKTİFLİK TAKİBİ ---
     const userSnap = await userRef.once('value');
     if (!userSnap.exists()) {
         await userRef.set({ balance: 1000, last_seen: Date.now(), created_at: Date.now() });
@@ -358,62 +358,62 @@ app.post('/kick/webhook', async (req, res) => {
         await userRef.update({ last_seen: Date.now() });
     }
 
-    // KICK ID KAYDET (Susturma iÅŸlemleri iÃ§in)
+    // KICK ID KAYDET (Susturma işlemleri için)
     if (event.sender?.user_id) {
         await db.ref('kick_ids/' + user.toLowerCase()).set(event.sender.user_id);
     }
 
-    // --- ADMIN / MOD YETKÄ° KONTROLÃœ ---
+    // --- ADMIN / MOD YETKİ KONTROLÜ ---
     const isAuthorized = event.sender?.identity?.badges?.some(b => b.type === 'broadcaster' || b.type === 'moderator') || user.toLowerCase() === "omegacyr";
 
     const reply = (msg) => sendChatMessage(msg, broadcasterId);
 
-    // --- RIG KONTROLÃœ ---
+    // --- RIG KONTROLÜ ---
     const checkRig = () => {
         const r = riggedGambles[user.toLowerCase()];
         if (r) { delete riggedGambles[user.toLowerCase()]; return r; }
         return null;
     };
 
-    // Komut aktif mi kontrolÃ¼ (undefined = aktif, false = kapalÄ±)
+    // Komut aktif mi kontrolü (undefined = aktif, false = kapalı)
     const isEnabled = (cmd) => settings[cmd] !== false;
 
-    // --- KOMUT ZÄ°NCÄ°RÄ° ---
-    // SELAM - Sadece tam kelime olarak geÃ§iyorsa cevap ver (ve cooldown)
-    const selamRegex = /\b(sa|sea|selam|selamlar|slm|selamÃ¼n aleykÃ¼m|selamÃ¼naleykÃ¼m)\b/i;
+    // --- KOMUT ZİNCİRİ ---
+    // SELAM - Sadece tam kelime olarak geçiyorsa cevap ver (ve cooldown)
+    const selamRegex = /\b(sa|sea|selam|selamlar|slm|selamün aleyküm|selamünaleyküm)\b/i;
     const selamCooldowns = global.selamCooldowns || (global.selamCooldowns = {});
     const userCooldownKey = `${broadcasterId}_${user.toLowerCase()}`;
     const now = Date.now();
 
-    if (selamRegex.test(lowMsg) && !lowMsg.startsWith('!') && !lowMsg.includes('aleykÃ¼m')) {
-        // AynÄ± kullanÄ±cÄ±ya 60 saniye iÃ§inde tekrar cevap verme
+    if (selamRegex.test(lowMsg) && !lowMsg.startsWith('!') && !lowMsg.includes('aleyküm')) {
+        // Aynı kullanıcıya 60 saniye içinde tekrar cevap verme
         if (!selamCooldowns[userCooldownKey] || now - selamCooldowns[userCooldownKey] > 60000) {
             selamCooldowns[userCooldownKey] = now;
-            await reply(`AleykÃ¼m selam @${user}! HoÅŸ geldin. ğŸ‘‹`);
+            await reply(`Aleyküm selam @${user}! Hoş geldin. 👋`);
         }
     }
 
     else if (lowMsg === '!bakiye') {
         const snap = await userRef.once('value');
-        await reply(`@${user}, Bakiyeniz: ${(snap.val()?.balance || 0).toLocaleString()} ğŸ’°`);
+        await reply(`@${user}, Bakiyeniz: ${(snap.val()?.balance || 0).toLocaleString()} 💰`);
     }
 
-    else if (lowMsg === '!gÃ¼nlÃ¼k') {
+    else if (lowMsg === '!günlük') {
         const snap = await userRef.once('value');
         const data = snap.val() || { balance: 1000, lastDaily: 0 };
         const now = Date.now();
         if (now - data.lastDaily < 86400000) {
             const diff = 86400000 - (now - data.lastDaily);
             const hours = Math.floor(diff / 3600000);
-            return await reply(`@${user}, â³ GÃ¼nlÃ¼k Ã¶dÃ¼l iÃ§in ${hours} saat beklemelisin.`);
+            return await reply(`@${user}, ⏳ Günlük ödül için ${hours} saat beklemelisin.`);
         }
         data.balance = (data.balance || 0) + 500; data.lastDaily = now;
         await userRef.set(data);
-        await reply(`ğŸ @${user}, +500 ğŸ’° eklendi! âœ…`);
+        await reply(`🎁 @${user}, +500 💰 eklendi! ✅`);
     }
 
-    // --- OYUNLAR (AYAR KONTROLLÃœ) ---
-    // Kumar kazanÃ§ oranlarÄ± (varsayÄ±lan deÄŸerler)
+    // --- OYUNLAR (AYAR KONTROLLÜ) ---
+    // Kumar kazanç oranları (varsayılan değerler)
     const wrSlot = settings.wr_slot || 30;
     const wrYazitura = settings.wr_yazitura || 50;
     const wrKutu = settings.wr_kutu || 40;
@@ -430,7 +430,7 @@ app.post('/kick/webhook', async (req, res) => {
         const snap = await userRef.once('value');
         let data = snap.val() || { balance: 1000, slot_count: 0, slot_reset: 0 };
 
-        // Veri gÃ¼venliÄŸi (NaN Ã¶nleme)
+        // Veri güvenliği (NaN önleme)
         data.balance = parseInt(data.balance) || 1000;
         data.slot_count = parseInt(data.slot_count) || 0;
         data.slot_reset = parseInt(data.slot_reset) || 0;
@@ -438,7 +438,7 @@ app.post('/kick/webhook', async (req, res) => {
         const now = Date.now();
 
         if (now > data.slot_reset) { data.slot_count = 0; data.slot_reset = now + 3600000; }
-        if (data.slot_count >= 5) return await reply(`@${user}, ğŸš¨ Slot limitin doldu! (5/saat)`);
+        if (data.slot_count >= 5) return await reply(`@${user}, 🚨 Slot limitin doldu! (5/saat)`);
         if (data.balance < cost) return await reply(`@${user}, Yetersiz bakiye!`);
 
         data.balance -= cost;
@@ -571,7 +571,7 @@ app.post('/kick/webhook', async (req, res) => {
     else if (isEnabled('duello') && lowMsg.startsWith('!duello')) {
         const target = args[0]?.replace('@', '').toLowerCase();
         const amt = parseInt(args[1]);
-        if (!target || isNaN(amt)) return await reply(`@${user}, KullanÄ±m: !duello @target [miktar]`);
+        if (!target || isNaN(amt)) return await reply(`@${user}, Kullanım: !duello @target [miktar]`);
 
         const snap = await userRef.once('value');
         const userData = snap.val() || { balance: 0 };
@@ -581,7 +581,7 @@ app.post('/kick/webhook', async (req, res) => {
         if (!targetSnap.exists() || targetSnap.val().balance < amt) return await reply('Rakibin bakiyesi yetersiz.');
 
         activeDuels[target] = { challenger: user, amount: amt, expire: Date.now() + 60000, channel: broadcasterId };
-        await reply(`âš”ï¸ @${target}, @${user} sana ${amt} ğŸ’° karÅŸÄ±lÄ±ÄŸÄ±nda meydan okudu! Kabul iÃ§in: !kabul`);
+        await reply(`⚔️ @${target}, @${user} sana ${amt} 💰 karşılığında meydan okudu! Kabul için: !kabul`);
     }
 
     else if (lowMsg === '!kabul') {
@@ -592,7 +592,7 @@ app.post('/kick/webhook', async (req, res) => {
         const loser = winner === user ? d.challenger : user;
         await db.ref('users/' + winner.toLowerCase()).transaction(u => { if (u) u.balance += d.amount; return u; });
         await db.ref('users/' + loser.toLowerCase()).transaction(u => { if (u) u.balance -= d.amount; return u; });
-        await reply(`ğŸ† @${winner} dÃ¼elloyu kazandÄ± ve ${d.amount} ğŸ’° kaptÄ±! âš”ï¸`);
+        await reply(`🏆 @${winner} düelloyu kazandı ve ${d.amount} 💰 kaptı! ⚔️`);
     }
 
     else if (isEnabled('soygun') && lowMsg === '!soygun') {
@@ -642,17 +642,17 @@ app.post('/kick/webhook', async (req, res) => {
         }
     }
 
-    // --- SOSYAL & DÄ°ÄER ---
+    // --- SOSYAL & DİĞER ---
     else if (isEnabled('fal') && lowMsg === '!fal') {
-        const list = ["GeleceÄŸin parlak.", "YakÄ±nda gÃ¼zel haber var.", "Dikkatli ol!", "AÅŸk kapÄ±da."];
-        await reply(`ğŸ”® @${user}, FalÄ±n: ${list[Math.floor(Math.random() * list.length)]}`);
+        const list = ["Geleceğin parlak.", "Yakında güzel haber var.", "Dikkatli ol!", "Aşk kapıda."];
+        await reply(`🔮 @${user}, Falın: ${list[Math.floor(Math.random() * list.length)]}`);
     }
 
     else if (isEnabled('ship') && lowMsg.startsWith('!ship')) {
         let target = args[0]?.replace('@', '');
         const rig = riggedShips[user.toLowerCase()];
 
-        // Hedef yoksa rastgele birini seÃ§ (veritabanÄ±ndan)
+        // Hedef yoksa rastgele birini seç (veritabanından)
         if (!target && !rig) {
             const allUsers = await db.ref('users').limitToFirst(50).once('value');
             const userList = Object.keys(allUsers.val() || {}).filter(u => u !== user.toLowerCase());
@@ -666,26 +666,26 @@ app.post('/kick/webhook', async (req, res) => {
         if (rig) {
             target = rig.target || target || "Gizli Hayran";
             const perc = rig.percent;
-            await reply(`â¤ï¸ @${user} & @${target} Uyumu: %${perc} ${perc >= 100 ? 'ğŸ”¥ RUH EÅžÄ° BULUNDU!' : 'ğŸ’”'}`);
+            await reply(`❤️ @${user} & @${target} Uyumu: %${perc} ${perc >= 100 ? '🔥 RUH EŞİ BULUNDU!' : '💔'}`);
             delete riggedShips[user.toLowerCase()];
         } else {
             const perc = Math.floor(Math.random() * 101);
-            await reply(`â¤ï¸ @${user} & @${target} Uyumu: %${perc} ${perc > 80 ? 'ğŸ”¥' : perc > 50 ? 'ğŸ˜' : 'ğŸ’”'}`);
+            await reply(`❤️ @${user} & @${target} Uyumu: %${perc} ${perc > 80 ? '🔥' : perc > 50 ? '😍' : '💔'}`);
         }
     }
 
     else if (settings.zenginler !== false && lowMsg === '!zenginler') {
         const snap = await db.ref('users').once('value');
         const sorted = Object.entries(snap.val() || {}).sort((a, b) => (b[1].balance || 0) - (a[1].balance || 0)).slice(0, 5);
-        let txt = "ğŸ† EN ZENGÄ°NLER: ";
-        sorted.forEach((u, i) => txt += `${i + 1}. ${u[0]} (${u[1].balance}) | `);
+        let txt = "🏆 EN ZENGİNLER: ";
+        sorted.forEach((u, i) => txt += `${i + 1}. ${u[0]} (${u[1].balance.toLocaleString()}) | `);
         await reply(txt);
     }
 
     else if (settings.hava !== false && lowMsg.startsWith('!hava')) {
         const city = args.join(' ');
-        if (city.toLowerCase() === "kÃ¼rdistan") {
-            return await reply("Aponunda kÃ¼rdistanÄ±nda amÄ±na Ã§aktÄ±m ğŸ‡¹ğŸ‡·");
+        if (city.toLowerCase() === "kürdistan") {
+            return await reply("T.C. sınırları içerisinde böyle bir yer bulunamadı! 🇹🇷");
         }
         try {
             const geo = await axios.get(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=tr&format=json`);
@@ -694,52 +694,52 @@ app.post('/kick/webhook', async (req, res) => {
                 const weather = await axios.get(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`);
                 const w = weather.data.current_weather;
                 const code = w.weathercode;
-                let cond = "AÃ§Ä±k"; let emoji = "â˜€ï¸";
-                if (code >= 1 && code <= 3) { cond = "Bulutlu"; emoji = "â˜ï¸"; }
-                else if (code >= 45 && code <= 48) { cond = "Sisli"; emoji = "ğŸŒ«ï¸"; }
-                else if (code >= 51 && code <= 67) { cond = "YaÄŸmurlu"; emoji = "ğŸŒ§ï¸"; }
-                else if (code >= 71 && code <= 86) { cond = "KarlÄ±"; emoji = "â„ï¸"; }
-                else if (code >= 95) { cond = "FÄ±rtÄ±na"; emoji = "â›ˆï¸"; }
-                await reply(`ğŸŒ Hava Durumu (${name}): ${cond} ${emoji}, ${w.temperature}Â°C, RÃ¼zgar: ${w.windspeed} km/s`);
-            } else await reply("Åžehir bulunamadÄ±.");
-        } catch { await reply("Hava durumu servisi ÅŸu an kullanÄ±lamÄ±yor."); }
+                let cond = "Açık"; let emoji = "☀️";
+                if (code >= 1 && code <= 3) { cond = "Bulutlu"; emoji = "☁️"; }
+                else if (code >= 45 && code <= 48) { cond = "Sisli"; emoji = "🌫️"; }
+                else if (code >= 51 && code <= 67) { cond = "Yağmurlu"; emoji = "🌧️"; }
+                else if (code >= 71 && code <= 86) { cond = "Karlı"; emoji = "❄️"; }
+                else if (code >= 95) { cond = "Fırtına"; emoji = "⛈️"; }
+                await reply(`🌍 Hava Durumu (${name}): ${cond} ${emoji}, ${w.temperature}°C, Rüzgar: ${w.windspeed} km/s`);
+            } else await reply("Şehir bulunamadı.");
+        } catch { await reply("Hava durumu servisi şu an kullanılamıyor."); }
     }
 
-    else if (settings.soz !== false && lowMsg === '!sÃ¶z') {
-        const list = ["GÃ¼lÃ¼ÅŸÃ¼ne yaÄŸmur yaÄŸsa, sÄ±rÄ±lsÄ±klam olurum.", "Seninle her ÅŸey gÃ¼zel, sensiz her ÅŸey boÅŸ.", "GÃ¶zlerin gÃ¶kyÃ¼zÃ¼, ben ise kayÄ±p bir uÃ§urtma.", "Hayat kÄ±sa, kuÅŸlar uÃ§uyor."];
-        await reply(`âœï¸ @${user}: ${list[Math.floor(Math.random() * list.length)]}`);
+    else if (settings.soz !== false && lowMsg === '!söz') {
+        const list = ["Gülüşüne yağmur yağsa, sırılsıklam olurum.", "Seninle her şey güzel, sensiz her şey boş.", "Gözlerin gökyüzü, ben ise kayıp bir uçurtma.", "Hayat kısa, kuşlar uçuyor."];
+        await reply(`✍️ @${user}: ${list[Math.floor(Math.random() * list.length)]}`);
     }
 
     else if (isEnabled('fal') && lowMsg === '!efkar') {
         const p = Math.floor(Math.random() * 101);
-        await reply(`ğŸš¬ @${user} Efkar Seviyesi: %${p} ${p > 70 ? 'ğŸ˜­ğŸš¬' : 'ğŸ·'}`);
+        await reply(`🚬 @${user} Efkar Seviyesi: %${p} ${p > 70 ? '😩🚬' : '🍷'}`);
     }
 
-    // --- YENÄ° BAKÄ°YE HARCAMA KOMUTLARI: TTS & SES ---
+    // --- YENİ BAKİYE HARCAMA KOMUTLARI: TTS & SES ---
     else if (lowMsg.startsWith('!tts')) {
         const text = args.join(' ');
-        if (!text) return await reply(`@${user}, !tts [mesaj] ÅŸeklinde kullanmalÄ±sÄ±n!`);
-        if (text.length > 100) return await reply(`@${user}, Mesaj Ã§ok uzun! (Maks 100 karakter)`);
+        if (!text) return await reply(`@${user}, !tts [mesaj] şeklinde kullanmalısın!`);
+        if (text.length > 100) return await reply(`@${user}, Mesaj çok uzun! (Maks 100 karakter)`);
 
         const snap = await userRef.once('value');
-        if ((snap.val()?.balance || 0) < 2500) return await reply(`@${user}, TTS iÃ§in 2.500 ğŸ’° lazÄ±m!`);
+        if ((snap.val()?.balance || 0) < 2500) return await reply(`@${user}, TTS için 2.500 💰 lazım!`);
 
         await userRef.transaction(u => { if (u) u.balance -= 2500; return u; });
         await db.ref('stream_events/tts').push({ text: `@${user} diyor ki: ${text}`, played: false, timestamp: Date.now() });
-        await reply(`ğŸ™ï¸ @${user}, MesajÄ±n yayÄ±na gÃ¶nderildi! (-2,500 ğŸ’°)`);
+        await reply(`🎙️ @${user}, Mesajın yayına gönderildi! (-2,500 💰)`);
     }
 
     else if (lowMsg.startsWith('!ses')) {
         const soundId = args[0]?.toLowerCase();
         const sounds = ["alkis", "gol", "korku", "gulme"];
-        if (!soundId || !sounds.includes(soundId)) return await reply(`@${user}, GeÃ§ersiz ses! Mevcutlar: ${sounds.join(', ')}`);
+        if (!soundId || !sounds.includes(soundId)) return await reply(`@${user}, Geçersiz ses! Mevcutlar: ${sounds.join(', ')}`);
 
         const snap = await userRef.once('value');
-        if ((snap.val()?.balance || 0) < 1000) return await reply(`@${user}, Ses efekti iÃ§in 1.000 ğŸ’° lazÄ±m!`);
+        if ((snap.val()?.balance || 0) < 1000) return await reply(`@${user}, Ses efekti için 1.000 💰 lazım!`);
 
         await userRef.transaction(u => { if (u) u.balance -= 1000; return u; });
         await db.ref('stream_events/sound').push({ soundId, played: false, timestamp: Date.now() });
-        await reply(`ğŸµ @${user}, ${soundId} sesi Ã§alÄ±nÄ±yor! (-1,000 ğŸ’°)`);
+        await reply(`🎵 @${user}, ${soundId} sesi çalınıyor! (-1,000 💰)`);
     }
 
     else if (lowMsg === '!sesler') {
@@ -752,12 +752,12 @@ app.post('/kick/webhook', async (req, res) => {
         if (target) {
             const snap = await userRef.once('value');
             if ((snap.val()?.balance || 0) < 10000) {
-                await reply(`@${user}, 10.000 ğŸ’° bakiye lazÄ±m!`);
+                await reply(`@${user}, 10.000 💰 bakiye lazım!`);
             } else {
                 const result = await timeoutUser(broadcasterId, target, 600);
                 if (result.success) {
                     await userRef.transaction(u => { if (u) u.balance -= 10000; return u; });
-                    await reply(`ğŸ”‡ @${user}, @${target} kullanÄ±cÄ±sÄ±nÄ± 10 dakika susturdu! (-10.000 ğŸ’°)`);
+                    await reply(`🔇 @${user}, @${target} kullanıcısını 10 dakika susturdu! (-10.000 💰)`);
 
                     // BAN Ä°STATÄ°STÄ°ÄÄ° (Target kullanÄ±cÄ±sÄ±nÄ±n ban sayÄ±sÄ±nÄ± artÄ±r)
                     const targetRef = db.ref(`users/${target}`);
@@ -866,24 +866,24 @@ app.post('/kick/webhook', async (req, res) => {
     }
 
     else if (lowMsg === '!komutlar') {
-        const toggleable = ['slot', 'yazitura', 'kutu', 'duello', 'soygun', 'fal', 'ship', 'hava', 'zenginler', 'sÃ¶z'];
+        const toggleable = ['slot', 'yazitura', 'kutu', 'duello', 'soygun', 'fal', 'ship', 'hava', 'zenginler', 'soz'];
         const enabled = toggleable.filter(k => settings[k] !== false).map(k => "!" + k);
-        const fixed = ['!bakiye', '!gÃ¼nlÃ¼k', '!sustur', '!efkar'];
-        await reply(`ğŸ“‹ Komutlar: ${[...enabled, ...fixed].join(', ')}`);
+        const fixed = ['!bakiye', '!günlük', '!sustur', '!efkar'];
+        await reply(`📋 Komutlar: ${[...enabled, ...fixed].join(', ')}`);
     }
 });
 
 // ---------------------------------------------------------
-// 5. ADMIN PANEL & API (GELÄ°ÅMÄ°Å)
+// 5. ADMIN PANEL & API (GELİŞMİŞ)
 // ---------------------------------------------------------
-const ADMIN_KEY = process.env.ADMIN_KEY || "Aloske123!";
+const ADMIN_KEY = process.env.ADMIN_KEY || "";
 
 app.get('/admin', (req, res) => { res.sendFile(path.join(__dirname, 'admin.html')); });
 
 const authAdmin = (req, res, next) => {
     const key = req.headers['authorization'] || req.body.key;
     if (key === ADMIN_KEY) return next();
-    res.status(403).json({ success: false, error: 'Yetkisiz EriÅŸim' });
+    res.status(403).json({ success: false, error: 'Yetkisiz Erişim' });
 };
 
 // ... Eski API'ler ...
@@ -905,7 +905,7 @@ app.post('/admin-api/rig-gamble', authAdmin, (req, res) => {
     res.json({ success: true });
 });
 
-// CHAT AKSÄ°YONLARI (API tabanlÄ± moderasyon)
+// CHAT AKSİYONLARI (API tabanlı moderasyon)
 app.post('/admin-api/chat-action', authAdmin, async (req, res) => {
     const { action, channelId } = req.body;
 
@@ -923,14 +923,14 @@ app.post('/admin-api/chat-action', authAdmin, async (req, res) => {
     res.json(result);
 });
 
-// ADMIN TIMEOUT (Kanal ve kullanÄ±cÄ± belirterek susturma)
+// ADMIN TIMEOUT (Kanal ve kullanıcı belirterek susturma)
 app.post('/admin-api/timeout', authAdmin, async (req, res) => {
     const { channelId, username, duration } = req.body;
     const result = await timeoutUser(channelId, username, duration || 600);
     res.json(result);
 });
 
-// YENÄ°: KANAL LÄ°STESÄ° (POST oldu)
+// YENİ: KANAL LİSTESİ (POST oldu)
 app.post('/admin-api/channels', authAdmin, async (req, res) => {
     const snap = await db.ref('channels').once('value');
     const channels = snap.val() || {};
@@ -944,26 +944,26 @@ app.post('/admin-api/toggle-command', authAdmin, async (req, res) => {
     res.json({ success: true });
 });
 
-// KANAL SÄ°L
+// KANAL SİL
 app.post('/admin-api/delete-channel', authAdmin, async (req, res) => {
     await db.ref('channels/' + req.body.channelId).remove();
     res.json({ success: true });
 });
 
-// TÃœM KULLANICILAR
+// TÜM KULLANICILAR
 app.post('/admin-api/all-users', authAdmin, async (req, res) => {
     const snap = await db.ref('users').limitToFirst(100).once('value');
     res.json(snap.val() || {});
 });
 
-// KULLANICI GÃœNCELLE
+// KULLANICI GÜNCELLE
 app.post('/admin-api/update-user', authAdmin, async (req, res) => {
     const { user, balance } = req.body;
     await db.ref('users/' + user.toLowerCase()).update({ balance: parseInt(balance) });
     res.json({ success: true });
 });
 
-// KANAL DUYURUSU (Tek kanala mesaj gÃ¶nder)
+// KANAL DUYURUSU (Tek kanala mesaj gönder)
 app.post('/admin-api/send-message', authAdmin, async (req, res) => {
     const { channelId, message } = req.body;
     try {
@@ -988,10 +988,10 @@ app.get('/overlay', (req, res) => { res.sendFile(path.join(__dirname, 'overlay.h
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'shop.html')); });
 
 // ---------------------------------------------------------
-// 6. PASSIVE INCOME (10 DK Ä°ZLEME Ã–DÃœLÃœ)
+// 6. PASSIVE INCOME (10 DK İZLEME ÖDÜLÜ)
 // ---------------------------------------------------------
 setInterval(async () => {
-    console.log("ğŸ’° Pasif bakiye daÄŸÄ±tÄ±mÄ± baÅŸlÄ±yor...");
+    console.log("💰 Pasif bakiye dağıtımı başlıyor...");
     const tenMinsAgo = Date.now() - (10 * 60 * 1000);
     const usersSnap = await db.ref('users').once('value');
     const allUsers = usersSnap.val() || {};
@@ -1006,8 +1006,8 @@ setInterval(async () => {
             rewardedCount++;
         }
     }
-    console.log(`âœ… ${rewardedCount} aktif kullanÄ±cÄ±ya 100 ğŸ’° daÄŸÄ±tÄ±ldÄ±.`);
+    console.log(`✅ ${rewardedCount} aktif kullanıcıya 100 💰 dağıtıldı.`);
 }, 10 * 60 * 1000); // 10 Dakikada bir
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`ğŸš€ MASTER FINAL (MULTI-CHANNEL) AKTIF!`));
+app.listen(PORT, () => console.log(`🚀 MASTER FINAL (MULTI-CHANNEL) AKTIF!`));
