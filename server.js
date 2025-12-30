@@ -430,10 +430,10 @@ app.post('/kick/webhook', async (req, res) => {
         }
     }
 
-// ...
+    // ...
 
     // --- ADMIN / MOD ---
-    else if (lowMsg.startsWith('!sustur')) {
+    if (lowMsg.startsWith('!sustur')) {
         const target = args[0]?.replace('@', '').toLowerCase();
         if (!target) return;
         const snap = await userRef.once('value');
@@ -514,9 +514,7 @@ const authAdmin = (req, res, next) => {
 // ... Eski API'ler ...
 app.post('/admin-api/check', authAdmin, (req, res) => res.json({ success: true }));
 
-// ---------------------------------------------------------
-// 5. ADMIN PANEL API (YENİLER)
-// ---------------------------------------------------------
+
 
 // RIG SHIP
 app.post('/admin-api/rig-ship', authAdmin, (req, res) => {
