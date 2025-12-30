@@ -21,7 +21,6 @@ const db = firebase.database();
 
 const KICK_CLIENT_ID = process.env.KICK_CLIENT_ID;
 const KICK_CLIENT_SECRET = process.env.KICK_CLIENT_SECRET;
-const BROADCASTER_ID = process.env.KICK_BROADCASTER_ID;
 const REDIRECT_URI = "https://aloskegangbot-market.onrender.com/auth/kick/callback";
 
 // PKCE YARDIMCILARI
@@ -33,7 +32,7 @@ function generatePKCE() {
 }
 
 // ---------------------------------------------------------
-// 2. AUTH & OTOMATİK ABONELİK
+// 2. AUTH & DİNAMİK KANAL TESPİTİ
 // ---------------------------------------------------------
 app.get('/login', async (req, res) => {
     const state = crypto.randomBytes(16).toString('hex');
@@ -60,47 +59,60 @@ app.get('/auth/kick/callback', async (req, res) => {
         const response = await axios.post('https://id.kick.com/oauth/token', params);
         const { access_token, refresh_token } = response.data;
 
-        // Bot Tokenlarını Kaydet
-        await db.ref('bot_tokens').set({ access_token, refresh_token, updatedAt: Date.now() });
+        // 🔥 YENİ: Giriş yapan kullanıcının bilgilerini ve ID'sini al
+        const userRes = await axios.get('https://api.kick.com/public/v1/user', {
+            headers: { 'Authorization': `Bearer ${access_token}` }
+        });
+        const broadcasterId = userRes.data.data.id;
+        const username = userRes.data.data.username;
 
-        // 🔥 KRİTİK: KICK'E ABONE OL (Dinlemeye başla)
-        await subscribeToChat(access_token);
+        // Bot Tokenlarını ve ID'sini Kaydet
+        await db.ref('bot_tokens').set({
+            access_token,
+            refresh_token,
+            broadcaster_id: broadcasterId,
+            bot_username: username,
+            updatedAt: Date.now()
+        });
 
-        res.send("<body style='background:#111;color:lime;text-align:center;padding-top:100px;font-family:sans-serif;'><h1>✅ BAŞARILI!</h1><p>Bot kanalını dinlemeye başladı. Chat'e !selam yazarak test et!</p></body>");
-    } catch (e) { res.status(500).send("Hata: " + e.message); }
+        // Giriş yapan kullanıcının kendi kalanını dinlemeye başla
+        await subscribeToChat(access_token, broadcasterId);
+
+        res.send(`<body style='background:#111;color:lime;text-align:center;padding-top:100px;font-family:sans-serif;'>
+            <h1>✅ BAŞARILI!</h1>
+            <p>Bot <b>@${username}</b> hesabıyla bağlandı.</p>
+            <p>Artık <b>${username}</b> kanalındaki chat mesajlarını dinliyor.</p>
+        </body>`);
+    } catch (e) { res.status(500).send("Hata: " + (e.response?.data?.message || e.message)); }
 });
 
-// Kick'e "Beni bu kanala abone yap" emri gönderir
-async function subscribeToChat(token) {
+async function subscribeToChat(token, broadcasterId) {
     try {
         await axios.post('https://api.kick.com/public/v1/events/subscriptions', {
-            broadcaster_user_id: parseInt(BROADCASTER_ID),
-            events: [
-                { name: "chat.message.sent", version: 1 }
-            ],
+            broadcaster_user_id: parseInt(broadcasterId),
+            events: [{ name: "chat.message.sent", version: 1 }],
             method: "webhook"
         }, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        console.log("✅ Kick Chat aboneliği başarıyla oluşturuldu!");
-    } catch (e) {
-        console.error("Abonelik Hatası:", e.response?.data || e.message);
-    }
+        console.log(`✅ ${broadcasterId} ID'li kanal için abonelik aktif!`);
+    } catch (e) { console.error("Abonelik Detay:", e.response?.data || e.message); }
 }
 
 // ---------------------------------------------------------
-// 3. MESAJ MOTORU
+// 3. MESAJ MOTORU (DİNAMİK ID İLE)
 // ---------------------------------------------------------
 async function sendChatMessage(content) {
     const snap = await db.ref('bot_tokens').once('value');
-    if (!snap.val()) return;
+    const data = snap.val();
+    if (!data) return;
     try {
         await axios.post(`https://api.kick.com/public/v1/chat`, {
             content: content,
-            type: "user", // Kendi hesabınla mesaj atmak için 'user' kalmalı
-            broadcaster_user_id: parseInt(BROADCASTER_ID)
+            type: "user",
+            broadcaster_user_id: parseInt(data.broadcaster_id)
         }, {
-            headers: { 'Authorization': `Bearer ${snap.val().access_token}` }
+            headers: { 'Authorization': `Bearer ${data.access_token}` }
         });
     } catch (e) {
         if (e.response?.status === 401) {
@@ -112,10 +124,11 @@ async function sendChatMessage(content) {
 
 async function refreshMyToken() {
     const snap = await db.ref('bot_tokens').once('value');
-    if (!snap.val()) return;
+    const tokenData = snap.val();
+    if (!tokenData) return;
     const params = new URLSearchParams();
     params.append('grant_type', 'refresh_token');
-    params.append('refresh_token', snap.val().refresh_token);
+    params.append('refresh_token', tokenData.refresh_token);
     params.append('client_id', KICK_CLIENT_ID);
     params.append('client_secret', KICK_CLIENT_SECRET);
     const res = await axios.post('https://id.kick.com/oauth/token', params);
@@ -129,24 +142,18 @@ app.post('/kick/webhook', async (req, res) => {
     const event = req.body;
     res.status(200).send('OK');
 
-    // Kick chat mesajı gönderdiğinde buraya düşer
     if (event.type === 'chat.message.sent') {
         const user = event.data.sender.username;
         const msg = event.data.content.trim().toLowerCase();
 
-        console.log(`📩 Yeni Mesaj (${user}): ${msg}`);
+        console.log(`📩 [${event.data.channel_id}] ${user}: ${msg}`);
 
-        if (msg === '!selam' || msg === 'sa') {
-            await sendChatMessage(`Aleyküm selam @${user}! Hoş geldin reis. 🦾`);
-        }
-        else if (msg === '!bakiye') {
-            const snap = await db.ref('users/' + user.toLowerCase()).once('value');
-            const balance = snap.val()?.balance || 1000;
-            await sendChatMessage(`@${user}, Bakiyeniz: ${balance.toLocaleString()} 💰`);
+        if (msg === '!selam') {
+            await sendChatMessage(`Aleyküm selam @${user}! Sunucu botu emrinde. 🦾`);
         }
     }
 });
 
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'shop.html')); });
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Bot Dinleyici Aktif!`));
+app.listen(PORT, () => console.log(`🚀 Akıllı Bot Dinleyici Yayında!`));
