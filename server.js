@@ -10,105 +10,96 @@ const app = express();
 app.use(express.static(__dirname));
 app.use(bodyParser.json());
 
-// 1. FIREBASE INITIALIZATION (Compat mode for Node.js)
+// 1. FIREBASE INITIALIZATION
 const firebaseConfig = {
     apiKey: process.env.FIREBASE_API_KEY,
     databaseURL: process.env.FIREBASE_DB_URL
 };
-
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-}
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 // 2. KICK API CONFIG
-const KICK_API_BASE = "https://api.kick.com/v1";
-let authToken = null;
+const KICK_CLIENT_ID = process.env.KICK_CLIENT_ID;
+const KICK_CLIENT_SECRET = process.env.KICK_CLIENT_SECRET;
+const REDIRECT_URI = "https://aloskegangbot-market.onrender.com/auth/kick/callback";
 
-async function refreshAccessToken() {
+// 3. OAUTH YÖNETİMİ (Kalıcı Bot Girişi)
+app.get('/login', (req, res) => {
+    const scopes = "chat:write events:subscribe user:read";
+    const authUrl = `https://id.kick.com/oauth/authorize?client_id=${KICK_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(scopes)}`;
+    res.redirect(authUrl);
+});
+
+app.get('/auth/kick/callback', async (req, res) => {
+    const code = req.query.code;
     try {
         const params = new URLSearchParams();
-        params.append('grant_type', 'client_credentials');
-        params.append('client_id', process.env.KICK_CLIENT_ID);
-        params.append('client_secret', process.env.KICK_CLIENT_SECRET);
-        params.append('scope', 'chat:write events:subscribe');
+        params.append('grant_type', 'authorization_code');
+        params.append('code', code);
+        params.append('client_id', KICK_CLIENT_ID);
+        params.append('client_secret', KICK_CLIENT_SECRET);
+        params.append('redirect_uri', REDIRECT_URI);
 
-        const response = await axios.post('https://id.kick.com/oauth/token', params, {
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }
+        const response = await axios.post('https://id.kick.com/oauth/token', params);
+        const { access_token, refresh_token } = response.data;
+
+        // Refresh token'ı Firebase'e kaydet (Ölümsüz bilet!)
+        await db.ref('bot_tokens').set({ access_token, refresh_token });
+
+        res.send("<h1>✅ Bot Başarıyla Bağlandı!</h1><p>Artık pencereyi kapatabilirsin, bot çalışmaya başladı.</p>");
+    } catch (e) {
+        res.status(500).send("Giriş Hatası: " + (e.response?.data?.error_description || e.message));
+    }
+});
+
+// 4. MESAJ GÖNDERME (TOKEN YENİLEME İLE)
+async function sendChatMessage(content) {
+    try {
+        const tokenData = (await db.ref('bot_tokens').once('value')).val();
+        if (!tokenData) return console.log("Bot girişi yapılmamış! Lütfen /login adresine gidin.");
+
+        await axios.post(`https://api.kick.com/public/v1/chat`, {
+            content: content,
+            type: "bot"
+        }, {
+            headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
         });
-
-        authToken = response.data.access_token;
-        console.log("🔑 [Kick API] Access Token yenilendi.");
-    } catch (error) {
-        const errorData = error.response?.data;
-        console.error("❌ [Kick API] Token alınamadı:", errorData || error.message);
-        if (errorData?.error === 'invalid_scope') {
-            console.log("ℹ️ Scope hatası algılandı, scope'suz deneniyor...");
-            // Scope'suz tekrar dene (bazı uygulamalarda scope gerekmez)
-            try {
-                const params = new URLSearchParams();
-                params.append('grant_type', 'client_credentials');
-                params.append('client_id', process.env.KICK_CLIENT_ID);
-                params.append('client_secret', process.env.KICK_CLIENT_SECRET);
-                const res = await axios.post('https://id.kick.com/oauth/token', params);
-                authToken = res.data.access_token;
-                console.log("🔑 [Kick API] Access Token (Scope'suz) başarıyla alındı.");
-            } catch (e) {
-                console.error("❌ [Kick API] Tamamen başarısız.");
-            }
+    } catch (e) {
+        if (e.response?.status === 401) {
+            console.log("🔄 Token süresi dolmuş, yenileniyor...");
+            await refreshMyToken();
+            await sendChatMessage(content); // Tekrar dene
         }
     }
 }
 
-async function sendChatMessage(content) {
-    if (!authToken) await refreshAccessToken();
-    try {
-        await axios.post(`${KICK_API_BASE}/chat`, {
-            content: content
-        }, {
-            headers: {
-                'Authorization': `Bearer ${authToken}`,
-                'Content-Type': 'application/json'
-            }
-        });
-        console.log(`📤 [Official API] Mesaj: ${content}`);
-    } catch (e) { console.error("Mesaj gönderilemedi:", e.message); }
+async function refreshMyToken() {
+    const tokenData = (await db.ref('bot_tokens').once('value')).val();
+    const params = new URLSearchParams();
+    params.append('grant_type', 'refresh_token');
+    params.append('refresh_token', tokenData.refresh_token);
+    params.append('client_id', KICK_CLIENT_ID);
+    params.append('client_secret', KICK_CLIENT_SECRET);
+
+    const res = await axios.post('https://id.kick.com/oauth/token', params);
+    await db.ref('bot_tokens').update({
+        access_token: res.data.access_token,
+        refresh_token: res.data.refresh_token
+    });
 }
 
-// 4. WEBHOOK HANDLER
+// 5. WEBHOOK & MARKET
 app.post('/kick/webhook', async (req, res) => {
     const event = req.body;
     if (event.type === 'chat.message.sent') {
-        const { content, sender } = event.data;
-        const user = sender.username;
-        const message = content.trim();
-        const lowerMsg = message.toLowerCase();
-
-        console.log(`📩 [Chat] ${user}: ${message}`);
-
-        if (lowerMsg.startsWith('!selam')) await sendChatMessage(`Aleyküm selam @${user}! 👋`);
-        if (lowerMsg.startsWith('!bakiye')) {
-            const snap = await db.ref('users/' + user.toLowerCase()).once('value');
-            const data = snap.val() || { balance: 1000 };
-            await sendChatMessage(`@${user}, Bakiyeniz: ${data.balance.toLocaleString()} 💰`);
-        }
-        if (lowerMsg.startsWith('!market')) {
-            await sendChatMessage(`@${user}, Mağaza & Market panelin: https://aloskegangbot-market.onrender.com 🛒`);
-        }
+        const user = event.data.sender.username;
+        const msg = event.data.content.toLowerCase();
+        if (msg === '!selam') await sendChatMessage(`Aleyküm selam @${user}! 👋`);
     }
     res.status(200).send('OK');
 });
 
-// 5. ANA SAYFA
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'shop.html'));
-});
+app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'shop.html')); });
 
-// 6. SERVER START
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, async () => {
-    console.log(`🚀 KickBot Official API on Port ${PORT}`);
-    await refreshAccessToken();
-});
+app.listen(PORT, () => console.log(`🚀 Bot Sunucusu Aktif! Port: ${PORT}`));
