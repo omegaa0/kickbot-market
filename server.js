@@ -12,12 +12,16 @@ const app = express();
 app.use(express.static(__dirname));
 app.use(bodyParser.json());
 
-// 2. FIREBASE INITIALIZATION
+// 1. FIREBASE INITIALIZATION
 const firebaseConfig = {
     apiKey: process.env.FIREBASE_API_KEY,
     databaseURL: process.env.FIREBASE_DB_URL
 };
-firebase.initializeApp(firebaseConfig);
+
+// Node.js tarafında bu şekilde başlatılmalı
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
 const db = firebase.database();
 
 // 3. KICK API CONFIG
