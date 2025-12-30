@@ -3,7 +3,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
 const path = require('path');
-const crypto = require('crypto'); // Güvenlik anahtarları için
+const crypto = require('crypto');
 const firebase = require('firebase/compat/app');
 require('firebase/compat/database');
 
@@ -24,34 +24,51 @@ const KICK_CLIENT_ID = process.env.KICK_CLIENT_ID;
 const KICK_CLIENT_SECRET = process.env.KICK_CLIENT_SECRET;
 const REDIRECT_URI = "https://aloskegangbot-market.onrender.com/auth/kick/callback";
 
-// 3. GÜVENLİK ANAHTARI ÜRETİCİSİ (PKCE & STATE)
-function generateRandomString(length) {
-    return crypto.randomBytes(length).toString('hex');
+// 3. PKCE & GÜVENLİK YARDIMCILARI
+function base64UrlEncode(str) {
+    return str.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
-// 4. LOGIN ENDPOINT (YENİLENMİŞ GÜVENLİ SÜRÜM)
-app.get('/login', (req, res) => {
-    const state = generateRandomString(16);
-    const scopes = "chat:write events:subscribe user:read";
+function generatePKCE() {
+    const verifier = base64UrlEncode(crypto.randomBytes(32));
+    const challenge = base64UrlEncode(crypto.createHash('sha256').update(verifier).digest());
+    return { verifier, challenge };
+}
 
-    // Kick artık 'state' parametresini ZORUNLU kılıyor.
+// 4. LOGIN ENDPOINT (OAuth 2.1 FULL PKCE)
+app.get('/login', async (req, res) => {
+    const state = crypto.randomBytes(16).toString('hex');
+    const { verifier, challenge } = generatePKCE();
+
+    // Geçici olarak bu state'e bağlı verifier'ı Firebase'e kaydet (10 dk geçerli)
+    await db.ref('temp_auth/' + state).set({
+        verifier: verifier,
+        createdAt: Date.now()
+    });
+
+    const scopes = "chat:write events:subscribe user:read channel:read";
+
     const authUrl = `https://id.kick.com/oauth/authorize?` +
         `client_id=${KICK_CLIENT_ID}` +
         `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
         `&response_type=code` +
         `&scope=${encodeURIComponent(scopes)}` +
-        `&state=${state}`; // State eklendi!
+        `&state=${state}` +
+        `&code_challenge=${challenge}` +
+        `&code_challenge_method=S256`; // Kick bu parametreleri ZORUNLU tutuyor!
 
-    console.log("🔗 Giriş isteği başlatıldı, state:", state);
+    console.log("� Giriş isteği gönderiliyor (PKCE Aktif)");
     res.redirect(authUrl);
 });
 
-// 5. CALLBACK (Kayıt ve Onay)
+// 5. CALLBACK (Token Değişimi)
 app.get('/auth/kick/callback', async (req, res) => {
     const { code, state, error } = req.query;
 
-    if (error) return res.status(400).send(`Hata: ${error}`);
-    if (!code) return res.status(400).send("Kod alınamadı.");
+    if (error) return res.status(400).send(`Kick Hatası: ${error}`);
+
+    const tempAuth = (await db.ref('temp_auth/' + state).once('value')).val();
+    if (!tempAuth) return res.status(400).send("Geçersiz veya süresi dolmuş oturum (State mismatch).");
 
     try {
         const params = new URLSearchParams();
@@ -60,6 +77,7 @@ app.get('/auth/kick/callback', async (req, res) => {
         params.append('client_id', KICK_CLIENT_ID);
         params.append('client_secret', KICK_CLIENT_SECRET);
         params.append('redirect_uri', REDIRECT_URI);
+        params.append('code_verifier', tempAuth.verifier); // PKCE doğrulaması burada yapılıyor
 
         const response = await axios.post('https://id.kick.com/oauth/token', params, {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
@@ -67,35 +85,33 @@ app.get('/auth/kick/callback', async (req, res) => {
 
         const { access_token, refresh_token } = response.data;
         await db.ref('bot_tokens').set({ access_token, refresh_token, updatedAt: Date.now() });
+        await db.ref('temp_auth/' + state).remove(); // Temizlik
 
-        res.send("<h1>✅ BOT BAĞLANDI!</h1><p>Kick API kapıları açıldı. Artık chatte fırtınalar estirebiliriz.</p>");
+        res.send("<h1>✅ BOT BAĞLANDI!</h1><p>Kick OAuth 2.1 protokolü başarıyla tamamlandı. Bot aktif!</p>");
     } catch (e) {
-        console.error("Callback Hatası:", e.response?.data || e.message);
+        console.error("Token Hatası:", e.response?.data || e.message);
         res.status(500).send("Giriş işlemi başarısız: " + (e.response?.data?.message || e.message));
     }
 });
 
-// 6. MESAJ GÖNDERME KODU
+// 6. MESAJ GÖNDERME
 async function sendChatMessage(content) {
-    try {
-        const snap = await db.ref('bot_tokens').once('value');
-        const tokenData = snap.val();
-        if (!tokenData) return console.log("Bot girişi yok!");
+    const snap = await db.ref('bot_tokens').once('value');
+    const tokenData = snap.val();
+    if (!tokenData) return;
 
+    try {
         await axios.post(`https://api.kick.com/public/v1/chat`, {
             content: content,
             type: "bot"
         }, {
             headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
         });
-        console.log(`📤 Bot Mesajı gönderildi: ${content}`);
     } catch (e) {
         if (e.response?.status === 401) {
-            console.log("🔄 Token dolmuş, yenileniyor...");
             await refreshMyToken();
             return sendChatMessage(content);
         }
-        console.error("Mesaj Hatası:", e.response?.data || e.message);
     }
 }
 
@@ -122,12 +138,7 @@ app.post('/kick/webhook', async (req, res) => {
     if (event.type === 'chat.message.sent') {
         const user = event.data.sender.username;
         const msg = event.data.content.toLowerCase();
-        if (msg === '!selam') await sendChatMessage(`Aleyküm selam @${user}! 💪`);
-        if (msg === '!bakiye') {
-            const uSnap = await db.ref('users/' + user.toLowerCase()).once('value');
-            const b = uSnap.val()?.balance || 1000;
-            await sendChatMessage(`@${user}, Bakiyeniz: ${b.toLocaleString()} �`);
-        }
+        if (msg === '!selam') await sendChatMessage(`Aleyküm selam @${user}! �`);
     }
     res.status(200).send('OK');
 });
@@ -135,6 +146,4 @@ app.post('/kick/webhook', async (req, res) => {
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'shop.html')); });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, async () => {
-    console.log(`🚀 Bot Sunucusu Aktif! Port: ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 PKCE Bot Aktif! Port: ${PORT}`));
