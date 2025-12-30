@@ -193,39 +193,43 @@ async function timeoutUser(broadcasterId, targetUsername, duration) {
 
         // Timeout uygula (Çoklu Endpoint Denemesi)
         const endpoints = [
-            `https://api.kick.com/public/v1/channels/${channelData.slug || channelData.username}/bans`, // 1. Slug (Resmi)
-            `https://api.kick.com/public/v1/channels/${broadcasterId}/bans`,                         // 2. ID
-            `https://kick.com/api/v2/channels/${channelData.slug || channelData.username}/bans`      // 3. V2 (Internal)
+            `https://api.kick.com/public/v1/bans`,                                                  // 1. Yeni V1 (Body'de broadcaster_user_id ile)
+            `https://api.kick.com/public/v1/channels/${channelData.slug || channelData.username}/bans`, // 2. Slug
+            `https://api.kick.com/public/v1/channels/${broadcasterId}/bans`                         // 3. ID
         ];
 
         let lastError = null;
         for (const url of endpoints) {
-            if (url.includes('undefined') || url.includes('null')) continue;
-
             console.log(`Trying Ban Endpoint: ${url}`);
             try {
-                const banRes = await axios.post(url, {
-                    banned_user_id: parseInt(targetUserId), // Integer zorla
-                    duration: parseInt(duration),           // Integer zorla
-                    reason: "Bot tarafından susturuldu",
-                    type: "timeout" // Bazı endpointler type isteyebilir
-                }, {
+                // Request Body
+                const body = {
+                    banned_user_id: String(targetUserId),
+                    duration: parseInt(duration),
+                    reason: "Susturuldu (Bot)"
+                };
+
+                // Eğer URL spesifik değilse (flat v1), broadcaster_user_id ekle
+                if (url === `https://api.kick.com/public/v1/bans`) {
+                    body.broadcaster_user_id = String(broadcasterId);
+                }
+
+                const banRes = await axios.post(url, body, {
                     headers: {
                         'Authorization': `Bearer ${channelData.access_token}`,
                         'Content-Type': 'application/json',
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                         'Accept': 'application/json'
                     }
                 });
                 console.log("✅ Ban başarılı! Status:", banRes.status);
-                return { success: true }; // Başarılıysa çık
+                return { success: true };
             } catch (e) {
-                console.log(`❌ Endpoint failed (${url}):`, e.response?.status, e.response?.data?.message || e.message);
+                console.log(`❌ Endpoint failed (${url}):`, e.response?.status, JSON.stringify(e.response?.data) || e.message);
                 lastError = e;
             }
         }
 
-        // Hiçbiri çalışmazsa
         return { success: false, error: lastError?.response?.data?.message || lastError?.message || 'Tüm endpointler başarısız' };
     } catch (e) {
         console.log("❌ Timeout Error:", e.response?.status, e.response?.data || e.message);
@@ -240,20 +244,35 @@ async function setSlowMode(broadcasterId, enabled, delay = 10) {
     if (!channelData) return { success: false, error: 'Kanal bulunamadı' };
 
     try {
-        // Kick API v1 chat-settings endpoint
-        const apiPath = `https://api.kick.com/public/v1/channels/${channelData.username || broadcasterId}/chat-settings`;
+        // Öncelik: Flat V1 endpoint
+        const endpoints = [
+            'https://api.kick.com/public/v1/chat-settings',
+            `https://api.kick.com/public/v1/channels/${channelData.slug || channelData.username || broadcasterId}/chat-settings`
+        ];
 
-        const res = await axios.patch(apiPath, {
-            slow_mode: enabled,
-            slow_mode_interval: delay // saniye
-        }, {
-            headers: {
-                'Authorization': `Bearer ${channelData.access_token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-        console.log("✅ SlowMode:", enabled ? "Açık" : "Kapalı", res.status);
-        return { success: true };
+        let lastErr = null;
+        for (const url of endpoints) {
+            try {
+                const body = {
+                    slow_mode: enabled,
+                    slow_mode_interval: parseInt(delay)
+                };
+                if (url === 'https://api.kick.com/public/v1/chat-settings') {
+                    body.broadcaster_user_id = String(broadcasterId);
+                }
+
+                await axios.patch(url, body, {
+                    headers: {
+                        'Authorization': `Bearer ${channelData.access_token}`,
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'Mozilla/5.0'
+                    }
+                });
+                console.log("✅ SlowMode güncellendi:", url);
+                return { success: true };
+            } catch (err) { lastErr = err; }
+        }
+        return { success: false, error: lastErr?.response?.data?.message || lastErr?.message };
     } catch (e) {
         console.log("❌ SlowMode Error:", e.response?.status, e.response?.data || e.message);
         return { success: false, error: e.response?.data?.message || e.message };
@@ -267,13 +286,31 @@ async function clearChat(broadcasterId) {
     if (!channelData) return { success: false, error: 'Kanal bulunamadı' };
 
     try {
-        // Kick API v1 chat clear endpoint
-        const apiPath = `https://api.kick.com/public/v1/channels/${channelData.username || broadcasterId}/chat/clear`;
-        const res = await axios.post(apiPath, {}, {
-            headers: { 'Authorization': `Bearer ${channelData.access_token}` }
-        });
-        console.log("✅ Chat temizlendi:", res.status);
-        return { success: true };
+        const endpoints = [
+            'https://api.kick.com/public/v1/chat/clear',
+            `https://api.kick.com/public/v1/channels/${channelData.slug || channelData.username || broadcasterId}/chat/clear`
+        ];
+
+        let lastErr = null;
+        for (const url of endpoints) {
+            try {
+                const body = {};
+                if (url === 'https://api.kick.com/public/v1/chat/clear') {
+                    body.broadcaster_user_id = String(broadcasterId);
+                }
+
+                await axios.post(url, body, {
+                    headers: {
+                        'Authorization': `Bearer ${channelData.access_token}`,
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'Mozilla/5.0'
+                    }
+                });
+                console.log("✅ Chat temizlendi:", url);
+                return { success: true };
+            } catch (err) { lastErr = err; }
+        }
+        return { success: false, error: lastErr?.response?.data?.message || lastErr?.message };
     } catch (e) {
         console.log("❌ ClearChat Error:", e.response?.status, e.response?.data || e.message);
         return { success: false, error: e.response?.data?.message || e.message };
@@ -700,67 +737,25 @@ app.post('/kick/webhook', async (req, res) => {
         }
     }
 
-    else if (lowMsg.startsWith('!tahmin') || lowMsg.startsWith('!oyla') || lowMsg.startsWith('!sonuç') || lowMsg.startsWith('!piyango')) {
-        // TAHMİN
-        if (lowMsg === '!tahmin iptal' && isAuthorized && activePrediction && activePrediction.channel === broadcasterId) {
-            activePrediction = null;
-            await reply(`❌ Tahmin iptal edildi.`);
-        }
-        else if (lowMsg.startsWith('!tahmin') && args[0] !== 'iptal' && isAuthorized) {
-            activePrediction = { q: args.join(' '), v1: 0, v2: 0, voters: {}, channel: broadcasterId };
-            await reply(`📊 TAHMİN: ${args.join(' ')} | !oyla 1 veya !oyla 2 | İptal: !tahmin iptal`);
-        }
-        else if (lowMsg.startsWith('!oyla') && activePrediction && activePrediction.channel === broadcasterId) {
-            if (!activePrediction.voters[user]) {
-                const pick = args[0];
-                if (pick === '1' || pick === '2') {
-                    activePrediction[pick === '1' ? 'v1' : 'v2']++;
-                    activePrediction.voters[user] = pick;
-                    await reply(`🗳️ @${user} oy kullandı.`);
-                }
-            }
-        }
-        else if (lowMsg.startsWith('!sonuç') && activePrediction && activePrediction.channel === broadcasterId && isAuthorized) {
-            await reply(`📊 SONUÇ: Evet: ${activePrediction.v1} - Hayır: ${activePrediction.v2}`);
-            activePrediction = null;
-        }
-        // PİYANGO
-        else if (lowMsg.startsWith('!piyango')) {
-            const sub = args[0];
-            if (sub === 'iptal' && isAuthorized && activePiyango && activePiyango.channel === broadcasterId) {
-                // Katılımcılara paralarını iade et
-                for (const p of activePiyango.p) {
-                    await db.ref('users/' + p.toLowerCase()).transaction(u => {
-                        if (u) u.balance = (u.balance || 0) + activePiyango.cost;
-                        return u;
-                    });
-                }
-                await reply(`❌ Piyango iptal edildi! ${activePiyango.p.length} kişiye ${activePiyango.cost} 💰 iade edildi.`);
-                activePiyango = null;
-            }
-            else if (sub === 'başla' && isAuthorized) {
-                activePiyango = { p: [], cost: parseInt(args[1]) || 500, pool: 0, channel: broadcasterId };
-                await reply(`🎰 PİYANGO! Giriş: ${activePiyango.cost} 💰 | !piyango katıl | İptal: !piyango iptal`);
-            }
-            else if (sub === 'katıl' && activePiyango && activePiyango.channel === broadcasterId) {
-                if (!activePiyango.p.includes(user)) {
-                    const d = (await userRef.once('value')).val() || { balance: 0 };
-                    if (d.balance >= activePiyango.cost) {
-                        await userRef.update({ balance: d.balance - activePiyango.cost });
-                        activePiyango.p.push(user); activePiyango.pool += activePiyango.cost;
-                        await reply(`🎟️ @${user} katıldı! Havuz: ${activePiyango.pool}`);
-                    } else await reply('Bakiye yetersiz.');
-                }
-            }
-            else if (sub === 'bitir' && activePiyango && activePiyango.channel === broadcasterId && isAuthorized) {
-                if (!activePiyango.p.length) { activePiyango = null; await reply('Katılım yok.'); }
-                else {
-                    const win = activePiyango.p[Math.floor(Math.random() * activePiyango.p.length)];
-                    await db.ref('users/' + win).transaction(u => { if (u) u.balance += activePiyango.pool; return u; });
-                    await reply(`🎉 KAZANAN: @${win} (+${activePiyango.pool})`);
-                    activePiyango = null;
-                }
-            }
+    else if (lowMsg === '!market') {
+        const webSiteUrl = "https://aloskegangbot-market.onrender.com";
+        await reply(`@${user}, Market & Mağaza bağlantın: ${webSiteUrl} 🛒 (Giriş yaptıktan sonra chat'e !doğrulama [kod] yazmayı unutmayın!)`);
+    }
+
+    else if (lowMsg.startsWith('!doğrulama') || lowMsg.startsWith('!kod')) {
+        const code = args[0];
+        if (!code) return await reply(`@${user}, Lütfen mağazadaki 6 haneli kodu yazın. Örn: !doğrulama 123456`);
+
+        const cleanUser = user.toLowerCase().trim();
+        const pendingSnap = await db.ref('pending_auth/' + cleanUser).once('value');
+        const pending = pendingSnap.val();
+
+        if (pending && pending.code === code) {
+            await db.ref('auth_success/' + cleanUser).set(true);
+            await db.ref('pending_auth/' + cleanUser).remove();
+            await reply(`✅ @${user}, Kimliğin doğrulandı! Mağaza sayfasına geri dönebilirsin. 🛍️`);
+        } else {
+            await reply(`❌ @${user}, Geçersiz veya süresi dolmuş kod! Lütfen mağazadan yeni bir kod al.`);
         }
     }
 
