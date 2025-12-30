@@ -24,7 +24,7 @@ const KICK_CLIENT_ID = process.env.KICK_CLIENT_ID;
 const KICK_CLIENT_SECRET = process.env.KICK_CLIENT_SECRET;
 const REDIRECT_URI = "https://aloskegangbot-market.onrender.com/auth/kick/callback";
 
-// 3. PKCE & GÜVENLİK YARDIMCILARI
+// 3. PKCE YARDIMCILARI
 function base64UrlEncode(str) {
     return str.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
@@ -35,19 +35,15 @@ function generatePKCE() {
     return { verifier, challenge };
 }
 
-// 4. LOGIN ENDPOINT (OAuth 2.1 FULL PKCE)
+// 4. LOGIN ENDPOINT
 app.get('/login', async (req, res) => {
     const state = crypto.randomBytes(16).toString('hex');
     const { verifier, challenge } = generatePKCE();
 
-    // Geçici olarak bu state'e bağlı verifier'ı Firebase'e kaydet (10 dk geçerli)
-    await db.ref('temp_auth/' + state).set({
-        verifier: verifier,
-        createdAt: Date.now()
-    });
+    // Geçici verileri kaydet
+    await db.ref('temp_auth/' + state).set({ verifier, createdAt: Date.now() });
 
     const scopes = "chat:write events:subscribe user:read channel:read";
-
     const authUrl = `https://id.kick.com/oauth/authorize?` +
         `client_id=${KICK_CLIENT_ID}` +
         `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
@@ -55,22 +51,22 @@ app.get('/login', async (req, res) => {
         `&scope=${encodeURIComponent(scopes)}` +
         `&state=${state}` +
         `&code_challenge=${challenge}` +
-        `&code_challenge_method=S256`; // Kick bu parametreleri ZORUNLU tutuyor!
+        `&code_challenge_method=S256`;
 
-    console.log("� Giriş isteği gönderiliyor (PKCE Aktif)");
     res.redirect(authUrl);
 });
 
-// 5. CALLBACK (Token Değişimi)
+// 5. CALLBACK (Garantili Token Değişimi)
 app.get('/auth/kick/callback', async (req, res) => {
     const { code, state, error } = req.query;
 
-    if (error) return res.status(400).send(`Kick Hatası: ${error}`);
+    if (error) return res.status(400).send(`Hata: ${error}`);
 
     const tempAuth = (await db.ref('temp_auth/' + state).once('value')).val();
-    if (!tempAuth) return res.status(400).send("Geçersiz veya süresi dolmuş oturum (State mismatch).");
+    if (!tempAuth) return res.status(400).send("Oturum süresi dolmuş veya geçersiz istek.");
 
     try {
+        // En sade ve resmi yöntem: Sadece vücutta (body) gönderiyoruz
         const params = new URLSearchParams();
         params.append('grant_type', 'authorization_code');
         params.append('code', code);
@@ -79,24 +75,18 @@ app.get('/auth/kick/callback', async (req, res) => {
         params.append('redirect_uri', REDIRECT_URI);
         params.append('code_verifier', tempAuth.verifier);
 
-        // Bazı Kick API sürümleri Client Secret'ı hem body'de hem de header'da bekleyebilir.
-        const authHeader = Buffer.from(`${KICK_CLIENT_ID}:${KICK_CLIENT_SECRET}`).toString('base64');
-
         const response = await axios.post('https://id.kick.com/oauth/token', params, {
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Authorization': `Basic ${authHeader}`
-            }
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
 
         const { access_token, refresh_token } = response.data;
         await db.ref('bot_tokens').set({ access_token, refresh_token, updatedAt: Date.now() });
-        await db.ref('temp_auth/' + state).remove(); // Temizlik
+        await db.ref('temp_auth/' + state).remove();
 
-        res.send("<h1>✅ BOT BAĞLANDI!</h1><p>Kick OAuth 2.1 protokolü başarıyla tamamlandı. Bot aktif!</p>");
+        res.send("<h1>✅ BOT BAĞLANDI!</h1><p>Kick API bağlantısı başarıyla kuruldu. Artık chat'e dönebilirsin!</p>");
     } catch (e) {
-        console.error("Token Hatası:", e.response?.data || e.message);
-        res.status(500).send("Giriş işlemi başarısız: " + (e.response?.data?.message || e.message));
+        console.error("Token Hatası Detayı:", e.response?.data || e.message);
+        res.status(500).send("Giriş başarısız oldu. Lütfen Client Secret'ı Render'dan kontrol edin.");
     }
 });
 
@@ -143,8 +133,8 @@ app.post('/kick/webhook', async (req, res) => {
     const event = req.body;
     if (event.type === 'chat.message.sent') {
         const user = event.data.sender.username;
-        const msg = event.data.content.toLowerCase();
-        if (msg === '!selam') await sendChatMessage(`Aleyküm selam @${user}! �`);
+        const msg = event.data.content;
+        if (msg.toLowerCase().startsWith('!selam')) await sendChatMessage(`Aleyküm selam @${user}! 💪`);
     }
     res.status(200).send('OK');
 });
@@ -152,4 +142,4 @@ app.post('/kick/webhook', async (req, res) => {
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'shop.html')); });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 PKCE Bot Aktif! Port: ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Bot Yayında! Port: ${PORT}`));
