@@ -397,7 +397,11 @@
         }
 
         async function loadChannels() {
-            const res = await fetch('/admin-api/channels', { headers: { 'Authorization': sessionKey } });
+            const res = await fetch('/admin-api/channels', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: sessionKey })
+            });
             const channels = await res.json();
             const container = document.getElementById('channel-list');
             container.innerHTML = "";
@@ -438,22 +442,26 @@
 
         async function toggleCmd(channelId, cmd, val) {
             await fetch('/admin-api/toggle-command', {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': sessionKey },
-                body: JSON.stringify({ channelId, command: cmd, value: val })
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: sessionKey, channelId, command: cmd, value: val })
             });
         }
 
         async function deleteChannel(channelId) {
             if (!confirm("Bu kanalı silmek istediğine emin misin? Bot çıkış yapacak.")) return;
             await fetch('/admin-api/delete-channel', {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': sessionKey },
-                body: JSON.stringify({ channelId })
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: sessionKey, channelId })
             });
             loadChannels();
         }
 
         async function loadUsers() {
-            const res = await fetch('/admin-api/all-users', { headers: { 'Authorization': sessionKey } });
+            const res = await fetch('/admin-api/all-users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: sessionKey })
+            });
             allUsers = await res.json();
             renderUsers(allUsers);
         }
@@ -492,8 +500,8 @@
             const newBal = prompt(`Yeni bakiye gir (${name}):`, current);
             if (newBal !== null) {
                 await fetch('/admin-api/update-user', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': sessionKey },
-                    body: JSON.stringify({ user: name, balance: newBal })
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: sessionKey, user: name, balance: newBal })
                 });
                 alert("Güncellendi!");
                 loadUsers();
@@ -510,8 +518,8 @@
             const target = document.getElementById('rigTarget').value;
             const percent = document.getElementById('rigPercent').value;
             await fetch('/admin-api/rig-ship', {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': sessionKey },
-                body: JSON.stringify({ user, target, percent })
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: sessionKey, user, target, percent })
             });
             alert("AŞK AYARLANDI! ❤️");
         }
@@ -519,8 +527,8 @@
         async function setGamble(res) {
             const user = document.getElementById('gambleUser').value;
             await fetch('/admin-api/rig-gamble', {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': sessionKey },
-                body: JSON.stringify({ user, result: res })
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: sessionKey, user, result: res })
             });
             alert("KUMAR AYARLANDI! 🎰");
         }
@@ -531,8 +539,8 @@
             if (!firstChannel) return alert("Aktif kanal yok!");
 
             await fetch('/admin-api/chat-action', {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': sessionKey },
-                body: JSON.stringify({ action: act, channelId: parseInt(firstChannel) })
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: sessionKey, action: act, channelId: parseInt(firstChannel) })
             });
             alert("DURUM GÜNCELLENDİ! 🛡️");
         }

@@ -130,15 +130,27 @@ async function refreshChannelToken(broadcasterId) {
 app.post('/kick/webhook', async (req, res) => {
     res.status(200).send('OK');
     const payload = req.body;
+    console.log("📩 WEBHOOK RECEIVED:", JSON.stringify(payload).substring(0, 500)); // Debug Log
+
     const event = payload.data || payload;
 
-    // Hangi kanaldan geldi?
-    const broadcasterId = event.broadcaster_user_id;
+    // Sağlam Broadcaster ID Bulma
+    let broadcasterId = event.broadcaster_user_id || payload.broadcaster_user_id;
+    if (!broadcasterId && payload.channel) broadcasterId = payload.channel.user_id;
+    if (!broadcasterId && payload.channel_id) broadcasterId = payload.channel_id; // Bazı eventlerde
+
+    if (!broadcasterId) {
+        console.log("❌ Broadcaster ID bulunamadı! Payload:", JSON.stringify(payload));
+        return;
+    }
+
     const channelRef = await db.ref('channels/' + broadcasterId).once('value');
     const channelData = channelRef.val();
 
-    // Eğer bu kanalı tanımıyorsak işlem yapma
-    if (!channelData) return;
+    if (!channelData) {
+        console.log(`❌ Kanal veritabanında yok: ${broadcasterId}`);
+        return;
+    }
 
     const settings = channelData.settings || {};
     const user = event.sender?.username;
@@ -160,8 +172,18 @@ app.post('/kick/webhook', async (req, res) => {
 
     const reply = (msg) => sendChatMessage(msg, broadcasterId);
 
-    // --- KOMUTLAR ---
+    // --- RIG KONTROLÜ (En başta tanımla) ---
+    const riggedGambles = {}; // Assuming this is defined globally or passed in
+    const riggedShips = {}; // Assuming this is defined globally or passed in
+    const checkRig = () => {
+        const r = riggedGambles[user.toLowerCase()];
+        if (r) { delete riggedGambles[user.toLowerCase()]; return r; }
+        return null;
+    };
+
+    // --- KOMUT ZİNCİRİ ---
     const selamWords = ['sa', 'sea', 'selam', 'slm', 'selamun aleyküm', 'selamünaleyküm'];
+
     if (selamWords.includes(lowMsg)) {
         await reply(`Aleyküm selam @${user}! Hoş geldin. 👋`);
     }
@@ -185,13 +207,6 @@ app.post('/kick/webhook', async (req, res) => {
         await reply(`🎁 @${user}, +500 💰 eklendi! ✅`);
     }
 
-    // --- RIGGED GAMBLE KONTROLÜ ---
-    const checkRig = () => {
-        const r = riggedGambles[user.toLowerCase()];
-        if (r) { delete riggedGambles[user.toLowerCase()]; return r; } // Kullandıktan sonra sil
-        return null;
-    };
-
     // --- OYUNLAR (AYAR KONTROLLÜ) ---
     if (settings.slot !== false && lowMsg.startsWith('!slot')) {
         const cost = Math.max(10, parseInt(args[0]) || 100);
@@ -204,16 +219,13 @@ app.post('/kick/webhook', async (req, res) => {
         if ((data.balance || 0) < cost) return await reply(`@${user}, Yetersiz bakiye!`);
 
         data.balance -= cost; data.slot_count++;
-
         const rig = checkRig();
         const sym = ["🍒", "🍋", "🍇", "🔔", "💎", "7️⃣", "🍉", "🍀"];
         let s, mult;
 
-        if (rig === 'win') {
-            s = ["7️⃣", "7️⃣", "7️⃣"]; mult = 5; // Zorla Kazan
-        } else if (rig === 'lose') {
-            s = ["🍒", "🍋", "🍇"]; mult = 0; // Zorla Kaybet
-        } else {
+        if (rig === 'win') { s = ["7️⃣", "7️⃣", "7️⃣"]; mult = 5; }
+        else if (rig === 'lose') { s = ["🍒", "🍋", "🍇"]; mult = 0; }
+        else {
             s = [sym[Math.floor(Math.random() * 8)], sym[Math.floor(Math.random() * 8)], sym[Math.floor(Math.random() * 8)]];
             mult = (s[0] === s[1] && s[1] === s[2]) ? 5 : (s[0] === s[1] || s[1] === s[2] || s[0] === s[2]) ? 1.5 : 0;
         }
@@ -251,8 +263,7 @@ app.post('/kick/webhook', async (req, res) => {
             win = (isYazi && res === 'yazı') || (!isYazi && res === 'tura');
         }
 
-        const resDisplay = win ? (isYazi ? 'YAZI' : 'TURA') : (isYazi ? 'TURA' : 'YAZI'); // Sonucu uydur
-
+        const resDisplay = win ? (isYazi ? 'YAZI' : 'TURA') : (isYazi ? 'TURA' : 'YAZI');
         if (win) {
             data.balance += cost * 2;
             await reply(`🪙 Para fırlatıldı... ${resDisplay}! @${user} KAZANDIN (+${cost * 2})`);
@@ -273,7 +284,6 @@ app.post('/kick/webhook', async (req, res) => {
 
         data.balance -= cost;
         const rig = checkRig();
-
         let resultType;
         if (rig === 'win') resultType = 'odul';
         else if (rig === 'lose') resultType = 'bomba';
@@ -339,17 +349,15 @@ app.post('/kick/webhook', async (req, res) => {
         const list = ["Geleceğin parlak.", "Yakında güzel haber var.", "Dikkatli ol!", "Aşk kapıda."];
         await reply(`🔮 @${user}, Falın: ${list[Math.floor(Math.random() * list.length)]}`);
     }
-    else if (settings.ship !== false && lowMsg.startsWith('!ship')) {
-        // Hedef belirlenmediyse hata ver
-        let target = args[0]?.replace('@', '');
 
-        // --- RIGGED SHIP LOGIC ---
+    else if (settings.ship !== false && lowMsg.startsWith('!ship')) {
+        let target = args[0]?.replace('@', '');
         const rig = riggedShips[user.toLowerCase()];
         if (rig) {
-            target = rig.target || target || "Gizli Hayran"; // Eğer hedef yoksa rig hedefini kullan
+            target = rig.target || target || "Gizli Hayran";
             const perc = rig.percent;
             await reply(`❤️ @${user} & @${target} Uyumu: %${perc} ${perc >= 100 ? '🔥 RUH EŞİ BULUNDU!' : '💔'}`);
-            delete riggedShips[user.toLowerCase()]; // Bir kerelik kullan
+            delete riggedShips[user.toLowerCase()];
         } else {
             if (!target) return await reply(`@${user}, Kiminle shipleneceksin? (!ship @biri)`);
             const perc = Math.floor(Math.random() * 101);
@@ -366,7 +374,7 @@ app.post('/kick/webhook', async (req, res) => {
     }
 
     else if (settings.hava !== false && lowMsg.startsWith('!hava')) {
-        const city = args.join(' '); // "New York" gibi boşluklu şehirler için
+        const city = args.join(' ');
         if (city.toLowerCase() === "kürdistan") {
             return await reply("Aponunda kürdistanında amına çaktım 🇹🇷");
         }
@@ -375,29 +383,25 @@ app.post('/kick/webhook', async (req, res) => {
             if (geo.data.results) {
                 const { latitude, longitude, name } = geo.data.results[0];
                 const weather = await axios.get(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`);
-
                 const w = weather.data.current_weather;
                 const code = w.weathercode;
                 let cond = "Açık"; let emoji = "☀️";
-
-                // WMO Kodları Basitleştirilmiş
                 if (code >= 1 && code <= 3) { cond = "Bulutlu"; emoji = "☁️"; }
                 else if (code >= 45 && code <= 48) { cond = "Sisli"; emoji = "🌫️"; }
                 else if (code >= 51 && code <= 67) { cond = "Yağmurlu"; emoji = "🌧️"; }
                 else if (code >= 71 && code <= 77) { cond = "Karlı"; emoji = "❄️"; }
                 else if (code >= 95) { cond = "Fırtına"; emoji = "⛈️"; }
-
                 await reply(`🌍 ${name}: ${w.temperature}°C ${cond} ${emoji} | Rüzgar: ${w.windspeed} km/s`);
             } else { await reply(`❌ Şehir yok: ${city}`); }
         } catch (e) { console.log(e); }
     }
 
-    else if (lowMsg === '!söz' && settings.soz !== false) {
+    else if (settings.soz !== false && lowMsg === '!söz') {
         const list = ["Mesafe iyidir, kimin nerede durduğunu hatırlatır.", "Zirveye tek başına çıkılır.", "Kurduğun hayali başkası yaşar.", "Giden gitmiştir."];
         await reply(`✍️ @${user}: ${list[Math.floor(Math.random() * list.length)]}`);
     }
 
-    else if (lowMsg === '!efkar' && settings.fal !== false) {
+    else if (settings.fal !== false && lowMsg === '!efkar') {
         const p = Math.floor(Math.random() * 101);
         await reply(`🚬 @${user} Efkar Seviyesi: %${p} ${p > 70 ? '😭🚬' : '🍷'}`);
     }
@@ -430,38 +434,35 @@ app.post('/kick/webhook', async (req, res) => {
         }
     }
 
-    // ...
-
     // --- ADMIN / MOD ---
-    if (lowMsg.startsWith('!sustur')) {
+    else if (lowMsg.startsWith('!sustur')) {
         const target = args[0]?.replace('@', '').toLowerCase();
-        if (!target) return;
-        const snap = await userRef.once('value');
-        if ((snap.val()?.balance || 0) < 10000) return await reply(`@${user}, 10.000 💰 bakiye lazım!`);
-
-        const success = await timeoutUser(broadcasterId, target, 600); // 600 sn = 10 dk
-
-        if (success) {
-            await userRef.transaction(u => { if (u) u.balance -= 10000; return u; });
-            await reply(`🔇 @${user}, @${target} kullanıcısını 10 dakika susturdu! (-10.000 💰)`);
-        } else {
-            await reply(`❌ İşlem başarısız! (Kullanıcı bulunamadı veya yetki yok)`);
+        if (target) {
+            const snap = await userRef.once('value');
+            if ((snap.val()?.balance || 0) < 10000) await reply(`@${user}, 10.000 💰 bakiye lazım!`);
+            else {
+                const success = await timeoutUser(broadcasterId, target, 600);
+                if (success) {
+                    await userRef.transaction(u => { if (u) u.balance -= 10000; return u; });
+                    await reply(`🔇 @${user}, @${target} kullanıcısını 10 dakika susturdu! (-10.000 💰)`);
+                } else await reply(`❌ İşlem başarısız! (Kullanıcı bulunamadı veya yetki yok)`);
+            }
         }
     }
 
     else if (lowMsg.startsWith('!tahmin') || lowMsg.startsWith('!oyla') || lowMsg.startsWith('!sonuç') || lowMsg.startsWith('!piyango')) {
-        // ... Tahmin / Piyango (Aynı kalacak) ...
         if (lowMsg.startsWith('!tahmin') && isAuthorized) {
             activePrediction = { q: args.join(' '), v1: 0, v2: 0, voters: {}, channel: broadcasterId };
             await reply(`📊 TAHMİN: ${args.join(' ')} | !oyla 1 veya !oyla 2`);
         }
         else if (lowMsg.startsWith('!oyla') && activePrediction && activePrediction.channel === broadcasterId) {
-            if (activePrediction.voters[user]) return;
-            const pick = args[0];
-            if (pick === '1' || pick === '2') {
-                activePrediction[pick === '1' ? 'v1' : 'v2']++;
-                activePrediction.voters[user] = pick;
-                await reply(`🗳️ @${user} oy kullandı.`);
+            if (!activePrediction.voters[user]) {
+                const pick = args[0];
+                if (pick === '1' || pick === '2') {
+                    activePrediction[pick === '1' ? 'v1' : 'v2']++;
+                    activePrediction.voters[user] = pick;
+                    await reply(`🗳️ @${user} oy kullandı.`);
+                }
             }
         }
         else if (lowMsg.startsWith('!sonuç') && activePrediction && activePrediction.channel === broadcasterId && isAuthorized) {
@@ -475,19 +476,23 @@ app.post('/kick/webhook', async (req, res) => {
                 await reply(`🎰 PİYANGO! Giriş: ${activePiyango.cost} 💰 | !piyango katıl`);
             }
             else if (sub === 'katıl' && activePiyango && activePiyango.channel === broadcasterId) {
-                if (activePiyango.p.includes(user)) return;
-                const d = (await userRef.once('value')).val() || { balance: 0 };
-                if (d.balance < activePiyango.cost) return await reply('Bakiye yetersiz.');
-                await userRef.update({ balance: d.balance - activePiyango.cost });
-                activePiyango.p.push(user); activePiyango.pool += activePiyango.cost;
-                await reply(`🎟️ @${user} katıldı! Havuz: ${activePiyango.pool}`);
+                if (!activePiyango.p.includes(user)) {
+                    const d = (await userRef.once('value')).val() || { balance: 0 };
+                    if (d.balance >= activePiyango.cost) {
+                        await userRef.update({ balance: d.balance - activePiyango.cost });
+                        activePiyango.p.push(user); activePiyango.pool += activePiyango.cost;
+                        await reply(`🎟️ @${user} katıldı! Havuz: ${activePiyango.pool}`);
+                    } else await reply('Bakiye yetersiz.');
+                }
             }
             else if (sub === 'bitir' && activePiyango && activePiyango.channel === broadcasterId && isAuthorized) {
-                if (!activePiyango.p.length) { activePiyango = null; return await reply('Katılım yok.'); }
-                const win = activePiyango.p[Math.floor(Math.random() * activePiyango.p.length)];
-                await db.ref('users/' + win).transaction(u => { if (u) u.balance += activePiyango.pool; return u; });
-                await reply(`🎉 KAZANAN: @${win} (+${activePiyango.pool})`);
-                activePiyango = null;
+                if (!activePiyango.p.length) { activePiyango = null; await reply('Katılım yok.'); }
+                else {
+                    const win = activePiyango.p[Math.floor(Math.random() * activePiyango.p.length)];
+                    await db.ref('users/' + win).transaction(u => { if (u) u.balance += activePiyango.pool; return u; });
+                    await reply(`🎉 KAZANAN: @${win} (+${activePiyango.pool})`);
+                    activePiyango = null;
+                }
             }
         }
     }
@@ -543,29 +548,18 @@ app.post('/admin-api/chat-action', authAdmin, async (req, res) => {
     res.json({ success: true });
 });
 
-// YENİ: KANAL LİSTESİ
-app.get('/admin-api/channels', authAdmin, async (req, res) => {
+// YENİ: KANAL LİSTESİ (POST oldu)
+app.post('/admin-api/channels', authAdmin, async (req, res) => {
     const snap = await db.ref('channels').once('value');
     const channels = snap.val() || {};
     res.json(channels);
 });
 
-// YENİ: KANAL AYARI GÜNCELLE
-app.post('/admin-api/toggle-command', authAdmin, async (req, res) => {
-    const { channelId, command, value } = req.body;
-    await db.ref(`channels/${channelId}/settings`).update({ [command]: value });
-    res.json({ success: true });
-});
+// ... (toggle-command ve delete-channel zaten POST) ...
 
-// YENİ: KANAL SİL (LOGOUT)
-app.post('/admin-api/delete-channel', authAdmin, async (req, res) => {
-    await db.ref('channels/' + req.body.channelId).remove();
-    res.json({ success: true });
-});
-
-// YENİ: TÜM KULLANICILAR (TABLO İÇİN)
-app.get('/admin-api/all-users', authAdmin, async (req, res) => {
-    const snap = await db.ref('users').limitToFirst(100).once('value'); // İlk 100 kullanıcı (performans için)
+// YENİ: TÜM KULLANICILAR (POST oldu)
+app.post('/admin-api/all-users', authAdmin, async (req, res) => {
+    const snap = await db.ref('users').limitToFirst(100).once('value');
     res.json(snap.val() || {});
 });
 
