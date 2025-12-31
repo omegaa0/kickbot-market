@@ -477,8 +477,18 @@ app.post('/kick/webhook', async (req, res) => {
     // SELAM - Sadece tam kelime olarak geçiyorsa cevap ver (ve cooldown)
     const selamRegex = /\b(sa|sea|selam|selamlar|slm|selamün aleyküm|selamünaleyküm)\b/i;
     const selamCooldowns = global.selamCooldowns || (global.selamCooldowns = {});
+    const iiremCooldowns = global.iiremCooldowns || (global.iiremCooldowns = {});
     const userCooldownKey = `${broadcasterId}_${user.toLowerCase()}`;
     const now = Date.now();
+
+    // --- ÖZEL TETİKLEYİCİ: iiremkk (aloskegang kanalı) ---
+    if (user.toLowerCase() === 'iiremkk' && channelData.username?.toLowerCase() === 'aloskegang') {
+        const lastTrigger = iiremCooldowns[user.toLowerCase()] || 0;
+        if (now - lastTrigger > 10800000) { // 3 Saat
+            iiremCooldowns[user.toLowerCase()] = now;
+            await reply("Chatte ardahanlı tespit edildi.");
+        }
+    }
 
     if (selamRegex.test(lowMsg) && !lowMsg.startsWith('!') && !lowMsg.includes('aleyküm')) {
         // Aynı kullanıcıya 60 saniye içinde tekrar cevap verme
@@ -896,7 +906,14 @@ app.post('/kick/webhook', async (req, res) => {
         await reply(`🎙️ @${user}, Mesajın yayına gönderildi! (-${ttsCost.toLocaleString()} 💰)`);
     }
 
-    else if (lowMsg.startsWith('!ses')) {
+    else if (lowMsg === '!sesler' && isEnabled('ses')) {
+        const customSounds = settings.custom_sounds || {};
+        const keys = Object.keys(customSounds);
+        if (keys.length === 0) return await reply(`@${user}, Bu kanalda henüz özel ses eklenmemiş.`);
+        await reply(`🎵 Mevcut Sesler: ${keys.map(k => `!ses ${k} (${parseInt(customSounds[k].cost).toLocaleString()} 💰)`).join(' | ')}`);
+    }
+
+    else if (lowMsg.startsWith('!ses') && isEnabled('ses')) {
         const soundTrigger = args[0]?.toLowerCase();
         const customSounds = settings.custom_sounds || {};
 
@@ -911,11 +928,13 @@ app.post('/kick/webhook', async (req, res) => {
         const snap = await userRef.once('value');
         if ((snap.val()?.balance || 0) < soundCost) return await reply(`@${user}, "${soundTrigger}" sesi için ${soundCost.toLocaleString()} 💰 lazım!`);
 
-        if (sound.url.startsWith('/uploads/sounds/')) {
-            const relativePath = sound.url.replace('/uploads/sounds/', '');
+        // Gelişmiş dosya kontrolü
+        if (sound.url.includes('/uploads/sounds/')) {
+            const parts = sound.url.split('/uploads/sounds/');
+            const relativePath = parts[1];
             const filePath = path.join(uploadDir, relativePath);
             if (!fs.existsSync(filePath)) {
-                return await reply(`⚠️ @${user}, "${soundTrigger}" ses dosyası silinmiş!`);
+                return await reply(`⚠️ @${user}, "${soundTrigger}" ses dosyası sunucuda bulunamadı!`);
             }
         }
 
@@ -923,19 +942,12 @@ app.post('/kick/webhook', async (req, res) => {
         await db.ref(`channels/${broadcasterId}/stream_events/sound`).push({
             soundId: soundTrigger,
             url: sound.url,
-            volume: sound.volume || 100, // Özel ses seviyesi
+            volume: sound.volume || 100,
             played: false,
             timestamp: Date.now(),
             broadcasterId: broadcasterId
         });
         await reply(`🎵 @${user}, ${soundTrigger} sesi çalınıyor! (-${soundCost.toLocaleString()} 💰)`);
-    }
-
-    else if (lowMsg === '!sesler') {
-        const customSounds = settings.custom_sounds || {};
-        const keys = Object.keys(customSounds);
-        if (keys.length === 0) return await reply(`@${user}, Bu kanalda henüz özel ses eklenmemiş.`);
-        await reply(`🎵 Mevcut Sesler: ${keys.map(k => `!ses ${k} (${parseInt(customSounds[k].cost).toLocaleString()} 💰)`).join(' | ')}`);
     }
 
     else if (lowMsg.startsWith('!kredi')) {
@@ -1097,6 +1109,14 @@ app.post('/kick/webhook', async (req, res) => {
         }
     }
 
+    else if (isAuthorized && lowMsg === '!havaifişek') {
+        await db.ref(`channels/${broadcasterId}/stream_events/fireworks`).push({
+            timestamp: Date.now(),
+            played: false
+        });
+        await reply(`🎆 Havai fişekler patlatılıyor! Hazırlanın...`);
+    }
+
     else if (lowMsg === '!komutlar') {
         const toggleable = ['slot', 'yazitura', 'kutu', 'duello', 'soygun', 'fal', 'ship', 'hava', 'zenginler', 'soz'];
         const enabled = toggleable.filter(k => settings[k] !== false).map(k => "!" + k);
@@ -1144,20 +1164,22 @@ app.post('/admin-api/check', authAdmin, (req, res) => res.json({ success: true }
 app.post('/admin-api/rig-ship', authAdmin, (req, res) => {
     const { user, target, percent } = req.body;
     riggedShips[user.toLowerCase()] = { target, percent: parseInt(percent) };
+    addLog("Rig Ayarı", `Ship Riglendi: ${user} -> ${target} (%${percent})`);
     res.json({ success: true });
 });
 
 // RIG GAMBLE
 app.post('/admin-api/rig-gamble', authAdmin, (req, res) => {
-    const { user, result } = req.body; // result: 'win' veya 'lose'
+    const { user, result } = req.body;
     riggedGambles[user.toLowerCase()] = result;
+    addLog("Rig Ayarı", `Gamble Riglendi: ${user} -> ${result}`);
     res.json({ success: true });
 });
 
-// CHAT AKSİYONLARI (API tabanlı moderasyon)
+// CHAT AKSİYONLARI
 app.post('/admin-api/chat-action', authAdmin, async (req, res) => {
     const { action, channelId } = req.body;
-
+    addLog("Chat Aksiyonu", `Eylem: ${action}`, channelId);
     let result;
     if (action === 'clear') {
         result = await clearChat(channelId);
@@ -1201,17 +1223,25 @@ app.post('/admin-api/delete-channel', authAdmin, async (req, res) => {
     res.json({ success: true });
 });
 
-// TÜM KULLANICILAR
+// TÜM KULLANICILAR (ARAMA DESTEKLİ)
 app.post('/admin-api/all-users', authAdmin, async (req, res) => {
-    // Limiti 1000'e çıkaralım ki daha fazla kullanıcı listelensin
-    const snap = await db.ref('users').limitToLast(1000).once('value');
+    const { search } = req.body;
+    if (search) {
+        const snap = await db.ref('users/' + search.toLowerCase()).once('value');
+        if (snap.exists()) return res.json({ [search.toLowerCase()]: snap.val() });
+        return res.json({});
+    }
+    const snap = await db.ref('users').limitToLast(5000).once('value');
     res.json(snap.val() || {});
 });
 
 // KULLANICI GÜNCELLE
 app.post('/admin-api/update-user', authAdmin, async (req, res) => {
     const { user, balance } = req.body;
+    const oldSnap = await db.ref('users/' + user.toLowerCase()).once('value');
+    const oldBal = oldSnap.val()?.balance || 0;
     await db.ref('users/' + user.toLowerCase()).update({ balance: parseInt(balance) });
+    addLog("Kullanıcı Düzenleme", `${user} bakiyesi: ${oldBal} -> ${balance}`);
     res.json({ success: true });
 });
 
@@ -1234,6 +1264,7 @@ app.post('/admin-api/distribute-balance', authAdmin, async (req, res) => {
             count++;
         }
     }
+    addLog("Toplu Para Dağıtımı", `${count} kullanıcıya +${addAmt} 💰 verildi.`, channelId);
     res.json({ success: true, count });
 });
 

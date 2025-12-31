@@ -80,21 +80,30 @@
             font-weight: 800;
             cursor: pointer;
             transition: 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
         }
 
         .btn:hover {
-            transform: scale(1.05);
+            transform: scale(1.02);
             filter: brightness(1.2);
         }
 
         .btn-danger {
-            background: var(--danger);
-            color: #fff;
+            background: var(--danger) !important;
+            color: #fff !important;
+        }
+
+        .btn-small {
+            padding: 5px 10px;
+            font-size: 0.8rem;
         }
 
         /* Dashboard */
         .container {
-            max-width: 1200px;
+            max-width: 1300px;
             margin: 40px auto;
             padding: 20px;
             display: none;
@@ -114,17 +123,19 @@
             margin-bottom: 30px;
             border-bottom: 1px solid #333;
             padding-bottom: 10px;
+            overflow-x: auto;
         }
 
         .tab-btn {
             background: none;
             border: none;
             color: var(--muted);
-            font-size: 1.1rem;
+            font-size: 1rem;
             cursor: pointer;
             padding: 10px 20px;
             border-radius: 8px;
             transition: 0.3s;
+            white-space: nowrap;
         }
 
         .tab-btn.active {
@@ -145,7 +156,7 @@
         /* Channel Cards */
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
             gap: 20px;
         }
 
@@ -154,6 +165,12 @@
             padding: 20px;
             border-radius: 15px;
             border: 1px solid #222;
+            transition: 0.3s;
+        }
+
+        .card:hover {
+            border-color: #333;
+            transform: translateY(-3px);
         }
 
         .card h3 {
@@ -161,6 +178,7 @@
             margin-bottom: 10px;
             display: flex;
             justify-content: space-between;
+            align-items: center;
         }
 
         .status-dot {
@@ -169,23 +187,7 @@
             background: var(--primary);
             border-radius: 50%;
             display: inline-block;
-        }
-
-        .toggle-group {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 15px;
-        }
-
-        .toggle-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-size: 0.9rem;
-            background: #000;
-            padding: 8px;
-            border-radius: 5px;
+            box-shadow: 0 0 10px var(--primary);
         }
 
         /* Sub-Tabs */
@@ -203,8 +205,8 @@
             background: none;
             border: none;
             color: #666;
-            font-size: 0.7rem;
-            padding: 6px 2px;
+            font-size: 0.75rem;
+            padding: 8px 2px;
             cursor: pointer;
             border-radius: 6px;
             transition: 0.2s;
@@ -225,10 +227,27 @@
             display: block;
         }
 
-        /* Fixed Slider */
+        /* Range Sliders */
+        .range-container {
+            margin-bottom: 12px;
+        }
+
+        .range-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            margin-bottom: 4px;
+            color: var(--muted);
+        }
+
+        .range-label span {
+            color: var(--primary);
+            font-weight: 800;
+        }
+
         input[type="range"] {
             width: 100% !important;
-            height: 5px;
+            height: 6px;
             background: #222;
             border-radius: 5px;
             outline: none;
@@ -237,19 +256,38 @@
 
         input[type="range"]::-webkit-slider-thumb {
             appearance: none;
-            width: 15px;
-            height: 15px;
+            width: 18px;
+            height: 18px;
             background: var(--primary);
             border-radius: 50%;
             cursor: pointer;
+            box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
         }
 
-        /* Switch */
+        /* Toggle Switches */
+        .toggle-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 5px;
+        }
+
+        .toggle-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            background: #000;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #1a1a1a;
+        }
+
         .switch {
             position: relative;
             display: inline-block;
             width: 34px;
-            height: 20px;
+            height: 18px;
         }
 
         .switch input {
@@ -273,8 +311,8 @@
         .slider:before {
             position: absolute;
             content: "";
-            height: 14px;
-            width: 14px;
+            height: 12px;
+            width: 12px;
             left: 3px;
             bottom: 3px;
             background-color: white;
@@ -287,52 +325,107 @@
         }
 
         input:checked+.slider:before {
-            transform: translateX(14px);
+            transform: translateX(16px);
         }
 
         /* User Table */
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-
-        th,
-        td {
-            text-align: left;
-            padding: 15px;
-            border-bottom: 1px solid #222;
-        }
-
-        th {
-            color: var(--muted);
-            font-size: 0.9rem;
-            text-transform: uppercase;
-        }
-
-        tr:hover {
-            background: rgba(255, 255, 255, 0.02);
-        }
-
-        /* Panels */
-        .panel {
-            background: var(--card);
-            padding: 20px;
-            border-radius: 15px;
-            border: 1px solid #222;
-        }
-
-        .main-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-
         .table-container {
             background: var(--card);
             border-radius: 15px;
             border: 1px solid #222;
             overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 12px 20px;
+            border-bottom: 1px solid #1a1a1a;
+        }
+
+        th {
+            color: var(--muted);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        tr:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--primary);
+        }
+
+        /* Logs */
+        #log-container {
+            background: #050505;
+            padding: 15px;
+            border-radius: 12px;
+            height: 500px;
+            overflow-y: auto;
+            font-family: 'Consolas', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            border: 1px solid #222;
+        }
+
+        .log-entry {
+            margin-bottom: 8px;
+            border-bottom: 1px solid #111;
+            padding-bottom: 4px;
+        }
+
+        .log-ts {
+            color: var(--muted);
+            padding-right: 10px;
+            font-size: 0.8rem;
+        }
+
+        .log-action {
+            color: var(--primary);
+            font-weight: bold;
+            padding-right: 10px;
+        }
+
+        .log-details {
+            color: var(--text);
+        }
+
+        .log-chan {
+            color: var(--secondary);
+            font-size: 0.8rem;
+            background: rgba(0, 225, 255, 0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
         }
     </style>
 </head>
@@ -342,8 +435,9 @@
     <!-- AUTH -->
     <div id="login-overlay">
         <div class="login-box">
-            <h2>🔐 GÜVENLİK</h2>
-            <input type="password" id="adminKey" class="inp" placeholder="Admin Anahtarı">
+            <h2>🛡️ ADMIN KONTROL</h2>
+            <input type="password" id="adminKey" class="inp" placeholder="Admin Şifresi"
+                onkeypress="if(event.key==='Enter') login()">
             <button class="btn" onclick="login()">GİRİŞ YAP</button>
             <p id="error-log" style="color:var(--danger); margin-top:10px;"></p>
         </div>
@@ -352,33 +446,35 @@
     <!-- MAIN PANEL -->
     <div class="container" id="admin-panel">
         <header>
-            <h1>AloskeGang<span style="color:var(--primary)">BOT</span></h1>
-            <button class="btn btn-danger" style="width: auto;" onclick="location.reload()">ÇIKIŞ</button>
+            <h1>AloskeGang<span style="color:var(--primary)">BOT</span> <small
+                    style="font-size: 0.4em; color: var(--muted); vertical-align: middle;">v2.0 Admin</small></h1>
+            <button class="btn btn-danger" style="width: auto; padding: 10px 20px;" onclick="location.reload()">🔒
+                ÇIKIŞ</button>
         </header>
 
         <div class="tabs">
             <button class="tab-btn active" onclick="showTab('channels')">📡 Kanallar</button>
             <button class="tab-btn" onclick="showTab('users')">👥 Kullanıcılar</button>
-            <button class="tab-btn" onclick="showTab('troll')">🤡 Troll & Aksiyon</button>
-            <button class="tab-btn" onclick="showTab('global')">⚙️ Genel</button>
-            <button class="tab-btn" onclick="showTab('logs')">📋 Loglar</button>
+            <button class="tab-btn" onclick="showTab('troll')">🤡 Troll & Rig</button>
+            <button class="tab-btn" onclick="showTab('logs')">📋 İşlem Kayıtları</button>
+            <button class="tab-btn" onclick="showTab('global')">⚙️ Duyuru</button>
         </div>
 
-        <!-- CHANNEL MANAGEMENT -->
+        <!-- CHANNELS -->
         <div id="channels" class="section active">
             <div class="grid" id="channel-list">
-                <p>Kanallar yükleniyor...</p>
+                <p style="padding: 20px; color: var(--muted);">Veriler yükleniyor...</p>
             </div>
         </div>
 
-        <!-- USERS MANAGEMENT -->
+        <!-- USERS -->
         <div id="users" class="section">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; gap:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; gap:15px;">
                 <h2 style="margin:0;">👤 Kullanıcı Yönetimi</h2>
-                <div style="display:flex; gap:10px; flex:1; max-width:400px;">
-                    <input type="text" id="usersearch" placeholder="Kullanıcı Ara..." class="inp"
-                        style="margin:0; height:35px;" oninput="filterUsers()">
-                    <button class="btn" style="width: auto; height:35px;" onclick="loadUsers()">🔄 Yenile</button>
+                <div style="display:flex; gap:10px; flex:1; max-width:500px;">
+                    <input type="text" id="usersearch" placeholder="İsimle ara..." class="inp"
+                        style="margin:0; height:45px; text-align: left; padding: 0 15px;" oninput="filterUsers()">
+                    <button class="btn" style="width: 120px; height:45px;" onclick="loadUsers()">🔄 Yenile</button>
                 </div>
             </div>
             <div class="table-container">
@@ -386,108 +482,132 @@
                     <thead>
                         <tr>
                             <th>Kullanıcı</th>
-                            <th>Bakiye</th>
-                            <th>Son Görülme</th>
-                            <th>İşlem</th>
+                            <th>Bakiye (💰)</th>
+                            <th>Son Aktiflik</th>
+                            <th>Ban (🚨)</th>
+                            <th style="text-align:right">İşlemler</th>
                         </tr>
                     </thead>
                     <tbody id="user-list"></tbody>
                 </table>
             </div>
+            <div style="margin-top: 15px; text-align: center;">
+                <button class="btn" style="width: auto; margin:0 auto; padding: 10px 30px;"
+                    onclick="loadMoreUsers()">DAHA FAZLA YÜKLE</button>
+            </div>
         </div>
 
-        <!-- TROLL & ACTION -->
+        <!-- TROLL -->
         <div id="troll" class="section">
             <div class="main-grid">
-                <div class="panel">
-                    <h2>💌 Rigged Ship (Aşk Ayarla)</h2>
-                    <input type="text" id="rigUser" class="inp" placeholder="Kullanıcı">
-                    <input type="text" id="rigTarget" class="inp" placeholder="Partner">
-                    <input type="number" id="rigPercent" class="inp" placeholder="Yüzde" value="100">
-                    <button class="btn" onclick="setRigShip()">AYARLA</button>
+                <div class="card">
+                    <h3>💌 Aşk Ayarla (!ship)</h3>
+                    <input type="text" id="rigUser" class="inp" placeholder="Kim? (Örn: aloske)">
+                    <input type="text" id="rigTarget" class="inp" placeholder="Kiminle? (Örn: chatbot)">
+                    <input type="number" id="rigPercent" class="inp" placeholder="Yüzde (0-100)" value="100">
+                    <button class="btn" onclick="setRigShip()">❤️ AYARLA</button>
                 </div>
-                <div class="panel">
-                    <h2>🎰 Kumar Sonucu Ayarla</h2>
-                    <input type="text" id="gambleUser" class="inp" placeholder="Kullanıcı Adı">
+                <div class="card">
+                    <h3>🎰 Kumar Rigle</h3>
+                    <input type="text" id="gambleUser" class="inp" placeholder="Kullanıcı adı">
                     <div style="display:flex; gap:10px;">
-                        <button class="btn" style="background:var(--primary)"
-                            onclick="setGamble('win')">KAZANSIN</button>
-                        <button class="btn btn-danger" onclick="setGamble('lose')">KAYBETSİN</button>
+                        <button class="btn" style="flex:1" onclick="setGamble('win')">✅ KAZANDIR</button>
+                        <button class="btn btn-danger" style="flex:1" onclick="setGamble('lose')">❌ KAYBETTİR</button>
                     </div>
                 </div>
-                <div class="panel" style="grid-column: span 2;">
-                    <h2>🛡️ Chat İşlemleri (Tüm Kanallar)</h2>
-                    <div style="display:flex; gap:10px;">
-                        <button class="btn" onclick="chatAction('clear')">Temizle</button>
-                        <button class="btn" onclick="chatAction('slow')">Slow Mod</button>
-                        <button class="btn" onclick="chatAction('slowoff')">Slow Mod Kapat</button>
+                <div class="card" style="grid-column: span 2;">
+                    <h3>🛡️ Global Chat Komutları</h3>
+                    <p style="font-size: 0.8rem; color: var(--muted); margin-bottom: 15px;">Bu komutlar bağlı olan kanal
+                        ID'sine göre o kanaldaki yetkili bot üzerinden çalışır.</p>
+                    <div style="display:flex; gap:15px;">
+                        <button class="btn" style="background:#222; flex:1" onclick="chatAction('clear')">🧹 Chat
+                            Temizle</button>
+                        <button class="btn" style="background:#222; flex:1" onclick="chatAction('slow')">🐢 Slow Mod
+                            (10sn)</button>
+                        <button class="btn" style="background:#222; flex:1" onclick="chatAction('slowoff')">⚡ Slow Mod
+                            Kapat</button>
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- LOGS -->
+        <div id="logs" class="section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 style="margin:0;">📋 Sistem Logları <small
+                        style="font-size: 0.5em; color: var(--primary);">CANLI</small></h2>
+                <button class="btn" style="width: auto; padding: 8px 15px;" onclick="loadLogs()">🔄 YENİLE</button>
+            </div>
+            <div id="log-container">Yükleniyor...</div>
         </div>
 
         <!-- GLOBAL -->
         <div id="global" class="section">
-            <div class="card">
-                <h3>📢 Kanal Duyurusu</h3>
-                <select id="targetChannel" class="inp"></select>
-                <textarea id="channelMsg" class="inp" style="height:100px; resize:none"
-                    placeholder="Mesaj..."></textarea>
-                <button class="btn" onclick="sendToChannel()">MESAJ GÖNDER</button>
-            </div>
-        </div>
-
-        <!-- ADMIN LOGS -->
-        <div id="logs" class="section">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                <h2 style="margin:0;">📋 Loglar</h2>
-                <button class="btn" style="width: auto; height:35px;" onclick="loadLogs()">🔄 Yenile</button>
-            </div>
-            <div id="log-container"
-                style="background:var(--card); border:1px solid #222; border-radius:15px; padding:20px; max-height:600px; overflow-y:auto; font-family:monospace; border-left: 5px solid var(--primary);">
-                Yükleniyor...
+            <div class="card" style="max-width: 600px; margin: 0 auto;">
+                <h3>📢 Tekli Kanal Duyurusu</h3>
+                <label style="font-size: 0.8rem; color: var(--muted);">Hedef Kanal:</label>
+                <select id="targetChannel" class="inp" style="margin-top: 5px; text-align-last: center;"></select>
+                <label style="font-size: 0.8rem; color: var(--muted);">Mesajınız:</label>
+                <textarea id="channelMsg" class="inp"
+                    style="height:120px; resize:none; margin-top: 5px; text-align: left; padding: 10px;"
+                    placeholder="Yazmaya başla..."></textarea>
+                <button class="btn" onclick="sendToChannel()">🚀 MESAJI GÖNDER</button>
             </div>
         </div>
     </div>
 
-    <!-- BAN STATS MODAL -->
-    <div id="banModal"
-        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000; align-items:center; justify-content:center;">
-        <div class="card" style="width:400px;">
-            <h3>🚫 Ban Detayları</h3>
-            <div id="banModalContent" style="margin:20px 0; color:#ddd;"></div>
-            <button class="btn" onclick="document.getElementById('banModal').style.display='none'">KAPAT</button>
+    <!-- BALANCE MODAL -->
+    <div id="balanceModal"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:2000; align-items:center; justify-content:center;">
+        <div class="card" style="width:350px;">
+            <h3 id="bal-modal-title">Bakiye Güncelle</h3>
+            <input type="number" id="newBalance" class="inp" style="margin-top:20px;">
+            <div style="display:flex; gap:10px;">
+                <button class="btn" id="saveBalBtn">KAYDET</button>
+                <button class="btn btn-danger" onclick="closeModal('balanceModal')">İPTAL</button>
+            </div>
         </div>
     </div>
 
     <script>
         let sessionKey = "";
-        let allUsers = {};
-        const COMMANDS = ['slot', 'yazitura', 'kutu', 'duello', 'soygun', 'fal', 'ship', 'hava', 'zenginler'];
+        let rawUsers = {};
+        const COMMANDS = ['slot', 'yazitura', 'kutu', 'duello', 'soygun', 'fal', 'ship', 'hava', 'zenginler', 'tts', 'ses'];
+        let logInterval = null;
 
         async function login() {
             const key = document.getElementById('adminKey').value;
-            const res = await fetch('/admin-api/check', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key })
-            });
-            const data = await res.json();
-            if (data.success) {
-                sessionKey = key;
-                document.getElementById('login-overlay').style.display = 'none';
-                document.getElementById('admin-panel').style.display = 'block';
-                loadChannels();
-                loadUsers();
-            } else {
-                document.getElementById('error-log').innerText = "Hatalı Anahtar!";
-            }
+            if (!key) return;
+            try {
+                const res = await fetch('/admin-api/check', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    sessionKey = key;
+                    document.getElementById('login-overlay').style.opacity = '0';
+                    setTimeout(() => document.getElementById('login-overlay').style.display = 'none', 500);
+                    document.getElementById('admin-panel').style.display = 'block';
+                    loadChannels();
+                    loadUsers();
+                } else {
+                    document.getElementById('error-log').innerText = "Hatalı Giriş Anahtarı!";
+                }
+            } catch (e) { alert("Sunucu hatası!"); }
         }
 
         function showTab(id) {
             document.querySelectorAll('.section').forEach(d => d.classList.remove('active'));
             document.getElementById(id).classList.add('active');
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            event.currentTarget.classList.add('active');
-            if (id === 'logs') loadLogs();
+            if (window.event) window.event.currentTarget.classList.add('active');
+
+            if (id === 'logs') {
+                loadLogs();
+                if (!logInterval) logInterval = setInterval(loadLogs, 5000);
+            } else {
+                if (logInterval) { clearInterval(logInterval); logInterval = null; }
+            }
         }
 
         function showSubTab(channelId, section, event) {
@@ -507,7 +627,7 @@
             container.innerHTML = "";
 
             const dropdown = document.getElementById('targetChannel');
-            dropdown.innerHTML = '<option value="">Kanal Seçin...</option>';
+            dropdown.innerHTML = '<option value="">Gönderilecek Kanalı Seç...</option>';
 
             for (const [id, data] of Object.entries(channels)) {
                 dropdown.innerHTML += `<option value="${id}">${data.username || id}</option>`;
@@ -518,167 +638,336 @@
                     toggles += `<div class="toggle-item"><span>!${cmd}</span><label class="switch"><input type="checkbox" ${isChecked} onchange="toggleCmd('${id}', '${cmd}', this.checked)"><span class="slider"></span></label></div>`;
                 });
 
-                const settings = data.settings || {};
+                const s = data.settings || {};
                 const overlayUrl = `${window.location.origin}/overlay?key=${data.overlay_key || 'YOK'}`;
 
                 const html = `
                     <div class="card">
-                        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
-                            <div><h3 style="margin:0;">${data.username} <span class="status-dot"></span></h3><p style="font-size:0.7rem; color:#666;">ID: ${id}</p></div>
-                            <button onclick="deleteChannel('${id}')" style="background:none; border:none; color:var(--danger); cursor:pointer; font-size:1.2rem;">✖</button>
-                        </div>
+                        <h3>
+                            <span>${data.username} <span class="status-dot"></span></span>
+                            <button onclick="deleteChannel('${id}')" style="background:none; border:none; color:var(--danger); cursor:pointer; font-size:1.1rem;">✖</button>
+                        </h3>
+                        <p style="font-size:0.7rem; color:#666; margin-bottom:12px;">ID: ${id}</p>
+                        
                         <div class="sub-tabs">
                             <button class="sub-tab-btn active" onclick="showSubTab('${id}', 'genel', event)">Genel</button>
                             <button class="sub-tab-btn" onclick="showSubTab('${id}', 'oyunlar', event)">Oyunlar</button>
                             <button class="sub-tab-btn" onclick="showSubTab('${id}', 'sesler', event)">Sesler</button>
-                            <button class="sub-tab-btn" onclick="showSubTab('${id}', 'komutlar', event)">Komutlar</button>
+                            <button class="sub-tab-btn" onclick="showSubTab('${id}', 'komutlar', event)">Diger</button>
                         </div>
+
+                        <!-- KANAL: GENEL -->
                         <div id="sub-genel-${id}" class="sub-section active">
-                            <div style="background:#000; padding:10px; border-radius:8px; border:1px solid #222; margin-bottom:10px;">
-                                <h4 style="font-size:0.8rem; color:var(--primary); margin-bottom:5px;">Overlay Linki</h4>
-                                <input type="text" readonly value="${overlayUrl}" class="inp" style="height:28px; font-size:0.65rem; margin:0;" onclick="this.select(); document.execCommand('copy'); alert('Kopyalandı!')">
-                                <button class="btn" style="height:24px; font-size:0.65rem; margin-top:5px; padding:0;" onclick="resetOverlayKey('${id}')">SIFIRLA</button>
+                            <div style="background:#000; padding:12px; border-radius:10px; border:1px solid #222; margin-bottom:12px;">
+                                <label style="font-size:0.7rem; color:var(--primary);">OVERLAY BAĞLANTISI</label>
+                                <input type="text" readonly value="${overlayUrl}" class="inp" style="height:32px; font-size:0.7rem; margin:5px 0;" onclick="this.select(); document.execCommand('copy'); alert('Overlay linki kopyalandı!')">
+                                <button class="btn btn-small" onclick="resetOverlayKey('${id}')">🔑 ANAHTARI SIFIRLA</button>
                             </div>
-                            <div style="background:#000; padding:10px; border-radius:8px; border:1px solid #222;">
-                                <h4 style="font-size:0.8rem; color:var(--primary); margin-bottom:5px;">Para Dağıt</h4>
-                                <div style="display:flex; gap:5px;"><input type="number" id="dist-amt-${id}" class="inp" style="height:28px; margin:0; flex:1;"><button class="btn" style="width:40px; height:28px; padding:0;" onclick="distributeBalance('${id}')">OK</button></div>
+                            <div class="form-row">
+                                <div style="flex:1">
+                                    <label class="range-label">Günlük Ödül</label>
+                                    <input type="number" value="${s.daily_reward || 500}" class="inp" style="height:35px; margin:0;" onchange="toggleCmd('${id}','daily_reward',parseInt(this.value))">
+                                </div>
+                                <div style="flex:1">
+                                    <label class="range-label">Pasif (10dk)</label>
+                                    <input type="number" value="${s.passive_reward || 100}" class="inp" style="height:35px; margin:0;" onchange="toggleCmd('${id}','passive_reward',parseInt(this.value))">
+                                </div>
                             </div>
+                            <button class="btn btn-small" onclick="distributeBalancePrompt('${id}')">💰 KANALDAKİ HERKESE PARA DAĞIT</button>
                         </div>
+
+                        <!-- KANAL: OYUNLAR -->
                         <div id="sub-oyunlar-${id}" class="sub-section">
-                            <div style="background:rgba(255,255,255,0.03); padding:8px; border-radius:8px;">
-                                <label style="font-size:0.7rem;">Slot: %<span id="v-sl-${id}">${settings.wr_slot || 30}</span></label>
-                                <input type="range" min="0" max="100" value="${settings.wr_slot || 30}" oninput="document.getElementById('v-sl-${id}').innerText=this.value" onchange="toggleCmd('${id}','wr_slot',parseInt(this.value))">
-                                <label style="font-size:0.7rem;">Y.Tura: %<span id="v-yt-${id}">${settings.wr_yazitura || 50}</span></label>
-                                <input type="range" min="0" max="100" value="${settings.wr_yazitura || 50}" oninput="document.getElementById('v-yt-${id}').innerText=this.value" onchange="toggleCmd('${id}','wr_yazitura',parseInt(this.value))">
-                                <label style="font-size:0.7rem;">Kutu: %<span id="v-kt-${id}">${settings.wr_kutu || 40}</span></label>
-                                <input type="range" min="0" max="100" value="${settings.wr_kutu || 40}" oninput="document.getElementById('v-kt-${id}').innerText=this.value" onchange="toggleCmd('${id}','wr_kutu',parseInt(this.value))">
+                            <div class="range-container">
+                                <label class="range-label">Slot Kazanma: <span>%<span id="v-sl-${id}">${s.wr_slot || 30}</span></span></label>
+                                <input type="range" min="0" max="100" value="${s.wr_slot || 30}" oninput="document.getElementById('v-sl-${id}').innerText=this.value" onchange="toggleCmd('${id}','wr_slot',parseInt(this.value))">
+                            </div>
+                            <div class="range-container">
+                                <label class="range-label">YazıTura Kazanma: <span>%<span id="v-yt-${id}">${s.wr_yazitura || 50}</span></span></label>
+                                <input type="range" min="0" max="100" value="${s.wr_yazitura || 50}" oninput="document.getElementById('v-yt-${id}').innerText=this.value" onchange="toggleCmd('${id}','wr_yazitura',parseInt(this.value))">
+                            </div>
+                            <div class="range-container">
+                                <label class="range-label">Kutu Kazanma: <span>%<span id="v-kt-${id}">${s.wr_kutu || 40}</span></span></label>
+                                <input type="range" min="0" max="100" value="${s.wr_kutu || 40}" oninput="document.getElementById('v-kt-${id}').innerText=this.value" onchange="toggleCmd('${id}','wr_kutu',parseInt(this.value))">
+                            </div>
+                            <div class="range-container">
+                                <label class="range-label">Soygun Kazanma: <span>%<span id="v-sy-${id}">${s.wr_soygun || 40}</span></span></label>
+                                <input type="range" min="0" max="100" value="${s.wr_soygun || 40}" oninput="document.getElementById('v-sy-${id}').innerText=this.value" onchange="toggleCmd('${id}','wr_soygun',parseInt(this.value))">
+                            </div>
+                            <div class="form-row">
+                                <div style="flex:1">
+                                    <label class="range-label">Soygun Ödül</label>
+                                    <input type="number" value="${s.soygun_reward || 30000}" class="inp" style="height:35px; margin:0;" onchange="toggleCmd('${id}','soygun_reward',parseInt(this.value))">
+                                </div>
+                                <div style="flex:1">
+                                    <label class="range-label">Soygun Sınır/Sa</label>
+                                    <input type="number" value="${s.soygun_limit || 3}" class="inp" style="height:35px; margin:0;" onchange="toggleCmd('${id}','soygun_limit',parseInt(this.value))">
+                                </div>
                             </div>
                         </div>
+
+                        <!-- KANAL: SESLER -->
                         <div id="sub-sesler-${id}" class="sub-section">
-                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
-                                <div><label style="font-size:0.6rem;">TTS: %${settings.tts_volume || 100}</label><input type="range" min="0" max="100" value="${settings.tts_volume || 100}" onchange="toggleCmd('${id}','tts_volume',parseInt(this.value))"></div>
-                                <div><label style="font-size:0.6rem;">Efekt: %${settings.sound_volume || 80}</label><input type="range" min="0" max="100" value="${settings.sound_volume || 80}" onchange="toggleCmd('${id}','sound_volume',parseInt(this.value))"></div>
-                            </div>
-                            <div style="background:#000; padding:8px; border-radius:8px; border:1px solid #333;">
-                                <div style="display:flex; gap:4px; margin-bottom:4px;">
-                                    <input type="text" id="snd-name-${id}" placeholder="Komut" class="inp" style="height:26px; font-size:0.7rem; flex:1; margin:0;">
-                                    <input type="number" id="snd-cost-${id}" placeholder="💰" class="inp" style="height:26px; width:50px; font-size:0.7rem; margin:0;">
+                             <div class="form-row">
+                                <div style="flex:1">
+                                    <label class="range-label">TTS Vol: <span>%<span id="v-tts-${id}">${s.tts_volume || 100}</span></span></label>
+                                    <input type="range" min="0" max="100" value="${s.tts_volume || 100}" oninput="document.getElementById('v-tts-${id}').innerText=this.value" onchange="toggleCmd('${id}','tts_volume',parseInt(this.value))">
                                 </div>
-                                <div style="display:flex; gap:4px; align-items:center;">
-                                    <input type="text" id="snd-url-${id}" placeholder="Link" class="inp" style="height:26px; font-size:0.7rem; flex:1; margin:0; text-align:left; padding-left:8px;">
+                                <div style="flex:1">
+                                    <label class="range-label">Ses Vol: <span>%<span id="v-snd-${id}">${s.sound_volume || 80}</span></span></label>
+                                    <input type="range" min="0" max="100" value="${s.sound_volume || 80}" oninput="document.getElementById('v-snd-${id}').innerText=this.value" onchange="toggleCmd('${id}','sound_volume',parseInt(this.value))">
+                                </div>
+                            </div>
+                            <div style="background:#000; padding:10px; border-radius:10px; border:1px solid #333;">
+                                <div style="display:flex; gap:5px; margin-bottom:5px;">
+                                    <input type="text" id="snd-name-${id}" placeholder="Komut" class="inp" style="height:28px; font-size:0.75rem; flex:2; margin:0;">
+                                    <input type="number" id="snd-cost-${id}" placeholder="💰" class="inp" style="height:28px; width:70px; font-size:0.75rem; margin:0;">
+                                </div>
+                                <div style="display:flex; gap:5px; align-items:center;">
+                                    <input type="text" id="snd-url-${id}" placeholder="Dosya URL" class="inp" style="height:28px; font-size:0.7rem; flex:1; margin:0; text-align:left; padding-left:10px;">
                                     <input type="file" id="snd-file-${id}" style="display:none;" onchange="uploadSoundFile('${id}')">
-                                    <button class="btn" style="width:26px; height:26px; background:#222; border:1px solid #444;" onclick="document.getElementById('snd-file-${id}').click()">📂</button>
-                                    <button class="btn" style="width:40px; height:26px;" onclick="addSound('${id}')">OK</button>
+                                    <button class="btn btn-small" style="width:32px; height:28px; background:#1a1a1a;" onclick="document.getElementById('snd-file-${id}').click()">📂</button>
+                                    <button class="btn btn-small" style="width:50px; height:28px;" onclick="addSound('${id}')">OK</button>
                                 </div>
-                                <div style="margin-top:4px;"><label style="font-size:0.6rem;">Vol: %<span id="vol-val-${id}">100</span></label><input type="range" id="snd-vol-${id}" min="0" max="200" value="100" oninput="document.getElementById('vol-val-${id}').innerText=this.value"></div>
+                                <div style="margin-top:10px;">
+                                    <label class="range-label">Bu Sesin Vol.: <span id="vol-val-${id}">100</span>%</label>
+                                    <input type="range" id="snd-vol-${id}" min="0" max="200" value="100" oninput="document.getElementById('vol-val-${id}').innerText=this.value">
+                                </div>
                             </div>
-                            <div id="sound-list-${id}" style="font-size:0.7rem; max-height:80px; overflow-y:auto; border:1px solid #222; margin-top:5px; padding:4px;"></div>
+                            <div id="sound-list-${id}" style="font-size:0.75rem; max-height:100px; overflow-y:auto; border:1px solid #222; margin-top:10px; padding:5px; border-radius:8px;"></div>
                         </div>
+
+                        <!-- KANAL: KOMUTLAR -->
                         <div id="sub-komutlar-${id}" class="sub-section">
                             <div class="toggle-group">${toggles}</div>
                         </div>
                     </div>
                 `;
                 container.innerHTML += html;
-                renderSoundList(id, settings.custom_sounds || {});
+                renderSoundList(id, s.custom_sounds || {});
             }
         }
 
         function renderSoundList(channelId, sounds) {
             const container = document.getElementById(`sound-list-${channelId}`);
-            if (!container) return; container.innerHTML = "";
+            if (!container) return;
+            container.innerHTML = Object.keys(sounds).length ? "" : "<p style='color:#444'>Henüz ses yok.</p>";
             Object.entries(sounds).forEach(([name, data]) => {
-                container.innerHTML += `<div style="display:flex; justify-content:space-between; padding:4px; background:#1a1a1a; margin-bottom:2px; border-radius:4px;">
-                    <span>!ses ${name}</span><button onclick="removeSound('${channelId}','${name}')" style="background:none; border:none; color:var(--danger); cursor:pointer;">✖</button>
-                </div>`;
+                container.innerHTML += `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:5px 8px; background:#121212; margin-bottom:3px; border-radius:6px; border-left: 2px solid var(--primary);">
+                        <span>!ses <b>${name}</b></span>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <span style="font-size:0.6rem; color:#666">${data.cost}💰</span>
+                            <button onclick="removeSound('${channelId}','${name}')" style="background:none; border:none; color:var(--danger); cursor:pointer;">✖</button>
+                        </div>
+                    </div>`;
             });
         }
 
-        async function uploadSoundFile(id) {
-            const file = document.getElementById(`snd-file-${id}`).files[0];
-            if (!file) return;
-            const formData = new FormData();
-            formData.append('sound', file);
-            formData.append('key', sessionKey);
-            formData.append('channelId', id);
-            try {
-                const res = await fetch('/admin-api/upload-sound', { method: 'POST', body: formData });
-                const data = await res.json();
-                if (data.url) {
-                    document.getElementById(`snd-url-${id}`).value = data.url;
-                    alert("Yüklendi!");
-                }
-            } catch (e) { alert("Hata!"); }
+        async function loadUsers() {
+            const res = await fetch('/admin-api/all-users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey }) });
+            rawUsers = await res.json();
+            userLimit = 100;
+            filterUsers();
         }
 
-        async function addSound(channelId) {
-            const name = document.getElementById(`snd-name-${channelId}`).value.trim();
-            const url = document.getElementById(`snd-url-${channelId}`).value.trim();
-            const cost = parseInt(document.getElementById(`snd-cost-${channelId}`).value) || 1000;
-            const volume = parseInt(document.getElementById(`snd-vol-${channelId}`).value) || 100;
-            if (!name || !url) return alert("Hata!");
-            const res = await fetch('/admin-api/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey }) });
-            const channels = await res.json();
-            const current = channels[channelId]?.settings?.custom_sounds || {};
-            current[name] = { url, cost, volume };
-            await toggleCmd(channelId, 'custom_sounds', current);
+        let userLimit = 100;
+        function loadMoreUsers() {
+            userLimit += 100;
+            filterUsers();
+        }
+
+        async function deepSearch() {
+            const q = document.getElementById('usersearch').value.trim();
+            if (!q) return;
+            const res = await fetch('/admin-api/all-users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: sessionKey, search: q })
+            });
+            const data = await res.json();
+            if (Object.keys(data).length) {
+                rawUsers = { ...rawUsers, ...data };
+                filterUsers();
+            } else {
+                alert("Kullanıcı bulunamadı.");
+            }
+        }
+
+        function displayUsers(users) {
+            const list = document.getElementById('user-list');
+            if (!users.length) {
+                list.innerHTML = "<tr><td colspan='5' style='text-align:center; padding:50px;'><p style='color:#555; margin-bottom:10px;'>Yerel listede bulunamadı.</p><button class='btn' style='width:auto; margin:0 auto;' onclick='deepSearch()'>🔍 SUNUCUDA ARA</button></td></tr>";
+                return;
+            }
+            list.innerHTML = users.map(([u, d]) => {
+                const lastSeen = d.last_seen ? new Date(d.last_seen).toLocaleString('tr-TR') : 'N/A';
+                const banCount = (d.bans && Object.values(d.bans).reduce((a, b) => a + b, 0)) || 0;
+                return `
+                <tr>
+                    <td><b>${u}</b></td>
+                    <td>${(d.balance || 0).toLocaleString()} 💰</td>
+                    <td><small>${lastSeen}</small></td>
+                    <td><span style="color:${banCount > 0 ? 'var(--danger)' : '#444'}">${banCount}</span></td>
+                    <td style="text-align:right">
+                        <button class="btn btn-small" style="width:34px; height:34px; display:inline-flex; background:#222; color:#fff;" onclick="openBalanceModal('${u}', ${d.balance || 0})">✏️</button>
+                        <button class="btn btn-small btn-danger" style="width:34px; height:34px; display:inline-flex;" onclick="resetUser('${u}')">🔄</button>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        function filterUsers() {
+            const q = document.getElementById('usersearch').value.toLowerCase();
+            const filtered = Object.entries(rawUsers).filter(([u]) => u.toLowerCase().includes(q));
+            displayUsers(filtered.slice(0, userLimit));
+        }
+
+        function openBalanceModal(user, current) {
+            document.getElementById('bal-modal-title').innerText = `@${user} Bakiyesi`;
+            document.getElementById('newBalance').value = current;
+            document.getElementById('balanceModal').style.display = 'flex';
+            document.getElementById('saveBalBtn').onclick = async () => {
+                const val = document.getElementById('newBalance').value;
+                await fetch('/admin-api/update-user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: sessionKey, user, balance: val })
+                });
+                closeModal('balanceModal');
+                loadUsers();
+            };
+        }
+
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+        async function loadLogs() {
+            const res = await fetch('/admin-api/get-logs', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey })
+            });
+            const logs = await res.json();
+            const container = document.getElementById('log-container');
+            if (!logs.length) { container.innerHTML = "<p style='color:#444'>Henüz kayıt yok.</p>"; return; }
+
+            container.innerHTML = logs.map(l => `
+                <div class="log-entry">
+                    <span class="log-ts">${new Date(l.timestamp).toLocaleTimeString()}</span>
+                    <span class="log-chan">${l.channelId || 'Global'}</span>
+                    <span class="log-action">${l.action}</span>
+                    <span class="log-details">${l.details}</span>
+                </div>
+            `).join('');
+            // Scroll to top
+            container.scrollTop = 0;
+        }
+
+        // --- Helper APIs ---
+        async function resetOverlayKey(id) {
+            if (!confirm("Overlay anahtarı değişecektir. Emin misiniz?")) return;
+            await fetch('/admin-api/reset-overlay-key', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey, channelId: id }) });
             loadChannels();
         }
 
-        async function removeSound(channelId, name) {
-            if (!confirm("Emin misin?")) return;
-            const res = await fetch('/admin-api/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey }) });
-            const channels = await res.json();
-            const current = channels[channelId]?.settings?.custom_sounds || {};
-            delete current[name];
-            await toggleCmd(channelId, 'custom_sounds', current);
-            loadChannels();
+        async function distributeBalancePrompt(id) {
+            const amt = prompt("Miktar (💰):", "1000");
+            if (amt) {
+                await fetch('/admin-api/distribute-balance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey, channelId: id, amount: amt }) });
+                alert("Dağıtım başarılı!");
+            }
         }
 
         async function toggleCmd(channelId, cmd, val) {
             await fetch('/admin-api/toggle-command', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey, channelId, command: cmd, value: val }) });
         }
 
-        async function loadUsers() {
-            const res = await fetch('/admin-api/all-users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey }) });
-            const users = await res.json();
-            const list = document.getElementById('user-list');
-            list.innerHTML = "";
-            Object.entries(users).sort((a, b) => (b[1].balance || 0) - (a[1].balance || 0)).slice(0, 100).forEach(([u, d]) => {
-                list.innerHTML += `<tr><td>${u}</td><td>${d.balance || 0}</td><td>-</td><td><button onclick="resetUser('${u}')">🔄</button></td></tr>`;
-            });
-        }
-
-        async function resetUser(u) {
-            if (!confirm("Sıfırla?")) return;
-            await fetch('/admin-api/update-user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey, user: u, balance: 1000 }) });
-            loadUsers();
-        }
-
-        async function loadLogs() {
-            const res = await fetch('/admin-api/get-logs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey }) });
-            const logs = await res.json();
-            const container = document.getElementById('log-container');
-            container.innerHTML = logs.map(l => `<div>[${new Date(l.timestamp).toLocaleTimeString()}] <b>${l.action}:</b> ${l.details}</div>`).join('');
-        }
-
-        async function distributeBalance(id) {
-            const amt = document.getElementById(`dist-amt-${id}`).value;
-            await fetch('/admin-api/distribute-balance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey, channelId: id, amount: amt }) });
-            alert("Dağıtıldı!");
-        }
-
         async function deleteChannel(id) {
-            if (!confirm("Sileyim mi?")) return;
+            if (!confirm("Kanalı sildiğinizde tüm ayarlar kaybolur. Emin misiniz?")) return;
             await fetch('/admin-api/delete-channel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey, channelId: id }) });
             loadChannels();
         }
 
-        function chatAction(act) {
-            const first = document.querySelector('h3')?.closest('.card')?.querySelector('p')?.innerText.replace('ID: ', '');
-            if (!first) return;
-            fetch('/admin-api/chat-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey, action: act, channelId: parseInt(first) }) });
+        async function uploadSoundFile(id) {
+            const inp = document.getElementById(`snd-file-${id}`);
+            if (!inp.files[0]) return;
+            const fd = new FormData();
+            fd.append('sound', inp.files[0]);
+            fd.append('key', sessionKey);
+            fd.append('channelId', id);
+            try {
+                const res = await fetch('/admin-api/upload-sound', { method: 'POST', body: fd });
+                const d = await res.json();
+                if (d.url) {
+                    document.getElementById(`snd-url-${id}`).value = d.url;
+                    alert("Dosya yüklendi!");
+                }
+            } catch (e) { console.error(e); }
         }
+
+        async function addSound(id) {
+            const name = document.getElementById(`snd-name-${id}`).value.trim().toLowerCase();
+            const url = document.getElementById(`snd-url-${id}`).value.trim();
+            const cost = parseInt(document.getElementById(`snd-cost-${id}`).value) || 1000;
+            const volume = parseInt(document.getElementById(`snd-vol-${id}`).value) || 100;
+            if (!name || !url) return alert("Eksik bilgi!");
+
+            const chanRes = await fetch('/admin-api/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey }) });
+            const channels = await chanRes.json();
+            const current = channels[id]?.settings?.custom_sounds || {};
+            current[name] = { url, cost, volume };
+            await toggleCmd(id, 'custom_sounds', current);
+            loadChannels();
+        }
+
+        async function removeSound(id, name) {
+            if (!confirm("Bu sesi silmek istediğine emin misin?")) return;
+            const chanRes = await fetch('/admin-api/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey }) });
+            const channels = await chanRes.json();
+            const current = channels[id]?.settings?.custom_sounds || {};
+            delete current[name];
+            await toggleCmd(id, 'custom_sounds', current);
+            loadChannels();
+        }
+
+        async function resetUser(u) {
+            if (!confirm("Bakiyeyi 1000 yap?")) return;
+            await fetch('/admin-api/update-user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey, user: u, balance: 1000 }) });
+            loadUsers();
+        }
+
+        async function setRigShip() {
+            const user = document.getElementById('rigUser').value;
+            const target = document.getElementById('rigTarget').value;
+            const percent = document.getElementById('rigPercent').value;
+            await fetch('/admin-api/rig-ship', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey, user, target, percent }) });
+            alert("Rig Ayarlandı!");
+        }
+
+        async function setGamble(res) {
+            const user = document.getElementById('gambleUser').value;
+            if (!user) return alert("Kullanıcı gir!");
+            await fetch('/admin-api/rig-gamble', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey, user, result: res }) });
+            alert("Gamble riglendi!");
+        }
+
+        async function chatAction(act) {
+            const cid = prompt("Kanal ID Girin (veya boş bırakırsanız ilk kanalda dener):");
+            const finalId = cid || (document.querySelector('select#targetChannel option:nth-child(2)')?.value);
+            if (!finalId) return alert("Kanal bulunamadı.");
+            const res = await fetch('/admin-api/chat-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey, action: act, channelId: finalId }) });
+            const d = await res.json();
+            alert(d.success ? "İşlem Başarılı" : "Hata: " + d.error);
+        }
+
+        async function sendToChannel() {
+            const channelId = document.getElementById('targetChannel').value;
+            const message = document.getElementById('channelMsg').value;
+            if (!channelId || !message) return alert("Eksik bilgi!");
+            const res = await fetch('/admin-api/send-message', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey, channelId, message }) });
+            const d = await res.json();
+            if (d.success) { alert("Mesaj gönderildi!"); document.getElementById('channelMsg').value = ""; }
+        }
+
+        // Auto login if possible (not implemented here but sessionKey could be in localStorage)
     </script>
 </body>
 

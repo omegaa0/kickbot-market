@@ -47,6 +47,7 @@
             font-size: 1.8rem;
             background: linear-gradient(45deg, var(--primary), var(--secondary));
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
@@ -335,6 +336,20 @@
                         oninput="document.getElementById('v-soy').innerText=this.value"
                         onchange="updateSetting('wr_soygun', this.value)">
                 </div>
+                <!-- Yeni: TTS ve Ana Ses Seviyeleri -->
+                <h3 style="margin: 20px 0 15px; color: var(--secondary);">🔊 Genel Ses Ayarları</h3>
+                <div class="range-box">
+                    <label>TTS (Konuşma) Sesi: %<span id="v-tts">100</span></label>
+                    <input type="range" id="tts_volume" min="0" max="100"
+                        oninput="document.getElementById('v-tts').innerText=this.value"
+                        onchange="updateSetting('tts_volume', this.value)">
+                </div>
+                <div class="range-box">
+                    <label>Efekt (Ses) Sesi: %<span id="v-snd">80</span></label>
+                    <input type="range" id="sound_volume" min="0" max="100"
+                        oninput="document.getElementById('v-snd').innerText=this.value"
+                        onchange="updateSetting('sound_volume', this.value)">
+                </div>
             </div>
 
             <!-- SESLER -->
@@ -408,10 +423,18 @@
                 document.getElementById('daily_reward').value = s.daily_reward || 500;
                 document.getElementById('passive_reward').value = s.passive_reward || 100;
 
-                ['wr_slot', 'wr_yazitura', 'wr_kutu', 'wr_soygun'].forEach(key => {
-                    const val = s[key] || 40;
-                    document.getElementById(key).value = val;
-                    document.getElementById('v-' + key.split('_')[1]).innerText = val;
+                ['wr_slot', 'wr_yazitura', 'wr_kutu', 'wr_soygun', 'tts_volume', 'sound_volume'].forEach(key => {
+                    let val = s[key];
+                    if (val === undefined) {
+                        if (key === 'tts_volume') val = 100;
+                        else if (key === 'sound_volume') val = 80;
+                        else val = 40;
+                    }
+                    if (document.getElementById(key)) {
+                        document.getElementById(key).value = val;
+                        const labelId = 'v-' + key.split('_')[0];
+                        if (document.getElementById(labelId)) document.getElementById(labelId).innerText = val;
+                    }
                 });
 
                 renderToggles(s);
