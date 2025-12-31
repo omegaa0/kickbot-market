@@ -146,9 +146,20 @@ async function loadChannelMarket(channelId) {
     const channelData = snap.val() || {};
     const settings = channelData.settings || {};
     const sounds = settings.custom_sounds || {};
-    document.getElementById('chan-name').innerText = (channelData.username || "Kick Kanalı") + " (Doğrulandı)";
-    document.getElementById('chan-icon').innerText = (channelData.username || "K")[0].toUpperCase();
-    document.getElementById('market-status').innerText = `${channelData.username || 'Kanal'} market ürünleri yönetiliyor.`;
+
+    const chanName = channelData.username || "Kick Kanalı";
+    document.getElementById('chan-name').innerText = chanName;
+
+    // Broadcaster PFP Fetch
+    try {
+        const res = await fetch(`https://kick.com/api/v2/channels/${chanName}`);
+        const data = await res.json();
+        if (data.user && data.user.profile_pic) {
+            document.getElementById('chan-pfp').src = data.user.profile_pic;
+        }
+    } catch (e) { console.log("Broadcaster PFP error", e); }
+
+    document.getElementById('market-status').innerText = `${chanName} market ürünleri yönetiliyor.`;
     marketGrid.innerHTML = "";
 
     // 1. MUTE
