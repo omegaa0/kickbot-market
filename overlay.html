@@ -161,7 +161,7 @@
                             const utterance = new SpeechSynthesisUtterance(data.text);
                             utterance.lang = 'tr-TR';
                             utterance.volume = Number(ttsVol);
-                            utterance.rate = 0.85; // Daha yavaş ve anlaşılır (Normalden biraz yavaş)
+                            utterance.rate = 0.7; // Daha da yavaş (0.7)
                             utterance.pitch = 1.0;
                             window.speechSynthesis.speak(utterance);
                         });
@@ -180,15 +180,26 @@
                                 console.log("🔊 Ses Tetiklendi:", data.url);
                                 showNotification("SES EFEKTİ", (data.soundId || "SES").toUpperCase() + " çalınıyor...", "🔊", 3000);
 
-                                var audio = new Audio();
-                                audio.src = data.url;
-                                audio.volume = Number(soundVol);
-                                audio.preload = 'auto';
+                                // DOM Element yöntemi (Daha güvenilir)
+                                var audioEl = document.createElement('audio');
+                                audioEl.src = data.url;
+                                audioEl.volume = Number(soundVol);
+                                audioEl.preload = 'auto';
+                                audioEl.autoplay = true;
 
-                                audio.play().catch(function (e) {
+                                // Sayfaya ekle (OBS bazen bunu ister)
+                                document.body.appendChild(audioEl);
+
+                                audioEl.play().catch(function (e) {
                                     console.error("❌ Ses Çalma Hatası:", e);
-                                    // Bazı tarayıcılar etkileşim bekler, bu yüzden log atıyoruz.
+                                    // Eğer tarayıcı engelliyorsa kullanıcıya göster
+                                    showNotification("HATA", "Ses çalınamadı! (Oynatıcıya tıklayın)", "🔇", 5000);
                                 });
+
+                                // Çalma bitince sil
+                                audioEl.onended = function () {
+                                    audioEl.remove();
+                                };
                             }
                         });
                 });
