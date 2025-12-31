@@ -4,18 +4,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KickBot Premium Market</title>
+    <title>KickBot Market</title>
     <link rel="stylesheet" href="shop.css">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        .channel-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 8px 15px;
+            border-radius: 12px;
+            border: 1px solid var(--glass-border);
+            margin-top: 10px;
+        }
+
+        .channel-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: black;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .item-cost {
+            font-weight: 800;
+            color: var(--primary);
+        }
+    </style>
 </head>
 
 <body>
     <div class="glow-bg"></div>
 
+    <!-- AUTH SECTION -->
     <div id="auth-container" class="glass-panel">
         <div class="logo">KICK<span>BOT</span></div>
-        <h2>Market Erişimi</h2>
-        <p>Bakiyeni harcamak için hesabını doğrula.</p>
+        <h2>Market Girişi</h2>
+        <p>Bakiyeni kullanmak için Kick adını doğrula.</p>
 
         <div id="step-1">
             <input type="text" id="username-input" placeholder="Kick Kullanıcı Adın" spellcheck="false">
@@ -27,20 +58,26 @@
                 <span class="label">Doğrulama Kodu:</span>
                 <div id="auth-code" class="code-display">000000</div>
             </div>
-            <p class="instruction">Chat'e şunu yaz: <br> <code id="cmd-example">!doğrulama 000000</code></p>
+            <p class="instruction">Herhangi bir bot kanalına şunu yaz: <br> <code
+                    id="cmd-example">!doğrulama 000000</code></p>
             <div class="loader"></div>
             <p class="waiting-text">Onay bekleniyor...</p>
             <button id="back-btn" class="secondary-btn">Geri Git</button>
         </div>
     </div>
 
+    <!-- MAIN MARKET SECTION -->
     <div id="main-content" class="hidden">
         <header>
             <div class="user-profile">
                 <div class="avatar" id="user-avatar">?</div>
                 <div class="user-meta">
                     <span id="display-name">Misafir</span>
-                    <span id="user-balance" class="balance-pill">0 💰</span>
+                    <div id="user-balance" class="balance-pill">0 💰</div>
+                    <div id="channel-badge" class="channel-info hidden">
+                        <div class="channel-avatar" id="chan-icon">K</div>
+                        <span id="chan-name" style="font-size: 0.8rem; color: #aaa;">Yükleniyor...</span>
+                    </div>
                 </div>
             </div>
             <div class="logo-mini">KICK<span>BOT</span></div>
@@ -48,12 +85,18 @@
         </header>
 
         <section class="hero">
-            <h1>Hoş Geldin, <span id="hero-name">Savaşçı</span></h1>
-            <p>Kazandığın paraları efsanevi güçlere dönüştürme vakti.</p>
+            <h1>Hoş Geldin, <span id="hero-name">Kullanıcı</span></h1>
+            <p id="market-status">Bağlı olduğun kanalın market ürünleri listeleniyor.</p>
         </section>
 
-        <div class="market-grid">
-            <!-- Market öğeleri JS ile yüklenecek -->
+        <div id="no-channel-msg" class="glass-panel hidden"
+            style="position:static; transform:none; width:100%; margin-top:20px;">
+            <h3>⚠️ Kanal Bağlantısı Yok</h3>
+            <p>Market ürünlerini görmek için önce bir Kick kanalında aktif olmalısın (mesaj yazmalısın).</p>
+        </div>
+
+        <div class="market-grid" id="market-items">
+            <!-- Dinamik olarak dolacak -->
         </div>
     </div>
 

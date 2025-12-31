@@ -496,10 +496,30 @@
         <div id="users" class="section">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; gap:15px;">
                 <h2 style="margin:0;">👤 Kullanıcı Yönetimi</h2>
-                <div style="display:flex; gap:10px; flex:1; max-width:500px;">
-                    <input type="text" id="usersearch" placeholder="İsimle ara..." class="inp"
-                        style="margin:0; height:45px; text-align: left; padding: 0 15px;" oninput="filterUsers()">
-                    <button class="btn" style="width: 120px; height:45px;" onclick="loadUsers()">🔄 Yenile</button>
+                <div style="display:flex; flex-direction:column; gap:10px; flex:1;">
+                    <div style="display:flex; gap:10px;">
+                        <input type="text" id="usersearch" placeholder="İsimle ara..." class="inp"
+                            style="margin:0; height:45px; text-align: left; padding: 0 15px;" oninput="filterUsers()">
+                        <select id="userSort" class="inp" style="width:180px; height:45px; margin:0;"
+                            onchange="filterUsers()">
+                            <option value="balance_desc">💰 Bakiye (Azalan)</option>
+                            <option value="balance_asc">💰 Bakiye (Artan)</option>
+                            <option value="seen_desc">🕒 Son Aktif (Yeni)</option>
+                            <option value="seen_asc">🕒 Son Aktif (Eski)</option>
+                            <option value="name_asc">🔤 İsim (A-Z)</option>
+                        </select>
+                        <button class="btn" style="width: 120px; height:45px;" onclick="loadUsers()">🔄 Yenile</button>
+                    </div>
+                    <div style="display:flex; gap:15px; align-items:center;">
+                        <label
+                            style="font-size:0.8rem; display:flex; align-items:center; gap:5px; cursor:pointer; color:var(--muted);">
+                            <input type="checkbox" id="filterInfinite" onchange="filterUsers()"> Sadece Sınırsızlar (♾️)
+                        </label>
+                        <select id="filterJob" class="inp"
+                            style="width:150px; height:30px; margin:0; font-size:0.75rem;" onchange="filterUsers()">
+                            <option value="all">Tüm Meslekler</option>
+                        </select>
+                    </div>
                 </div>
             </div>
             <div class="table-container">
@@ -837,6 +857,14 @@
             const res = await fetch('/admin-api/all-users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey }) });
             rawUsers = await res.json();
             userLimit = 100;
+
+            // Job filtresini doldur
+            const jobSelect = document.getElementById('filterJob');
+            const currentVal = jobSelect.value;
+            jobSelect.innerHTML = '<option value="all">Tüm Meslekler</option>' +
+                JOBS.map(j => `<option value="${j}">${j}</option>`).join('');
+            jobSelect.value = currentVal;
+
             filterUsers();
         }
 
@@ -899,7 +927,34 @@
 
         function filterUsers() {
             const q = document.getElementById('usersearch').value.toLowerCase();
-            const filtered = Object.entries(rawUsers).filter(([u]) => u.toLowerCase().includes(q));
+            const sort = document.getElementById('userSort').value;
+            const onlyInf = document.getElementById('filterInfinite').checked;
+            const jobFilter = document.getElementById('filterJob').value;
+
+            let filtered = Object.entries(rawUsers);
+
+            // ARAMA
+            if (q) filtered = filtered.filter(([u]) => u.toLowerCase().includes(q));
+
+            // FİLTRE: SINIRSIZ
+            if (onlyInf) filtered = filtered.filter(([_, d]) => d.is_infinite);
+
+            // FİLTRE: MESLEK
+            if (jobFilter !== 'all') filtered = filtered.filter(([_, d]) => (d.job || "İşsiz") === jobFilter);
+
+            // SIRALAMA
+            filtered.sort((a, b) => {
+                const [uA, dA] = a;
+                const [uB, dB] = b;
+
+                if (sort === 'balance_desc') return (dB.balance || 0) - (dA.balance || 0);
+                if (sort === 'balance_asc') return (dA.balance || 0) - (dB.balance || 0);
+                if (sort === 'seen_desc') return (dB.last_seen || 0) - (dA.last_seen || 0);
+                if (sort === 'seen_asc') return (dA.last_seen || 0) - (dB.last_seen || 0);
+                if (sort === 'name_asc') return uA.localeCompare(uB);
+                return 0;
+            });
+
             displayUsers(filtered.slice(0, userLimit));
         }
 

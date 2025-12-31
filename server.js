@@ -1106,7 +1106,6 @@ app.post('/kick/webhook', async (req, res) => {
                     if (!isInf) await userRef.transaction(u => { if (u) u.balance -= muteCost; return u; });
                     await reply(`🔇 @${user}, @${target} kullanıcısını 10 dakika susturdu! (-${muteCost.toLocaleString()} 💰)`);
 
-                    // BAN Ä°STATÄ°STÄ°ÄÄ° (Target kullanÄ±cÄ±sÄ±nÄ±n ban sayÄ±sÄ±nÄ± artÄ±r)
                     const targetRef = db.ref(`users/${target}`);
                     await targetRef.transaction(u => {
                         if (!u) u = { balance: 0 };
@@ -1136,9 +1135,10 @@ app.post('/kick/webhook', async (req, res) => {
         const pending = pendingSnap.val();
 
         if (pending && String(pending.code) === String(code)) {
+            await db.ref('users/' + cleanUser).update({ auth_channel: broadcasterId });
             await db.ref('auth_success/' + cleanUser).set(true);
             await db.ref('pending_auth/' + cleanUser).remove();
-            await reply(`✅ @${user}, Kimliğin doğrulandı! Mağaza sayfasına geri dönebilirsin. 🛍️`);
+            await reply(`✅ @${user}, Kimliğin doğrulandı! Mağaza sayfasına geri dönebilirsin. Bu kanala özel market ürünlerini görebilirsin. 🛍️`);
         } else {
             console.log(`❌ Doğrulama başarısız. Beklenen: ${pending?.code}, Gelen: ${code}`);
             await reply(`❌ @${user}, Geçersiz veya süresi dolmuş kod! Lütfen mağazadan yeni bir kod al.`);
@@ -1579,6 +1579,25 @@ setInterval(async () => {
     }
     console.log(`✅ ${rewardedCount} aktif kullanıcıya kanal ayarlarına göre ödülleri dağıtıldı.`);
 }, 10 * 60 * 1000); // 10 Dakikada bir
+
+// ---------------------------------------------------------
+// 7. BACKGROUND EVENT LISTENERS (SHOP MUTE ETC)
+// ---------------------------------------------------------
+db.ref('channels').on('child_added', (snapshot) => {
+    const channelId = snapshot.key;
+    // Market Susturma (Mute) Dinleyicisi
+    db.ref(`channels/${channelId}/stream_events/mute`).on('child_added', async (snap) => {
+        const event = snap.val();
+        if (event && !event.executed) {
+            console.log(`🚫 MARKET MUTE: ${event.user} -> ${event.target} (${channelId})`);
+            const res = await timeoutUser(channelId, event.target, 600); // 10 Dakika
+            if (res.success) {
+                await sendChatMessage(`🔇 @${event.user}, Market'ten @${event.target} kullanıcısını 10 dakika susturdu!`, channelId);
+                await db.ref(`channels/${channelId}/stream_events/mute/${snap.key}`).update({ executed: true });
+            }
+        }
+    });
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 MASTER FINAL (MULTI-CHANNEL) AKTIF!`));
