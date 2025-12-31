@@ -20,20 +20,19 @@ if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname);
-        const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1E9) + ext;
-        cb(null, uniqueName);
-    }
+// Firebase Storage Bucket Ayarı (Otomatik Algılama)
+const bucketName = `${serviceAccount.project_id}.appspot.com`;
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    databaseURL: process.env.FIREBASE_DB_URL,
+    storageBucket: bucketName // Storage için gerekli
 });
 
+const bucket = admin.storage().bucket(); // Bucket erişimi
+
 const upload = multer({
-    storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 } // Maks 5MB
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 } // 5MB Limit
 });
 
 // 1. FIREBASE INITIALIZATION
@@ -862,6 +861,14 @@ app.post('/kick/webhook', async (req, res) => {
         const snap = await userRef.once('value');
         if ((snap.val()?.balance || 0) < soundCost) return await reply(`@${user}, "${soundTrigger}" sesi için ${soundCost.toLocaleString()} 💰 lazım!`);
 
+        // DOSYA KONTROLÜ (Render gibi geçici disklerde dosya silinmiş olabilir)
+        if (sound.url.startsWith('/uploads/')) {
+            const filePath = path.join(__dirname, sound.url);
+            if (!fs.existsSync(filePath)) {
+                return await reply(`⚠️ @${user}, "${soundTrigger}" ses dosyası sunucu yeniden başladığı için silinmiş! (Render Free Plan). Lütfen sesi tekrar yükle veya dış bağlantı (Discord vb.) kullan.`);
+            }
+        }
+
         await userRef.transaction(u => { if (u) u.balance -= soundCost; return u; });
         await db.ref(`channels/${broadcasterId}/stream_events/sound`).push({
             soundId: soundTrigger,
@@ -1188,19 +1195,25 @@ app.post('/admin-api/reset-overlay-key', authAdmin, async (req, res) => {
     res.json({ success: true, key: newKey });
 });
 
-app.post('/admin-api/upload-sound', upload.single('sound'), (req, res) => {
-    // Key kontrolünü multer'dan sonra yapıyoruz çünkü multipart/form-data
-    if (req.body.key !== ADMIN_KEY) return res.status(403).json({ success: false, error: 'Yetkisiz Erişim' });
-    if (!req.file) return res.status(400).json({ success: false, error: 'Dosya seçilmedi!' });
 
-    const baseUrl = process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get('host')}`;
-    const fileUrl = `${baseUrl}/uploads/sounds/${req.file.filename}`;
-    res.json({ success: true, url: fileUrl });
+// --- ADMIN API ---
+// Ses Yükleme (Manuel URL tercih ediliyor)
+app.post('/admin-api/upload-sound', upload.single('sound'), async (req, res) => {
+    // Admin Key Kontrolü
+    const key = req.body.key || req.query.key;
+    if (key !== ADMIN_KEY) return res.status(403).json({ error: 'Yetkisiz erişim' });
+
+    // Render Free ve Firebase Spark plan kısıtlamaları nedeniyle dosya yüklemeyi kapattık.
+    // Kullanıcıya Discord yöntemi öneriyoruz.
+    return res.status(400).json({ error: 'Render Free planda dosya yükleme desteklenmiyor. Lütfen ses dosyasını Discord\'a yükleyip Bağlantıyı Kopyala diyerek URL kısmına yapıştırın.' });
 });
 
 app.get('/overlay', (req, res) => {
     res.sendFile(path.join(__dirname, 'overlay.html'));
 });
+
+// Health Check (UptimeRobot için)
+app.get('/health', (req, res) => res.status(200).send('OK (Bot Uyanık)'));
 
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'shop.html')); });
 
