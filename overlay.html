@@ -146,32 +146,43 @@
 
                     db.ref(`channels/${targetBroadcasterId}/settings`).on('value', (sSnap) => {
                         const settings = sSnap.val() || {};
-                        ttsVol = (settings.tts_volume !== undefined ? settings.tts_volume : 100) / 100;
-                        soundVol = (settings.sound_volume !== undefined ? settings.sound_volume : 80) / 100;
-                        console.log("🔊 Ses Seviyeleri Güncellendi:", { ttsVol, soundVol });
+                        const newTts = Number(settings.tts_volume ?? 100) / 100;
+                        const newSnd = Number(settings.sound_volume ?? 80) / 100;
+
+                        if (newTts !== ttsVol || newSnd !== soundVol) {
+                            ttsVol = newTts;
+                            soundVol = newSnd;
+                            console.log("🔊 Ses Seviyeleri Güncellendi:", { ttsVol, soundVol });
+                            // Canlı ses seviyesi değişimi için bir görsel bildirim (isteğe bağlı)
+                            // showNotification("AYAR", "Ses seviyeleri güncellendi.", "⚙️", 1000);
+                        }
                     });
 
                     // TTS Dinle
-                    db.ref('stream_events/tts').orderByChild('timestamp').startAt(startTime).on('child_added', (snap) => {
+                    db.ref(`channels/${targetBroadcasterId}/stream_events/tts`).orderByChild('timestamp').startAt(startTime).on('child_added', (snap) => {
                         const data = snap.val();
-                        if (!data || data.played || String(data.broadcasterId) !== String(targetBroadcasterId)) return;
+                        if (!data || data.played) return;
 
-                        db.ref('stream_events/tts/' + snap.key).update({ played: true });
+                        db.ref(`channels/${targetBroadcasterId}/stream_events/tts/${snap.key}`).update({ played: true });
                         showNotification("TTS MESAJI", data.text, "🎙️");
+
+                        // Önceki konuşmaları iptal et (opsiyonel ama daha temiz)
+                        window.speechSynthesis.cancel();
+
                         const utterance = new SpeechSynthesisUtterance(data.text);
                         utterance.lang = 'tr-TR';
-                        utterance.volume = ttsVol; // Güncel seviye
+                        utterance.volume = Number(ttsVol); // Kesin rakam
                         utterance.rate = 1.0;
                         utterance.pitch = 1.0;
                         window.speechSynthesis.speak(utterance);
                     });
 
                     // Ses Dinle
-                    db.ref('stream_events/sound').orderByChild('timestamp').startAt(startTime).on('child_added', (snap) => {
+                    db.ref(`channels/${targetBroadcasterId}/stream_events/sound`).orderByChild('timestamp').startAt(startTime).on('child_added', (snap) => {
                         const data = snap.val();
-                        if (!data || data.played || String(data.broadcasterId) !== String(targetBroadcasterId)) return;
+                        if (!data || data.played) return;
 
-                        db.ref('stream_events/sound/' + snap.key).update({ played: true });
+                        db.ref(`channels/${targetBroadcasterId}/stream_events/sound/${snap.key}`).update({ played: true });
                         const url = data.url;
                         if (url) {
                             showNotification("SES EFEKTİ", data.soundId.toUpperCase() + " çalınıyor...", "🔊", 3000);
