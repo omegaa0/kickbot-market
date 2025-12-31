@@ -894,7 +894,11 @@
             fd.append('key', sessionKey);
             fd.append('channelId', id);
             try {
-                const res = await fetch('/admin-api/upload-sound', { method: 'POST', body: fd });
+                const res = await fetch('/admin-api/upload-sound', {
+                    method: 'POST',
+                    body: fd,
+                    headers: { 'c-id': id } // Body'den önce header'ı kontrol etmesi için
+                });
                 const d = await res.json();
                 if (d.url) {
                     document.getElementById(`snd-url-${id}`).value = d.url;

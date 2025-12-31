@@ -28,7 +28,8 @@ app.use('/uploads/sounds', express.static(uploadDir)); // Sesler için doğru ye
 // MULTER SETUP
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const channelId = req.body.channelId || 'global';
+        // Öncelik: Header > Query > Body
+        const channelId = req.headers['c-id'] || req.query.channelId || req.body.channelId || 'global';
         const channelDir = path.join(uploadDir, channelId);
         if (!fs.existsSync(channelDir)) {
             fs.mkdirSync(channelDir, { recursive: true });
@@ -821,7 +822,7 @@ app.post('/kick/webhook', async (req, res) => {
         await reply(txt);
     }
 
-    else if (settings.hava !== false && lowMsg.startsWith('!hava')) {
+    else if (settings.hava !== false && (lowMsg === '!hava' || lowMsg.startsWith('!hava '))) {
         const city = args.join(' ');
         if (city.toLowerCase() === "kürdistan") {
             return await reply("T.C. sınırları içerisinde böyle bir yer bulunamadı! 🇹🇷");
@@ -932,8 +933,14 @@ app.post('/kick/webhook', async (req, res) => {
         if (sound.url.includes('/uploads/sounds/')) {
             const parts = sound.url.split('/uploads/sounds/');
             const relativePath = parts[1];
-            const filePath = path.join(uploadDir, relativePath);
+            // Normalize path for different OS (Render is Linux, local might be Win)
+            const filePath = path.join(uploadDir, relativePath).replace(/\\/g, '/');
+
+            console.log(`[SoundCheck] URL: ${sound.url}`);
+            console.log(`[SoundCheck] FilePath: ${filePath}`);
+
             if (!fs.existsSync(filePath)) {
+                console.error(`❌ Dosya Yok: ${filePath}`);
                 return await reply(`⚠️ @${user}, "${soundTrigger}" ses dosyası sunucuda bulunamadı!`);
             }
         }
@@ -1345,7 +1352,7 @@ app.post('/admin-api/upload-sound', upload.single('sound'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Dosya yok' });
 
     // Render'daki URL
-    const channelId = req.body.channelId || 'global';
+    const channelId = req.headers['c-id'] || req.query.channelId || req.body.channelId || 'global';
     const baseUrl = process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get('host')}`;
     const fileUrl = `${baseUrl}/uploads/sounds/${channelId}/${req.file.filename}`;
 
