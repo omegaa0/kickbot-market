@@ -950,6 +950,7 @@ app.post('/kick/webhook', async (req, res) => {
             soundId: soundTrigger,
             url: sound.url,
             volume: sound.volume || 100,
+            duration: sound.duration || 0,
             played: false,
             timestamp: Date.now(),
             broadcasterId: broadcasterId
@@ -1327,9 +1328,9 @@ app.post('/dashboard-api/update', authDashboard, async (req, res) => {
 });
 
 app.post('/dashboard-api/add-sound', authDashboard, async (req, res) => {
-    const { channelId, name, url, cost, volume } = req.body;
+    const { channelId, name, url, cost, volume, duration } = req.body;
     const cleanName = name.toLowerCase().trim();
-    await db.ref(`channels/${channelId}/settings/custom_sounds/${cleanName}`).set({ url, cost, volume });
+    await db.ref(`channels/${channelId}/settings/custom_sounds/${cleanName}`).set({ url, cost, volume, duration: parseInt(duration) || 0 });
     res.json({ success: true });
 });
 

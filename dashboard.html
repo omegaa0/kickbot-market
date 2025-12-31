@@ -367,6 +367,8 @@
                                 style="margin:0;">
                             <input type="number" id="snd-cost" placeholder="Ücret" class="inp"
                                 style="margin:0; width: 100px;">
+                            <input type="number" id="snd-duration" placeholder="Süre (sn)" class="inp"
+                                style="margin:0; width: 100px;" title="0 = Sınırsız">
                         </div>
                         <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
                             <input type="text" id="snd-url" placeholder="Ses Linki veya Dosya" class="inp"
@@ -482,15 +484,32 @@
                 container.innerHTML = "";
                 Object.entries(sounds).forEach(([name, data]) => {
                     container.innerHTML += `
-                    <div class="sound-item">
-                        <div>
+                    <div style="padding:15px; background:rgba(255,255,255,0.03); margin-bottom:10px; border-radius:12px; border:1px solid #222;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
                             <b style="color:var(--primary)">!ses ${name}</b>
-                            <div style="font-size:0.7rem; color:var(--muted)">Ücret: ${data.cost} | Ses: %${data.volume || 100}</div>
+                            <button onclick="removeSound('${name}')" style="background:none; border:none; color:var(--danger); cursor:pointer;">✖</button>
                         </div>
-                        <button onclick="removeSound('${name}')">✖</button>
-                    </div>
-                `;
+                        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px;">
+                            <div><label style="font-size:0.7rem; color:var(--muted)">Ücret</label><input type="number" value="${data.cost}" class="inp" style="height:30px; font-size:0.8rem;" onchange="editSound('${name}','cost',this.value)"></div>
+                            <div><label style="font-size:0.7rem; color:var(--muted)">Ses %</label><input type="number" value="${data.volume || 100}" class="inp" style="height:30px; font-size:0.8rem;" onchange="editSound('${name}','volume',this.value)"></div>
+                            <div><label style="font-size:0.7rem; color:var(--muted)">Süre (sn)</label><input type="number" value="${data.duration || 0}" class="inp" style="height:30px; font-size:0.8rem;" onchange="editSound('${name}','duration',this.value)"></div>
+                        </div>
+                    </div>`;
                 });
+            }
+
+            async function editSound(name, key, val) {
+                const res = await fetch('/dashboard-api/data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ channelId, key: loginKey })
+                });
+                const data = await res.json();
+                const sounds = data.settings?.custom_sounds || {};
+                if (sounds[name]) {
+                    sounds[name][key] = parseInt(val);
+                    await updateSetting('custom_sounds', sounds);
+                }
             }
 
             async function updateSetting(cmd, val) {
@@ -525,17 +544,24 @@
 
             async function addSound() {
                 const name = document.getElementById('snd-name').value.trim().toLowerCase();
-                const url = document.getElementById('snd-url').value.trim();
                 const cost = parseInt(document.getElementById('snd-cost').value) || 1000;
+                const url = document.getElementById('snd-url').value.trim();
                 const volume = parseInt(document.getElementById('snd-vol').value) || 100;
-                if (!name || !url) return alert("Hata!");
+                const duration = parseInt(document.getElementById('snd-duration').value) || 0;
 
-                await fetch('/dashboard-api/add-sound', {
+                if (!name || !url) return alert("Eksik bilgi!");
+
+                const res = await fetch('/dashboard-api/add-sound', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ channelId, key: loginKey, name, url, cost, volume })
+                    body: JSON.stringify({ channelId, key: loginKey, name, cost, url, volume, duration })
                 });
-                location.reload();
+                if (res.ok) {
+                    alert("Ses eklendi!");
+                    init();
+                } else {
+                    alert("Hata oluştu.");
+                }
             }
 
             async function removeSound(name) {
@@ -545,7 +571,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ channelId, key: loginKey, name })
                 });
-                location.reload();
+                init();
             }
 
             function copyOverlay() {

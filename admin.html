@@ -726,6 +726,7 @@
                                 <div style="display:flex; gap:5px; margin-bottom:5px;">
                                     <input type="text" id="snd-name-${id}" placeholder="Komut" class="inp" style="height:28px; font-size:0.75rem; flex:2; margin:0;">
                                     <input type="number" id="snd-cost-${id}" placeholder="💰" class="inp" style="height:28px; width:70px; font-size:0.75rem; margin:0;">
+                                    <input type="number" id="snd-dur-${id}" placeholder="⏱️ Sn" class="inp" style="height:28px; width:60px; font-size:0.75rem; margin:0;" title="Saniye (0=Sınırsız)">
                                 </div>
                                 <div style="display:flex; gap:5px; align-items:center;">
                                     <input type="text" id="snd-url-${id}" placeholder="Dosya URL" class="inp" style="height:28px; font-size:0.7rem; flex:1; margin:0; text-align:left; padding-left:10px;">
@@ -758,14 +759,28 @@
             container.innerHTML = Object.keys(sounds).length ? "" : "<p style='color:#444'>Henüz ses yok.</p>";
             Object.entries(sounds).forEach(([name, data]) => {
                 container.innerHTML += `
-                    <div style="display:flex; justify-content:space-between; align-items:center; padding:5px 8px; background:#121212; margin-bottom:3px; border-radius:6px; border-left: 2px solid var(--primary);">
-                        <span>!ses <b>${name}</b></span>
-                        <div style="display:flex; gap:10px; align-items:center;">
-                            <span style="font-size:0.6rem; color:#666">${data.cost}💰</span>
+                    <div style="padding:8px; background:#121212; margin-bottom:5px; border-radius:8px; border: 1px solid #222;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                            <span>!ses <b>${name}</b></span>
                             <button onclick="removeSound('${channelId}','${name}')" style="background:none; border:none; color:var(--danger); cursor:pointer;">✖</button>
+                        </div>
+                        <div style="display:flex; gap:5px;">
+                            <div style="flex:1"><label style="font-size:0.6rem; color:#666">Ücret</label><input type="number" value="${data.cost}" class="inp" style="height:25px; font-size:0.7rem;" onchange="editSound('${channelId}','${name}','cost',this.value)"></div>
+                            <div style="flex:1"><label style="font-size:0.6rem; color:#666">Ses %</label><input type="number" value="${data.volume || 100}" class="inp" style="height:25px; font-size:0.7rem;" onchange="editSound('${channelId}','${name}','volume',this.value)"></div>
+                            <div style="flex:1"><label style="font-size:0.6rem; color:#666">Süre</label><input type="number" value="${data.duration || 0}" class="inp" style="height:25px; font-size:0.7rem;" onchange="editSound('${channelId}','${name}','duration',this.value)"></div>
                         </div>
                     </div>`;
             });
+        }
+
+        async function editSound(channelId, name, key, val) {
+            const chanRes = await fetch('/admin-api/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey }) });
+            const channels = await chanRes.json();
+            const current = channels[channelId]?.settings?.custom_sounds || {};
+            if (current[name]) {
+                current[name][key] = parseInt(val);
+                await toggleCmd(channelId, 'custom_sounds', current);
+            }
         }
 
         async function loadUsers() {
@@ -933,12 +948,13 @@
             const url = document.getElementById(`snd-url-${id}`).value.trim();
             const cost = parseInt(document.getElementById(`snd-cost-${id}`).value) || 1000;
             const volume = parseInt(document.getElementById(`snd-vol-${id}`).value) || 100;
+            const duration = parseInt(document.getElementById(`snd-dur-${id}`).value) || 0;
             if (!name || !url) return alert("Eksik bilgi!");
 
             const chanRes = await fetch('/admin-api/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey }) });
             const channels = await chanRes.json();
             const current = channels[id]?.settings?.custom_sounds || {};
-            current[name] = { url, cost, volume };
+            current[name] = { url, cost, volume, duration };
             await toggleCmd(id, 'custom_sounds', current);
             loadChannels();
         }
