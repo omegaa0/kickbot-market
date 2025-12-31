@@ -689,6 +689,7 @@
                                 <div style="display:flex; gap:5px;">
                                     <input type="text" id="snd-name-${id}" placeholder="Komut (örn: gol)" class="inp" style="margin:0; height:30px; font-size:0.7rem; flex:1;">
                                     <input type="number" id="snd-cost-${id}" placeholder="Ücret" class="inp" style="margin:0; height:30px; width:70px; font-size:0.7rem;">
+                                    <input type="number" id="snd-vol-${id}" placeholder="Ses %" class="inp" min="1" max="200" value="100" style="margin:0; height:30px; width:60px; font-size:0.7rem;">
                                 </div>
                                 <div style="display:flex; gap:5px;">
                                     <input type="text" id="snd-url-${id}" placeholder="MP3 URL veya Dosya Yükle" class="inp" style="margin:0; height:30px; font-size:0.7rem; flex:1;">
@@ -717,7 +718,7 @@
             Object.entries(sounds).forEach(([name, data]) => {
                 container.innerHTML += `
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; padding-bottom:5px; border-bottom:1px solid #222;">
-                        <span>!ses ${name} (${data.cost} 💰)</span>
+                        <span>!ses ${name} (${data.cost} 💰) [Vol: %${data.volume || 100}]</span>
                         <button onclick="removeSound('${channelId}', '${name}')" style="background:none; border:none; color:var(--danger); cursor:pointer;">✖</button>
                     </div>
                 `;
@@ -729,6 +730,7 @@
             const name = document.getElementById(`snd-name-${channelId}`).value.toLowerCase().trim();
             const url = document.getElementById(`snd-url-${channelId}`).value.trim();
             const cost = parseInt(document.getElementById(`snd-cost-${channelId}`).value) || 1000;
+            const volume = parseInt(document.getElementById(`snd-vol-${channelId}`).value) || 100;
 
             if (!name || !url) return alert("Ad ve URL boş olamaz!");
 
@@ -739,7 +741,7 @@
             const channels = await res.json();
             const currentSounds = channels[channelId]?.settings?.custom_sounds || {};
 
-            currentSounds[name] = { url, cost };
+            currentSounds[name] = { url, cost, volume };
 
             await toggleCmd(channelId, 'custom_sounds', currentSounds);
             loadChannels();

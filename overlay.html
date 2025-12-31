@@ -183,7 +183,14 @@
                                 // DOM Element yöntemi (Daha güvenilir)
                                 var audioEl = document.createElement('audio');
                                 audioEl.src = data.url;
-                                audioEl.volume = Number(soundVol);
+                                var activeVol = Number(soundVol);
+                                if (data.volume) {
+                                    activeVol = activeVol * (Number(data.volume) / 100);
+                                }
+                                if (activeVol > 1) activeVol = 1;
+                                if (activeVol < 0) activeVol = 0;
+
+                                audioEl.volume = activeVol;
                                 audioEl.preload = 'auto';
                                 audioEl.autoplay = true;
 

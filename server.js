@@ -255,9 +255,11 @@ async function timeoutUser(broadcasterId, targetUsername, duration) {
         }
 
         // --- SON ÇARE: CHAT KOMUTU ---
-        console.log(`⚠️ API başarısız. Chat komutu deneniyor: /timeout @${targetUsername} ${duration}`);
+        // API başarısız olursa chat komutu saniye cinsinden çalışır, bu yüzden süreyi 60 ile çarpıyoruz.
+        const seconds = parseInt(duration) * 60;
+        console.log(`⚠️ API başarısız. Chat komutu deneniyor: /timeout @${targetUsername} ${seconds}`);
         try {
-            await sendChatMessage(`/timeout @${targetUsername} ${duration}`, broadcasterId);
+            await sendChatMessage(`/timeout @${targetUsername} ${seconds}`, broadcasterId);
             return { success: true, note: "Chat fallback" };
         } catch (chatErr) {
             console.log("❌ Chat fallback de başarısız.");
@@ -711,7 +713,17 @@ app.post('/kick/webhook', async (req, res) => {
             "Bugün aldığın kararlar geleceğini şekillendirecek, sakin kal. 🧘",
             "Bir projende büyük başarı yakalamak üzeresin, pes etme. 🏆",
             "Sosyal çevrende parlayacağın bir gün, spot ışıkları üzerinde. ✨",
-            "Eskiden gelen bir borç veya alacak bugün kapanabilir. 💳"
+            "Eskiden gelen bir borç veya alacak bugün kapanabilir. 💳",
+            "Uzaklardan beklediğin o telefon her an gelebilir, hazır ol! 📞",
+            "Gözlerindeki ışıltı bugün birilerinin gününü aydınlatacak. ✨",
+            "Biraz iç sesine kulak ver, cevaplar aslında sende gizli. 🧘‍♂️",
+            "Bugün cüzdanına dikkat et, bereketli bir gün seni bekliyor. 💸",
+            "Aşk hayatında sürpriz bir gelişme kapıda, heyecana hazır ol! ❤️",
+            "Dost sandığın birinden küçük bir hayal kırıklığı yaşayabilirsin, dikkat! ⚠️",
+            "Bugün şansın %99, bir piyango bileti denemeye ne dersin? 🎫",
+            "Eski bir arkadaşın seni anıyor, bir mesaj atmanın vakti geldi. 📩",
+            "Hayatın sana fısıldadığı küçük mutlulukları görmezden gelme. 🌸",
+            "Kendi değerini bildiğin sürece kimse seni yolundan alıkoyamaz. 🛡️"
         ];
         await reply(`🔮 @${user}, Falın: ${list[Math.floor(Math.random() * list.length)]}`);
     }
@@ -796,7 +808,16 @@ app.post('/kick/webhook', async (req, res) => {
             "Her şey vaktini bekler, ne gül vaktinden önce açar, ne güneş vaktinden önce doğar.",
             "Gelecek, hayallerinin güzelliğine inananlarındır.",
             "Dün geçti, yarın gelmedi; bugün ise bir armağandır.",
-            "Hayat bir kitaptır, gezmeyenler sadece bir sayfasını okur."
+            "Hayat bir kitaptır, gezmeyenler sadece bir sayfasını okur.",
+            "Büyük işler başarmak için sadece harekete geçmek yetmez, önce hayal etmek gerekir.",
+            "Güneşi örnek al; batmaktan korkma, doğmaktan asla vazgeçme.",
+            "Yaşamak, sadece nefes almak değil, her anın tadını çıkarmaktır.",
+            "Dostluk, iki bedende yaşayan tek bir ruh gibidir. - Aristoteles",
+            "Affetmek, ruhun zincirlerini kırmaktır.",
+            "Engeller, gözlerini hedeften ayırdığında karşına çıkan korkunç şeylerdir.",
+            "Bir insanın gerçek zenginliği, bu dünyada yaptığı iyiliklerdir.",
+            "Karanlıktan şikayet edeceğine bir mum da sen yak.",
+            "En büyük zafer, hiç düşmemek değil, her düştüğünde ayağa kalkmaktır. - Konfüçyüs"
         ];
         await reply(`✍️ @${user}: ${list[Math.floor(Math.random() * list.length)]}`);
     }
@@ -845,6 +866,7 @@ app.post('/kick/webhook', async (req, res) => {
         await db.ref(`channels/${broadcasterId}/stream_events/sound`).push({
             soundId: soundTrigger,
             url: sound.url,
+            volume: sound.volume || 100, // Özel ses seviyesi
             played: false,
             timestamp: Date.now(),
             broadcasterId: broadcasterId
@@ -862,8 +884,8 @@ app.post('/kick/webhook', async (req, res) => {
     else if (lowMsg.startsWith('!kredi')) {
         const sub = args[0]?.toLowerCase();
         const options = {
-            '1k': { reward: 1000, time: 60, label: '1 Dakika' },
-            '2k': { reward: 2000, time: 120, label: '2 Dakika' }
+            '1k': { reward: 1000, time: 1, label: '1 Dakika' },
+            '2k': { reward: 2000, time: 2, label: '2 Dakika' }
         };
 
         if (!sub || !options[sub]) {
