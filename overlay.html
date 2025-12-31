@@ -161,7 +161,7 @@
                             const utterance = new SpeechSynthesisUtterance(data.text);
                             utterance.lang = 'tr-TR';
                             utterance.volume = Number(ttsVol);
-                            utterance.rate = 1.0;
+                            utterance.rate = 0.85; // Daha yavaş ve anlaşılır (Normalden biraz yavaş)
                             utterance.pitch = 1.0;
                             window.speechSynthesis.speak(utterance);
                         });
@@ -175,11 +175,20 @@
                             if (!data || data.played) return;
 
                             db.ref('channels/' + targetBroadcasterId + '/stream_events/sound/' + snap.key).update({ played: true });
+
                             if (data.url) {
+                                console.log("🔊 Ses Tetiklendi:", data.url);
                                 showNotification("SES EFEKTİ", (data.soundId || "SES").toUpperCase() + " çalınıyor...", "🔊", 3000);
-                                const audio = new Audio(data.url);
+
+                                var audio = new Audio();
+                                audio.src = data.url;
                                 audio.volume = Number(soundVol);
-                                audio.play().catch(function (e) { console.error("Ses hatası:", e); });
+                                audio.preload = 'auto';
+
+                                audio.play().catch(function (e) {
+                                    console.error("❌ Ses Çalma Hatası:", e);
+                                    // Bazı tarayıcılar etkileşim bekler, bu yüzden log atıyoruz.
+                                });
                             }
                         });
                 });
