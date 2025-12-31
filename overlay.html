@@ -84,9 +84,10 @@
     </div>
 
     <script>
-        let startTime = Date.now();
+        let startTime = Date.now() - 60000; // 60 saniye öncesinden başla ki senkron hatası olmasın
 
-        function showNotification(title, text, icon, duration = 5000) {
+        function showNotification(title, text, icon, duration) {
+            if (!duration) duration = 5000;
             const box = document.getElementById('notification-box');
             document.getElementById('alert-title').innerText = title;
             document.getElementById('alert-text').innerText = text;
@@ -95,24 +96,19 @@
             box.style.display = 'block';
             box.style.animation = 'fadeInRight 0.5s ease-out';
 
-            setTimeout(() => {
+            setTimeout(function () {
                 box.style.animation = 'fadeOut 0.5s ease-in forwards';
-                setTimeout(() => { box.style.display = 'none'; }, 500);
+                setTimeout(function () { box.style.display = 'none'; }, 500);
             }, duration);
         }
 
-        // Sunucudan ayarları alacağız veya burayı manuel dolduracağız
-        // Güvenlik için Firebase config'i server.js'den buraya enjekte edebilirsin
-        // Şimdilik standart bir fetch ile sunucudan config'i alalım
-
         fetch('/api/overlay-config')
-            .then(res => res.json())
-            .then(config => {
+            .then(function (res) { return res.json(); })
+            .then(function (config) {
                 firebase.initializeApp(config);
                 const db = firebase.database();
                 console.log("✅ Firebase Bağlandı");
 
-                // URL'den key'i al
                 const params = new URLSearchParams(window.location.search);
                 const overlayKey = params.get('key');
 
@@ -121,76 +117,71 @@
                     return;
                 }
 
-                // Kanallardan bu key'e sahip olanı bul
-                db.ref('channels').once('value').then(snap => {
+                db.ref('channels').once('value').then(function (snap) {
                     const channels = snap.val() || {};
                     let targetBroadcasterId = null;
 
-                    for (const [id, data] of Object.entries(channels)) {
-                        if (data.overlay_key === overlayKey) {
+                    for (const id in channels) {
+                        if (channels[id].overlay_key === overlayKey) {
                             targetBroadcasterId = id;
                             break;
                         }
                     }
 
                     if (!targetBroadcasterId) {
-                        showNotification("HATA", "Geçersiz veya eski anahtar!", "❌", 999999);
+                        showNotification("HATA", "Geçersiz anahtar!", "❌", 999999);
                         return;
                     }
 
                     console.log("🎯 Hedef Kanal:", targetBroadcasterId);
 
-                    // Ses seviyelerini dinamik takip et
                     let ttsVol = 1.0;
                     let soundVol = 0.8;
 
-                    db.ref(`channels/${targetBroadcasterId}/settings`).on('value', (sSnap) => {
+                    db.ref('channels/' + targetBroadcasterId + '/settings').on('value', function (sSnap) {
                         const settings = sSnap.val() || {};
-                        const newTts = Number(settings.tts_volume ?? 100) / 100;
-                        const newSnd = Number(settings.sound_volume ?? 80) / 100;
-
-                        if (newTts !== ttsVol || newSnd !== soundVol) {
-                            ttsVol = newTts;
-                            soundVol = newSnd;
-                            console.log("🔊 Ses Seviyeleri Güncellendi:", { ttsVol, soundVol });
-                            // Canlı ses seviyesi değişimi için bir görsel bildirim (isteğe bağlı)
-                            // showNotification("AYAR", "Ses seviyeleri güncellendi.", "⚙️", 1000);
-                        }
+                        // OBS Uyumluluğu için basit mantık
+                        ttsVol = (settings.tts_volume !== undefined ? settings.tts_volume : 100) / 100;
+                        soundVol = (settings.sound_volume !== undefined ? settings.sound_volume : 80) / 100;
+                        console.log("🔊 Seviyeler:", ttsVol, soundVol);
                     });
 
                     // TTS Dinle
-                    db.ref(`channels/${targetBroadcasterId}/stream_events/tts`).orderByChild('timestamp').startAt(startTime).on('child_added', (snap) => {
-                        const data = snap.val();
-                        if (!data || data.played) return;
+                    db.ref('channels/' + targetBroadcasterId + '/stream_events/tts')
+                        .orderByChild('timestamp')
+                        .startAt(startTime)
+                        .on('child_added', function (snap) {
+                            const data = snap.val();
+                            if (!data || data.played) return;
 
-                        db.ref(`channels/${targetBroadcasterId}/stream_events/tts/${snap.key}`).update({ played: true });
-                        showNotification("TTS MESAJI", data.text, "🎙️");
+                            db.ref('channels/' + targetBroadcasterId + '/stream_events/tts/' + snap.key).update({ played: true });
+                            showNotification("TTS MESAJI", data.text, "🎙️");
 
-                        // Önceki konuşmaları iptal et (opsiyonel ama daha temiz)
-                        window.speechSynthesis.cancel();
-
-                        const utterance = new SpeechSynthesisUtterance(data.text);
-                        utterance.lang = 'tr-TR';
-                        utterance.volume = Number(ttsVol); // Kesin rakam
-                        utterance.rate = 1.0;
-                        utterance.pitch = 1.0;
-                        window.speechSynthesis.speak(utterance);
-                    });
+                            window.speechSynthesis.cancel();
+                            const utterance = new SpeechSynthesisUtterance(data.text);
+                            utterance.lang = 'tr-TR';
+                            utterance.volume = Number(ttsVol);
+                            utterance.rate = 1.0;
+                            utterance.pitch = 1.0;
+                            window.speechSynthesis.speak(utterance);
+                        });
 
                     // Ses Dinle
-                    db.ref(`channels/${targetBroadcasterId}/stream_events/sound`).orderByChild('timestamp').startAt(startTime).on('child_added', (snap) => {
-                        const data = snap.val();
-                        if (!data || data.played) return;
+                    db.ref('channels/' + targetBroadcasterId + '/stream_events/sound')
+                        .orderByChild('timestamp')
+                        .startAt(startTime)
+                        .on('child_added', function (snap) {
+                            const data = snap.val();
+                            if (!data || data.played) return;
 
-                        db.ref(`channels/${targetBroadcasterId}/stream_events/sound/${snap.key}`).update({ played: true });
-                        const url = data.url;
-                        if (url) {
-                            showNotification("SES EFEKTİ", data.soundId.toUpperCase() + " çalınıyor...", "🔊", 3000);
-                            const audio = new Audio(url);
-                            audio.volume = soundVol; // Güncel seviye
-                            audio.play().catch(e => console.error("Ses çalma hatası:", e));
-                        }
-                    });
+                            db.ref('channels/' + targetBroadcasterId + '/stream_events/sound/' + snap.key).update({ played: true });
+                            if (data.url) {
+                                showNotification("SES EFEKTİ", (data.soundId || "SES").toUpperCase() + " çalınıyor...", "🔊", 3000);
+                                const audio = new Audio(data.url);
+                                audio.volume = Number(soundVol);
+                                audio.play().catch(function (e) { console.error("Ses hatası:", e); });
+                            }
+                        });
                 });
             });
     </script>

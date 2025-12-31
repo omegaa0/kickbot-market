@@ -817,7 +817,7 @@ app.post('/kick/webhook', async (req, res) => {
         if ((snap.val()?.balance || 0) < ttsCost) return await reply(`@${user}, TTS için ${ttsCost.toLocaleString()} 💰 lazım!`);
 
         await userRef.transaction(u => { if (u) u.balance -= ttsCost; return u; });
-        await db.ref('stream_events/tts').push({
+        await db.ref(`channels/${broadcasterId}/stream_events/tts`).push({
             text: `@${user} diyor ki: ${text}`,
             played: false,
             timestamp: Date.now(),
@@ -842,7 +842,7 @@ app.post('/kick/webhook', async (req, res) => {
         if ((snap.val()?.balance || 0) < soundCost) return await reply(`@${user}, "${soundTrigger}" sesi için ${soundCost.toLocaleString()} 💰 lazım!`);
 
         await userRef.transaction(u => { if (u) u.balance -= soundCost; return u; });
-        await db.ref('stream_events/sound').push({
+        await db.ref(`channels/${broadcasterId}/stream_events/sound`).push({
             soundId: soundTrigger,
             url: sound.url,
             played: false,
@@ -857,6 +857,45 @@ app.post('/kick/webhook', async (req, res) => {
         const keys = Object.keys(customSounds);
         if (keys.length === 0) return await reply(`@${user}, Bu kanalda henüz özel ses eklenmemiş.`);
         await reply(`🎵 Mevcut Sesler: ${keys.map(k => `!ses ${k} (${parseInt(customSounds[k].cost).toLocaleString()} 💰)`).join(' | ')}`);
+    }
+
+    else if (lowMsg.startsWith('!kredi')) {
+        const sub = args[0]?.toLowerCase();
+        const options = {
+            '1k': { reward: 1000, time: 60, label: '1 Dakika' },
+            '2k': { reward: 2000, time: 120, label: '2 Dakika' }
+        };
+
+        if (!sub || !options[sub]) {
+            return await reply(`💰 @${user}, !kredi [seçenek] yazarak timeout karşılığı bakiye alabilirsin! Seçenekler: 
+            1k (1 Dakika Timeout -> +1000 💰)
+            2k (2 Dakika Timeout -> +2000 💰)
+            Not: Günde sadece 1 kez yapabilirsin.`);
+        }
+
+        const choice = options[sub];
+        const uSnap = await userRef.once('value');
+        const uData = uSnap.val() || {};
+
+        // GÜNLÜK SINIR KONTROLÜ
+        const today = new Date().toLocaleDateString('tr-TR');
+        if (uData.last_kredi_date === today) {
+            return await reply(`🚫 @${user}, Bugün kredini zaten çektin! Yarın tekrar gel.`);
+        }
+
+        // İŞLEM: Bakiye EKLE
+        await userRef.transaction(u => {
+            if (u) {
+                u.balance = (u.balance || 0) + choice.reward;
+                u.last_kredi_date = today;
+            }
+            return u;
+        });
+
+        await reply(`🏦 @${user}, ${choice.label} timeout olmayı kabul ettin ve hesabına ${choice.reward.toLocaleString()} 💰 yüklendi! İyi uykular...`);
+
+        // Timeout uygula (Önce parayı veriyoruz sonra susturuyoruz ki havada kalmasın)
+        await timeoutUser(broadcasterId, user, choice.time);
     }
 
     // --- ADMIN / MOD ---
