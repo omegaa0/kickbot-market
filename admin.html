@@ -290,6 +290,7 @@
             <button class="tab-btn" onclick="showTab('users')">👥 Kullanıcılar</button>
             <button class="tab-btn" onclick="showTab('troll')">🤡 Troll & Aksiyon</button>
             <button class="tab-btn" onclick="showTab('global')">⚙️ Genel</button>
+            <button class="tab-btn" onclick="showTab('logs')">📋 Loglar</button>
         </div>
 
         <!-- CHANNEL MANAGEMENT -->
@@ -372,6 +373,18 @@
                 <button class="btn" onclick="sendToChannel()">MESAJ GÖNDER</button>
             </div>
         </div>
+
+        <!-- ADMIN LOGS -->
+        <div id="logs" class="section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h2 style="margin:0;">📋 Admin Panel Logları</h2>
+                <button class="btn" style="width: auto; height:35px;" onclick="loadLogs()">🔄 Yenile</button>
+            </div>
+            <div id="log-container"
+                style="background:var(--card); border:1px solid #222; border-radius:15px; padding:20px; max-height:600px; overflow-y:auto; font-family:monospace; font-size:0.85rem; line-height:1.6; border-left: 5px solid var(--primary);">
+                Yükleniyor...
+            </div>
+        </div>
     </div>
 
     <!-- BAN STATS MODAL -->
@@ -410,7 +423,49 @@
             document.querySelectorAll('.section').forEach(d => d.classList.remove('active'));
             document.getElementById(id).classList.add('active');
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            event.target.classList.add('active');
+            event.currentTarget.classList.add('active');
+
+            if (id === 'logs') {
+                loadLogs();
+                // Real-time update every 5 seconds if logs tab is active
+                if (!window.logInterval) {
+                    window.logInterval = setInterval(() => {
+                        if (document.getElementById('logs').classList.contains('active')) {
+                            loadLogs();
+                        }
+                    }, 5000);
+                }
+            }
+        }
+
+        async function loadLogs() {
+            try {
+                const res = await fetch('/admin-api/get-logs', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey })
+                });
+                const logs = await res.json();
+                const container = document.getElementById('log-container');
+
+                if (!logs || logs.length === 0) {
+                    container.innerHTML = "<p style='color:#555;'>Henüz log kaydı yok.</p>";
+                    return;
+                }
+
+                let html = "";
+                logs.forEach(log => {
+                    const time = new Date(log.timestamp).toLocaleTimeString('tr-TR');
+                    const date = new Date(log.timestamp).toLocaleDateString('tr-TR');
+                    html += `<div style="margin-bottom:8px; border-bottom:1px solid #222; padding-bottom:4px;">
+                        <span style="color:var(--muted)">[${date} ${time}]</span> 
+                        <span style="color:var(--secondary)">[${log.channelId}]</span> 
+                        <b style="color:var(--primary)">${log.action}:</b> 
+                        <span style="color:#ddd">${log.details}</span>
+                    </div>`;
+                });
+                container.innerHTML = html;
+            } catch (e) {
+                console.error("Logs load error:", e);
+            }
         }
 
         let cachedUsers = {};
@@ -689,7 +744,10 @@
                                 <div style="display:flex; gap:5px;">
                                     <input type="text" id="snd-name-${id}" placeholder="Komut (örn: gol)" class="inp" style="margin:0; height:30px; font-size:0.7rem; flex:1;">
                                     <input type="number" id="snd-cost-${id}" placeholder="Ücret" class="inp" style="margin:0; height:30px; width:70px; font-size:0.7rem;">
-                                    <input type="number" id="snd-vol-${id}" placeholder="Ses %" class="inp" min="1" max="200" value="100" style="margin:0; height:30px; width:60px; font-size:0.7rem;">
+                                    <div style="flex:1; display:flex; flex-direction:column; gap:2px;">
+                                        <label style="font-size:0.6rem; color:#aaa;">Ses Seviyesi: %<span id="vol-val-${id}">100</span></label>
+                                        <input type="range" id="snd-vol-${id}" min="0" max="200" value="100" class="slider" style="width:100%;" oninput="document.getElementById('vol-val-${id}').innerText = this.value">
+                                    </div>
                                 </div>
                                 <div style="display:flex; gap:5px;">
                                     <input type="text" id="snd-url-${id}" placeholder="MP3 URL Yapıştır (Discord)" class="inp" style="margin:0; height:30px; font-size:0.7rem; flex:1;">
@@ -715,9 +773,12 @@
             container.innerHTML = "";
             Object.entries(sounds).forEach(([name, data]) => {
                 container.innerHTML += `
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; padding-bottom:5px; border-bottom:1px solid #222;">
-                        <span>!ses ${name} (${data.cost} 💰) [Vol: %${data.volume || 100}]</span>
-                        <button onclick="removeSound('${channelId}', '${name}')" style="background:none; border:none; color:var(--danger); cursor:pointer;">✖</button>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; padding:10px; background:#1a1a1a; border-radius:5px; border-left:4px solid var(--primary);">
+                        <div style="display:flex; flex-direction:column;">
+                            <span style="font-weight:bold; color:var(--primary);">!ses ${name}</span>
+                            <span style="font-size:0.75rem; color:#aaa;">Maliyet: ${data.cost} 💰 | Ses: %${data.volume || 100}</span>
+                        </div>
+                        <button onclick="removeSound('${channelId}', '${name}')" class="btn-danger" style="width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; padding:0; border:none; cursor:pointer;">✖</button>
                     </div>
                 `;
             });
@@ -752,6 +813,7 @@
             const formData = new FormData();
             formData.append('sound', fileInp.files[0]);
             formData.append('key', sessionKey);
+            formData.append('channelId', id);
 
             try {
                 const res = await fetch('/admin-api/upload-sound', {

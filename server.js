@@ -14,24 +14,36 @@ app.use(express.static(__dirname));
 app.use(bodyParser.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Upload Klasörü Hazırla
-const uploadDir = path.join(__dirname, 'uploads', 'sounds');
+// PERSISTENT STORAGE (Render Disk)
+const persistPath = '/var/data';
+const uploadDir = fs.existsSync(persistPath)
+    ? path.join(persistPath, 'sounds')
+    : path.join(__dirname, 'uploads', 'sounds');
+
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }
+app.use('/uploads/sounds', express.static(uploadDir)); // Sesler için doğru yer
 
-// Firebase Storage Bucket Ayarı (Otomatik Algılama)
-const bucketName = `${serviceAccount.project_id}.appspot.com`;
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: process.env.FIREBASE_DB_URL,
-    storageBucket: bucketName // Storage için gerekli
+// MULTER SETUP
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const channelId = req.body.channelId || 'global';
+        const channelDir = path.join(uploadDir, channelId);
+        if (!fs.existsSync(channelDir)) {
+            fs.mkdirSync(channelDir, { recursive: true });
+        }
+        cb(null, channelDir);
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname);
+        const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1E9) + ext;
+        cb(null, uniqueName);
+    }
 });
 
-const bucket = admin.storage().bucket(); // Bucket erişimi
-
 const upload = multer({
-    storage: multer.memoryStorage(),
+    storage: storage,
     limits: { fileSize: 5 * 1024 * 1024 } // 5MB Limit
 });
 
@@ -46,6 +58,24 @@ const db = firebase.database();
 const KICK_CLIENT_ID = process.env.KICK_CLIENT_ID;
 const KICK_CLIENT_SECRET = process.env.KICK_CLIENT_SECRET;
 const REDIRECT_URI = "https://aloskegangbot-market.onrender.com/auth/kick/callback";
+
+// ADMIN LOG HELPER
+async function addLog(action, details, channelId = 'Global') {
+    const timestamp = Date.now();
+    try {
+        const logRef = db.ref('admin_logs');
+        await logRef.push({ action, details, channelId, timestamp });
+
+        // Capped logs: 100 limit
+        const snap = await logRef.once('value');
+        if (snap.numChildren() > 100) {
+            const keys = Object.keys(snap.val());
+            await logRef.child(keys[0]).remove();
+        }
+    } catch (e) {
+        console.error("Log error:", e.message);
+    }
+}
 
 // GLOBAL STATES
 const activeDuels = {};
@@ -186,7 +216,7 @@ async function timeoutUser(broadcasterId, targetUsername, duration) {
             }
         }
 
-        // YÃ¶ntem 2: Public v1 channels endpoint
+        // Yöntem 2: Public v1 channels endpoint
         if (!targetUserId) {
             try {
                 const chRes = await axios.get(`https://api.kick.com/public/v1/channels?slug=${encodeURIComponent(targetUsername)}`, {
@@ -199,6 +229,7 @@ async function timeoutUser(broadcasterId, targetUsername, duration) {
                 console.log("Method 2 (v1 channels):", e2.response?.status || e2.message);
             }
         }
+
 
         // YÃ¶ntem 3: Check username endpoint
         if (!targetUserId) {
@@ -861,11 +892,11 @@ app.post('/kick/webhook', async (req, res) => {
         const snap = await userRef.once('value');
         if ((snap.val()?.balance || 0) < soundCost) return await reply(`@${user}, "${soundTrigger}" sesi için ${soundCost.toLocaleString()} 💰 lazım!`);
 
-        // DOSYA KONTROLÜ (Render gibi geçici disklerde dosya silinmiş olabilir)
-        if (sound.url.startsWith('/uploads/')) {
-            const filePath = path.join(__dirname, sound.url);
+        if (sound.url.startsWith('/uploads/sounds/')) {
+            const relativePath = sound.url.replace('/uploads/sounds/', '');
+            const filePath = path.join(uploadDir, relativePath);
             if (!fs.existsSync(filePath)) {
-                return await reply(`⚠️ @${user}, "${soundTrigger}" ses dosyası sunucu yeniden başladığı için silinmiş! (Render Free Plan). Lütfen sesi tekrar yükle veya dış bağlantı (Discord vb.) kullan.`);
+                return await reply(`⚠️ @${user}, "${soundTrigger}" ses dosyası silinmiş!`);
             }
         }
 
@@ -1123,11 +1154,13 @@ app.post('/admin-api/channels', authAdmin, async (req, res) => {
 app.post('/admin-api/toggle-command', authAdmin, async (req, res) => {
     const { channelId, command, value } = req.body;
     await db.ref(`channels/${channelId}/settings`).update({ [command]: value });
+    addLog("Ayar Güncelleme", `${command} -> ${value}`, channelId);
     res.json({ success: true });
 });
 
 // KANAL SİL
 app.post('/admin-api/delete-channel', authAdmin, async (req, res) => {
+    addLog("Kanal Silme", `Channel ID: ${req.body.channelId}`, req.body.channelId);
     await db.ref('channels/' + req.body.channelId).remove();
     res.json({ success: true });
 });
@@ -1192,20 +1225,41 @@ app.post('/admin-api/reset-overlay-key', authAdmin, async (req, res) => {
     const { channelId } = req.body;
     const newKey = crypto.randomBytes(16).toString('hex');
     await db.ref(`channels/${channelId}`).update({ overlay_key: newKey });
+    addLog("Overlay Anahtarı Sıfırlandı", `Yeni anahtar oluşturuldu`, channelId);
     res.json({ success: true, key: newKey });
 });
 
 
+
 // --- ADMIN API ---
-// Ses Yükleme (Manuel URL tercih ediliyor)
-app.post('/admin-api/upload-sound', upload.single('sound'), async (req, res) => {
+// Ses Yükleme (Render Disk)
+app.post('/admin-api/upload-sound', upload.single('sound'), (req, res) => {
     // Admin Key Kontrolü
     const key = req.body.key || req.query.key;
     if (key !== ADMIN_KEY) return res.status(403).json({ error: 'Yetkisiz erişim' });
 
-    // Render Free ve Firebase Spark plan kısıtlamaları nedeniyle dosya yüklemeyi kapattık.
-    // Kullanıcıya Discord yöntemi öneriyoruz.
-    return res.status(400).json({ error: 'Render Free planda dosya yükleme desteklenmiyor. Lütfen ses dosyasını Discord\'a yükleyip Bağlantıyı Kopyala diyerek URL kısmına yapıştırın.' });
+    if (!req.file) return res.status(400).json({ error: 'Dosya yok' });
+
+    // Render'daki URL
+    const channelId = req.body.channelId || 'global';
+    const baseUrl = process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get('host')}`;
+    const fileUrl = `${baseUrl}/uploads/sounds/${channelId}/${req.file.filename}`;
+
+    res.json({ url: fileUrl });
+});
+
+// ADMIN LOGLARI ÇEK
+app.post('/admin-api/get-logs', authAdmin, async (req, res) => {
+    try {
+        const snap = await db.ref('admin_logs').limitToLast(50).once('value');
+        const logs = [];
+        snap.forEach(child => {
+            logs.unshift(child.val()); // En yeniyi başa koy
+        });
+        res.json(logs);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 app.get('/overlay', (req, res) => {
