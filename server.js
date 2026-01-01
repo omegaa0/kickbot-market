@@ -1694,24 +1694,55 @@ async function trackWatchTime() {
         for (const [chanId, chan] of Object.entries(channels)) {
             if (!chan.username) continue;
             try {
-                // Check if live
-                const res = await axios.get(`https://kick.com/api/v2/channels/${chan.username}`, {
-                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
-                    timeout: 5000
-                }).catch(() => null);
+                let isLive = false;
+                let apiSource = "NONE";
 
-                const isLive = res && res.data && res.data.livestream;
+                // 1. ÖNCE RESMİ PUBLIC API (v1) DENE (En güvenilir)
+                if (chan.access_token) {
+                    try {
+                        const v1Res = await axios.get(`https://api.kick.com/public/v1/channels?slug=${chan.username}`, {
+                            headers: { 'Authorization': `Bearer ${chan.access_token}` },
+                            timeout: 5000
+                        });
+                        if (v1Res.data && v1Res.data.data && v1Res.data.data[0]) {
+                            isLive = v1Res.data.data[0].is_live;
+                            apiSource = "V1_OFFICIAL";
+                        }
+                    } catch (e1) {
+                        if (e1.response?.status === 401) {
+                            await refreshChannelToken(chanId);
+                        }
+                    }
+                }
 
-                // DEBUG LOG
-                console.log(`[Watch] Kanal: ${chan.username}, Canlı mı: ${isLive ? 'EVET' : 'HAYIR'} (API: ${res ? res.status : 'HATA'})`);
+                // 2. EĞER V1 SONUÇ VERMEDİYSE V2 (INTERNAL) DENE (Fallback)
+                if (!isLive) {
+                    const v2Res = await axios.get(`https://kick.com/api/v2/channels/${chan.username}`, {
+                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+                        timeout: 5000
+                    }).catch(() => null);
 
-                const watchList = new Set();
+                    if (v2Res && v2Res.data && v2Res.data.livestream) {
+                        isLive = true;
+                        apiSource = "V2_INTERNAL";
+                    }
+                }
 
-                // Sync with Chatters API
+                // 3. CHATTERS API KONTROLÜ (Son çare ve doğrulama)
                 const chattersRes = await axios.get(`https://kick.com/api/v2/channels/${chan.username}/chatters`, {
                     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
                     timeout: 4000
                 }).catch(() => null);
+
+                const hasChatters = chattersRes && chattersRes.data && chattersRes.data.chatters &&
+                    (chattersRes.data.chatters.viewers?.length > 0 || chattersRes.data.chatters.moderators?.length > 0);
+
+                // DEBUG LOG
+                console.log(`[Watch] Kanal: ${chan.username}, Canlı mı: ${isLive ? 'EVET' : 'HAYIR'} (Kaynak: ${apiSource}, Chat Aktif: ${hasChatters ? 'Evet' : 'Hayır'})`);
+
+                if (!isLive && !hasChatters) {
+                    continue; // Her iki API ve Chat boşsa gerçekten kapalıdır
+                }
 
                 // 1. Chatters API'den gelenler
                 if (chattersRes && chattersRes.data && chattersRes.data.chatters) {
