@@ -1097,6 +1097,10 @@
                     const isInf = d.is_infinite;
                     const userJob = d.job || "İşsiz";
                     const totalWatch = d.lifetime_w || 0;
+                    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
+                    const todayData = d.quests?.[today] || { m: 0, w: 0 };
+                    const todayWatch = todayData.w || 0;
+                    const todayMessages = todayData.m || 0;
 
                     // En çok izlediği kanalı bul
                     let mostWatched = "Yok";
@@ -1120,14 +1124,14 @@
                     <td>${isInf ? '♾️' : (d.balance || 0).toLocaleString() + ' 💰'}</td>
                     <td>
                         <div style="cursor:pointer;" onclick="openDetailModal('${u}', 'watch')">
-                            <div style="font-size:0.8rem;">Toplam: <b>${totalWatch}dk</b></div>
-                            <div style="font-size:0.65rem; color:var(--primary)">🔍 Detayları Gör</div>
+                            <div style="font-size:0.8rem;">Bugün: <b style="color:var(--primary)">${todayWatch}dk</b></div>
+                            <div style="font-size:0.65rem; color:var(--muted)">Toplam: ${totalWatch}dk</div>
                         </div>
                     </td>
                     <td>
                         <div style="cursor:pointer;" onclick="openDetailModal('${u}', 'messages')">
-                            <div style="font-size:0.8rem;">Toplam: <b>${d.lifetime_m || 0}</b></div>
-                            <div style="font-size:0.65rem; color:var(--primary)">🔍 Detayları Gör</div>
+                            <div style="font-size:0.8rem;">Bugün: <b style="color:var(--primary)">${todayMessages}</b></div>
+                            <div style="font-size:0.65rem; color:var(--muted)">Toplam: ${d.lifetime_m || 0}</div>
                         </div>
                     </td>
                     <td>

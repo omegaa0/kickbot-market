@@ -507,7 +507,10 @@ app.post('/kick/webhook', async (req, res) => {
             const uData = userSnap.val();
             const today = getTodayKey();
             const quests = uData.quests || {};
+            // Initialize today's quest if not exists
             if (!quests[today]) quests[today] = { m: 0, g: 0, d: 0, w: 0, claimed: {} };
+
+            // Increment message count for today
             quests[today].m = (quests[today].m || 0) + 1;
 
             const channelM = uData.channel_m || {};
@@ -1749,7 +1752,10 @@ async function trackWatchTime() {
                             if (rewardPerMin > 0 && !u.is_infinite) u.balance = (u.balance || 0) + rewardPerMin;
                             if (!u.quests) u.quests = {};
                             if (!u.quests[today]) u.quests[today] = { m: 0, g: 0, d: 0, w: 0, claimed: {} };
+
+                            // Daily Watch Progress
                             u.quests[today].w = (u.quests[today].w || 0) + 1;
+
                             if (!u.channel_watch_time) u.channel_watch_time = {};
                             u.channel_watch_time[chanId] = (u.channel_watch_time[chanId] || 0) + 1;
                             u.lifetime_w = (u.lifetime_w || 0) + 1;
