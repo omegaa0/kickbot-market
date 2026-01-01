@@ -306,4 +306,175 @@ function showToast(msg, type) {
     toast.innerText = msg; toast.className = `toast ${type}`; toast.classList.remove('hidden');
     setTimeout(() => toast.classList.add('hidden'), 3000);
 }
+// TABS LOGIC
+function switchTab(id) {
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+    document.getElementById('tab-' + id).classList.remove('hidden');
+
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+
+    if (id === 'leaderboard') loadLeaderboard();
+    if (id === 'quests') loadQuests();
+    if (id === 'profile') loadProfile();
+}
+
+let lbType = 'global';
+async function switchLB(type) {
+    lbType = type;
+    document.querySelectorAll('#tab-leaderboard .primary-btn').forEach(b => b.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+    loadLeaderboard();
+}
+
+async function loadLeaderboard() {
+    const container = document.getElementById('leaderboard-container');
+    container.innerHTML = `<div class="loading-spinner"></div>`;
+    try {
+        const res = await fetch('/api/leaderboard', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: lbType, channelId: targetBroadcasterId })
+        });
+        const list = await res.json();
+        container.innerHTML = "";
+        list.forEach((u, i) => {
+            const item = document.createElement('div');
+            item.className = 'leader-item';
+            item.innerHTML = `
+                <div style="display:flex; align-items:center; gap:15px;">
+                    <span class="rank">${i + 1}.</span>
+                    <span style="font-weight:600;">${u.name.toUpperCase()}</span>
+                </div>
+                <span style="color:var(--primary); font-weight:800;">${u.balance.toLocaleString()} 💰</span>
+            `;
+            container.appendChild(item);
+        });
+    } catch (e) { container.innerHTML = "<p>Hata oluştu.</p>"; }
+}
+
+async function loadQuests() {
+    if (!currentUser) return;
+    const container = document.getElementById('quests-container');
+    container.innerHTML = `<div class="loading-spinner"></div>`;
+
+    try {
+        const qRes = await fetch('/admin-api/get-quests', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: 'PUBLIC' })
+        });
+        const globalQuests = await qRes.json();
+
+        db.ref('users/' + currentUser).once('value', snap => {
+            const u = snap.val() || {};
+            const today = new Date().toLocaleDateString('tr-TR');
+            const userToday = u.quests?.[today] || { m: 0, g: 0, d: 0, claimed: {} };
+
+            container.innerHTML = "";
+            if (Object.keys(globalQuests).length === 0) {
+                container.innerHTML = "<p style='text-align:center; color:var(--muted);'>Şu an aktif görev yok.</p>";
+                return;
+            }
+
+            Object.entries(globalQuests).forEach(([id, q]) => {
+                const currentProgress = userToday[q.type] || 0;
+                const isClaimed = userToday.claimed?.[id];
+                const isDone = currentProgress >= q.goal;
+                const percent = Math.min(100, (currentProgress / q.goal) * 100);
+
+                const card = document.createElement('div');
+                card.className = 'quest-card';
+                card.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <h3>${q.name}</h3>
+                        <span style="color:var(--primary); font-weight:700;">+${q.reward.toLocaleString()} 💰</span>
+                    </div>
+                    <p>Görev Türü: ${q.type === 'm' ? 'Sohbet' : q.type === 'g' ? 'Kumar' : q.type === 'w' ? '👁️ İzleme' : '⚔️ Düello'}</p>
+                    <div class="progress-bar"><div class="progress-fill" style="width: ${percent}%"></div></div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <small>${currentProgress}/${q.goal} ${q.type === 'm' ? 'Mesaj' : 'İşlem'}</small>
+                        <button class="primary-btn" style="width:auto; padding:8px 20px;" 
+                            ${isDone && !isClaimed ? '' : 'disabled'} onclick="claimQuest('${id}')">
+                            ${isClaimed ? 'ALINDI' : (isDone ? 'ÖDÜLÜ AL' : 'TAMAMLA')}
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        });
+    } catch (e) { container.innerHTML = "<p>Görevler yüklenemedi.</p>"; }
+}
+
+async function claimQuest(questId) {
+    if (!currentUser) return;
+    try {
+        const res = await fetch('/api/claim-quest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser, questId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`🎉 +${data.reward} 💰 aldın!`, "success");
+            loadQuests();
+            loadProfile();
+        } else {
+            showToast(data.error, "error");
+        }
+    } catch (e) { showToast("Bağlantı hatası!", "error"); }
+}
+
+async function loadProfile() {
+    if (!currentUser) return;
+    const container = document.getElementById('profile-card');
+    db.ref('users/' + currentUser).once('value', snap => {
+        const u = snap.val() || { balance: 0 };
+        container.innerHTML = `
+            <div style="display:flex; flex-direction:column; gap:25px;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+                    <div class="stat-box">
+                        <label>Cüzdan</label>
+                        <div class="val">${u.balance.toLocaleString()} 💰</div>
+                    </div>
+                    <div class="stat-box">
+                        <label>Meslek</label>
+                        <div class="val">${u.job || 'İşsiz'}</div>
+                    </div>
+                    <div class="stat-box">
+                        <label>Kayıt Tarihi</label>
+                        <div class="val">${new Date(u.created_at || Date.now()).toLocaleDateString('tr-TR')}</div>
+                    </div>
+                    <div class="stat-box">
+                        <label>Durum</label>
+                        <div class="val">${u.is_infinite ? '♾️ Sınırsız' : '👤 Oyuncu'}</div>
+                    </div>
+                </div>
+                
+                <div class="stats-section">
+                    <h3 style="margin-bottom:15px; font-size:1rem; opacity:0.8;">📈 Ömür Boyu İstatistikler</h3>
+                    <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:15px; margin-bottom:15px;">
+                        <div class="stat-mini">
+                            <label>Mesaj</label>
+                            <div class="v">${u.lifetime_m || 0}</div>
+                        </div>
+                        <div class="stat-mini">
+                            <label>Kumar</label>
+                            <div class="v">${u.lifetime_g || 0}</div>
+                        </div>
+                        <div class="stat-mini">
+                            <label>Düello</label>
+                            <div class="v">${u.lifetime_d || 0}</div>
+                        </div>
+                        <div class="stat-mini" style="background:rgba(255,255,255,0.05); border:1px solid var(--primary);">
+                            <label style="color:var(--primary);">Günlük İzleme</label>
+                            <div class="v" style="color:var(--primary);">${u.quests?.[new Date().toLocaleDateString('tr-TR')]?.w || 0} dk</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+}
+
 init();

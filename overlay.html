@@ -192,6 +192,17 @@
                             startFireworks();
                         });
 
+                    // Market Alerts Dinle
+                    db.ref('channels/' + targetBroadcasterId + '/stream_events/alerts')
+                        .orderByChild('timestamp')
+                        .startAt(startTime)
+                        .on('child_added', function (snap) {
+                            const data = snap.val();
+                            if (!data || data.played) return;
+                            db.ref('channels/' + targetBroadcasterId + '/stream_events/alerts/' + snap.key).update({ played: true });
+                            showNotification(data.title, data.text, data.icon);
+                        });
+
                     // UZAKTAN YENİLEME DİNLE (Remote Reload)
                     db.ref('channels/' + targetBroadcasterId + '/commands/reload').on('value', function (snap) {
                         if (snap.val() === true) {
