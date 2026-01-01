@@ -656,6 +656,16 @@
             </div>
         </div>
 
+        <!-- DETAIL MODAL -->
+        <div id="detailModal" class="modal">
+            <div class="card" style="width:500px; max-height:80vh; overflow-y:auto;">
+                <h3 id="detail-modal-title">Kanal İstatistikleri</h3>
+                <div id="detail-modal-content" style="margin-top:20px;"></div>
+                <button class="btn btn-danger" onclick="closeModal('detailModal')"
+                    style="margin-top:20px;">KAPAT</button>
+            </div>
+        </div>
+
         <!-- QUEST MODAL -->
         <div id="questModal" class="modal">
             <div class="card" style="width:400px;">
@@ -1109,12 +1119,16 @@
                     <td><b>${u}</b> ${isInf ? '<span style="color:var(--primary); font-size:0.7rem;">(♾️)</span>' : ''}</td>
                     <td>${isInf ? '♾️' : (d.balance || 0).toLocaleString() + ' 💰'}</td>
                     <td>
-                        <div style="font-size:0.8rem;">Toplam: <b>${totalWatch}dk</b></div>
-                        <div style="font-size:0.65rem; color:var(--muted)">Max: ${mostWatched}</div>
+                        <div style="cursor:pointer;" onclick="openDetailModal('${u}', 'watch')">
+                            <div style="font-size:0.8rem;">Toplam: <b>${totalWatch}dk</b></div>
+                            <div style="font-size:0.65rem; color:var(--primary)">🔍 Detayları Gör</div>
+                        </div>
                     </td>
                     <td>
-                        <div style="font-size:0.8rem;">Toplam: <b>${d.lifetime_m || 0}</b></div>
-                        <div style="font-size:0.65rem; color:var(--muted)">Max: ${mostMessages}</div>
+                        <div style="cursor:pointer;" onclick="openDetailModal('${u}', 'messages')">
+                            <div style="font-size:0.8rem;">Toplam: <b>${d.lifetime_m || 0}</b></div>
+                            <div style="font-size:0.65rem; color:var(--primary)">🔍 Detayları Gör</div>
+                        </div>
                     </td>
                     <td>
                         <select class="inp" style="margin:0; height:30px; font-size:0.75rem; padding:0 5px;" onchange="setUserJob('${u}', this.value)">
@@ -1182,6 +1196,51 @@
             }
 
             function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+            async function openDetailModal(username, type) {
+                const user = rawUsers[username];
+                if (!user) return;
+
+                const title = document.getElementById('detail-modal-title');
+                const content = document.getElementById('detail-modal-content');
+                title.innerText = `@${username} - ${type === 'watch' ? 'İzleme' : 'Mesaj'} Detayları`;
+
+                // Kanalları çek (İsimleri göstermek için)
+                const cRes = await fetch('/admin-api/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: sessionKey }) });
+                const channels = await cRes.json();
+
+                let html = `
+                    <table style="width:100%; border-collapse:collapse;">
+                        <thead>
+                            <tr style="border-bottom:1px solid #333;">
+                                <th style="text-align:left; padding:10px; font-size:0.8rem;">Kanal</th>
+                                <th style="text-align:right; padding:10px; font-size:0.8rem;">${type === 'watch' ? 'Dakika' : 'Mesaj'}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                const dataObj = type === 'watch' ? (user.channel_watch_time || {}) : (user.channel_m || {});
+                const sorted = Object.entries(dataObj).sort((a, b) => b[1] - a[1]);
+
+                if (sorted.length === 0) {
+                    html += `<tr><td colspan="2" style="text-align:center; padding:20px; color:#666;">Veri bulunamadı.</td></tr>`;
+                } else {
+                    sorted.forEach(([cid, val]) => {
+                        const cName = channels[cid]?.username || `ID: ${cid}`;
+                        html += `
+                            <tr style="border-bottom:1px solid #111;">
+                                <td style="padding:10px; font-size:0.85rem;">${cName}</td>
+                                <td style="padding:10px; text-align:right; font-weight:bold; color:var(--primary); font-size:0.85rem;">${val}${type === 'watch' ? ' dk' : ''}</td>
+                            </tr>
+                        `;
+                    });
+                }
+
+                html += `</tbody></table>`;
+                content.innerHTML = html;
+                document.getElementById('detailModal').style.display = 'flex';
+            }
 
             function previewAdminSound(url) {
                 const audio = new Audio(url);
