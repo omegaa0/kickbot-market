@@ -103,7 +103,23 @@
         <div id="player"></div>
     </div>
 
+    <div id="debug-log"
+        style="position: fixed; top: 0; right: 0; background: rgba(0,0,0,0.7); color: lime; font-size: 10px; padding: 5px; z-index: 9999; display: none;">
+        Debug Console
+    </div>
+
     <script>
+        function logDebug(msg) {
+            console.log("[DEBUG]", msg);
+            const el = document.getElementById('debug-log');
+            if (el) el.innerHTML += "<div>" + msg + "</div>";
+        }
+
+        // URL'den debug modunu kontrol et
+        if (window.location.search.includes('debug=true')) {
+            document.getElementById('debug-log').style.display = 'block';
+        }
+
         let startTime = Date.now() - 60000;
         let ttsVol = 1.0;
         let soundVol = 0.8;
@@ -226,14 +242,17 @@
                     // Song Requests Dinle
                     let songQueue = [];
                     let isPlaying = false;
+                    let playerReady = false;
                     let player;
 
                     window.onYouTubeIframeAPIReady = function () {
+                        logDebug("YouTube API Hazır. Player oluşturuluyor...");
                         player = new YT.Player('player', {
                             height: '170',
                             width: '300',
-                            playerVars: { 'autoplay': 1, 'controls': 0, 'modestbranding': 1 },
+                            playerVars: { 'autoplay': 1, 'controls': 0, 'modestbranding': 1, 'origin': window.location.origin },
                             events: {
+                                'onReady': () => { logDebug("Player Hazır!"); playerReady = true; processQueue(); },
                                 'onStateChange': onPlayerStateChange,
                                 'onError': onPlayerError
                             }
@@ -241,6 +260,7 @@
                     };
 
                     function onPlayerStateChange(event) {
+                        logDebug("Player Durum Değişti: " + event.data);
                         if (event.data === YT.PlayerState.ENDED) {
                             isPlaying = false;
                             document.getElementById('yt-player-container').style.display = 'none';
@@ -248,7 +268,8 @@
                         }
                     }
 
-                    function onPlayerError() {
+                    function onPlayerError(e) {
+                        logDebug("Player Hatası: " + e.data);
                         isPlaying = false;
                         document.getElementById('yt-player-container').style.display = 'none';
                         processQueue();
@@ -256,12 +277,12 @@
 
                     function processQueue() {
                         if (songQueue.length > 0 && !isPlaying) {
-                            if (!player || typeof player.loadVideoById !== 'function') {
-                                console.log("Player henüz hazır değil, bekleniyor...");
-                                setTimeout(processQueue, 1000);
+                            if (!playerReady) {
+                                logDebug("Player henüz tamamen hazır değil, bekleniyor...");
                                 return;
                             }
                             const next = songQueue.shift();
+                            logDebug("Kuyruktan şarkı alınıyor: " + next.query);
                             playSong(next);
                         }
                     }
@@ -276,20 +297,22 @@
                         try {
                             const query = data.query.trim();
                             const videoId = getYouTubeId(query);
+                            logDebug("Video ID ayrıştırıldı: " + videoId);
 
-                            if (videoId && player && typeof player.loadVideoById === 'function') {
+                            if (videoId && playerReady) {
                                 isPlaying = true;
                                 document.getElementById('yt-player-container').style.display = 'block';
                                 showNotification("ŞARKI İSTEĞİ", data.user + " bir şarkı açtı!", "🎵");
                                 player.loadVideoById(videoId);
+                                logDebug("Video yüklendi: " + videoId);
                             } else {
-                                console.log("Geçersiz link veya player hazır değil:", query);
+                                logDebug("Şarkı oynatılamadı. ID: " + videoId + " | Ready: " + playerReady);
                                 isPlaying = false;
                                 document.getElementById('yt-player-container').style.display = 'none';
                                 processQueue();
                             }
                         } catch (e) {
-                            console.error("Şarkı oynatma hatası:", e);
+                            logDebug("Oynatma Hatası: " + e.message);
                             isPlaying = false;
                             processQueue();
                         }
@@ -301,6 +324,7 @@
                         .on('child_added', function (snap) {
                             const data = snap.val();
                             if (!data || data.played) return;
+                            logDebug("Yeni şarkı isteği alındı: " + data.query);
                             db.ref('channels/' + targetBroadcasterId + '/stream_events/song_requests/' + snap.key).update({ played: true });
                             songQueue.push(data);
                             processQueue();
