@@ -941,6 +941,8 @@
         }
 
         init();
+        setInterval(init, 30000); // 30 saniyede bir verileri tazele
+
         function copyLink(id) {
             const input = document.getElementById(id);
             input.select();

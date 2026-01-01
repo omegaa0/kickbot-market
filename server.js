@@ -177,7 +177,7 @@ app.get('/auth/kick/callback', async (req, res) => {
         const updateObj = {
             access_token: response.data.access_token,
             refresh_token: response.data.refresh_token,
-            username: userData.name.toLowerCase(),
+            username: (userData.slug || userData.name || "").toLowerCase(),
             broadcaster_id: bid,
             dashboard_key: loginKey,
             updatedAt: Date.now()
@@ -1645,7 +1645,14 @@ app.post('/dashboard-api/data', authDashboard, async (req, res) => {
     });
 
     const statsSnap = await db.ref(`channels/${channelId}/stats`).once('value');
-    const liveStats = statsSnap.val() || { followers: 0, subscribers: 0 };
+    let liveStats = statsSnap.val() || { followers: 0, subscribers: 0 };
+
+    // Eğer veri yoksa veya 5 dakikadan eskiyse anlık güncelle
+    const fiveMinsAgo = Date.now() - 300000;
+    if (!liveStats.last_sync || liveStats.last_sync < fiveMinsAgo) {
+        const synced = await syncSingleChannelStats(channelId, channelData);
+        if (synced) liveStats = synced;
+    }
 
     channelData.stats = {
         users: Object.keys(users).length,
@@ -1747,48 +1754,56 @@ async function trackWatchTime() {
                 let isLive = false;
                 let apiSource = "NONE";
 
-                // 1. ÖNCE RESMİ PUBLIC API (v1) DENE (En güvenilir)
-                if (chan.access_token) {
+                // 1. ÖNCE V2 (INTERNAL) DENE (En güncel veriyi bu verir, user tavsiyesi)
+                const v2Res = await axios.get(`https://kick.com/api/v2/channels/${chan.username}`, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+                    timeout: 5000
+                }).catch(() => null);
+
+                if (v2Res && v2Res.data && v2Res.data.livestream) {
+                    isLive = true;
+                    apiSource = "V2_INTERNAL";
+                }
+
+                // 2. EĞER V2 SONUÇ VERMEDİYSE RESMİ API (v1) DENE
+                if (!isLive && chan.access_token) {
                     try {
                         const v1Res = await axios.get(`https://api.kick.com/public/v1/channels?slug=${chan.username}`, {
                             headers: { 'Authorization': `Bearer ${chan.access_token}` },
                             timeout: 5000
                         });
                         if (v1Res.data && v1Res.data.data && v1Res.data.data[0]) {
-                            isLive = v1Res.data.data[0].is_live;
+                            const d = v1Res.data.data[0];
+                            isLive = d.is_live || !!d.livestream;
                             apiSource = "V1_OFFICIAL";
                         }
                     } catch (e1) {
-                        if (e1.response?.status === 401) {
-                            await refreshChannelToken(chanId);
-                        }
+                        if (e1.response?.status === 401) await refreshChannelToken(chanId);
                     }
                 }
 
-                // 2. EĞER V1 SONUÇ VERMEDİYSE V2 (INTERNAL) DENE (Fallback)
+                // 3. EĞER HALA BULAMADIKSA V1 (INTERNAL) DENE
                 if (!isLive) {
-                    const v2Res = await axios.get(`https://kick.com/api/v2/channels/${chan.username}`, {
+                    const iv1Res = await axios.get(`https://kick.com/api/v1/channels/${chan.username}`, {
                         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
                         timeout: 5000
                     }).catch(() => null);
 
-                    if (v2Res && v2Res.data && v2Res.data.livestream) {
+                    if (iv1Res && iv1Res.data && (iv1Res.data.is_live || iv1Res.data.livestream)) {
                         isLive = true;
-                        apiSource = "V2_INTERNAL";
+                        apiSource = "V1_INTERNAL";
                     }
                 }
 
-                // 3. CHATTERS API + DB AKTİFLİK KONTROLÜ
+                // 4. CHATTERS API + DB AKTİFLİK KONTROLÜ
                 const chattersRes = await axios.get(`https://kick.com/api/v2/channels/${chan.username}/chatters`, {
                     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
                     timeout: 4000
                 }).catch(() => null);
 
-                // API'den gelenler
                 const apiHasChatters = chattersRes && chattersRes.data && chattersRes.data.chatters &&
                     (Object.values(chattersRes.data.chatters).some(list => Array.isArray(list) && list.length > 0));
 
-                // Veritabanından son 60 saniyede bu kanalda mesaj yazanlar (Offline iken saymayı zorlaştırır)
                 const activeThreshold = Date.now() - 60000;
                 const dbRecentSnap = await db.ref('users').orderByChild('last_seen').startAt(activeThreshold).once('value');
                 const dbRecentUsers = dbRecentSnap.val() || {};
@@ -1796,11 +1811,17 @@ async function trackWatchTime() {
 
                 const hasChatters = apiHasChatters || dbHasChatters;
 
+                // Eğer API "Offline" diyor ama chat'te bizzat insanlar varsa, kanalı CANLI kabul et
+                if (!isLive && hasChatters) {
+                    isLive = true;
+                    apiSource = "CHAT_ACTIVITY";
+                }
+
                 // DEBUG LOG
                 console.log(`[Watch] Kanal: ${chan.username}, Canlı mı: ${isLive ? 'EVET' : 'HAYIR'} (Kaynak: ${apiSource}, Chat Aktif: ${hasChatters ? 'Evet' : 'Hayır'})`);
 
-                if (!isLive && !hasChatters) {
-                    continue; // Her iki API ve Chat boşsa gerçekten kapalıdır
+                if (!isLive) {
+                    continue;
                 }
 
                 // --- İZLEYİCİ LİSTESİ OLUŞTUR ---
@@ -1889,63 +1910,82 @@ async function trackWatchTime() {
 // Bu fonksiyon hem Kick API üzerinden hem de son mesaj atanlardan süreyi takip eder
 setInterval(trackWatchTime, 60000);
 
+async function syncSingleChannelStats(chanId, chan) {
+    if (!chan.username) return null;
+    try {
+        let followers = 0;
+        let subscribers = 0;
+
+        // 1. Kick V2 üzerinden takipçi sayısını çek (Public)
+        const v2Res = await axios.get(`https://kick.com/api/v2/channels/${chan.username}`, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+            timeout: 5000
+        }).catch(() => null);
+
+        if (v2Res && v2Res.data) {
+            const d = v2Res.data;
+            followers = d.followers_count || d.followersCount || (d.chatroom && d.chatroom.followers_count) || 0;
+            subscribers = d.subscriber_count || 0;
+        }
+
+        // 2. Eğer Access Token varsa Resmi V1 API'den detayları çek (Subscriber count için)
+        if (chan.access_token) {
+            try {
+                const v1Res = await axios.get(`https://api.kick.com/public/v1/channels?slug=${chan.username}`, {
+                    headers: { 'Authorization': `Bearer ${chan.access_token}` },
+                    timeout: 5000
+                });
+                if (v1Res.data && v1Res.data.data && v1Res.data.data[0]) {
+                    const d = v1Res.data.data[0];
+                    if (d.followers_count > 0) followers = d.followers_count;
+                    if (d.subscriber_count !== undefined) subscribers = d.subscriber_count;
+                }
+            } catch (e1) {
+                if (e1.response?.status === 401) await refreshChannelToken(chanId);
+            }
+        }
+
+        // 3. Fallback: Internal V1 (Eski ama bazen daha stabil)
+        if (followers === 0) {
+            const iv1Res = await axios.get(`https://kick.com/api/v1/channels/${chan.username}`, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+                timeout: 5000
+            }).catch(() => null);
+            if (iv1Res && iv1Res.data) {
+                followers = iv1Res.data.followers_count || iv1Res.data.followersCount || 0;
+            }
+        }
+
+        console.log(`[Sync] ${chan.username} -> F: ${followers}, S: ${subscribers}`);
+
+        const result = {
+            followers,
+            subscribers,
+            last_sync: Date.now()
+        };
+
+        await db.ref(`channels/${chanId}/stats`).update(result);
+        return result;
+    } catch (e) {
+        console.error(`Sync Stats Error (${chan.username}):`, e.message);
+        return null;
+    }
+}
+
 async function syncChannelStats() {
     try {
         const channelsSnap = await db.ref('channels').once('value');
         const channels = channelsSnap.val() || {};
 
         for (const [chanId, chan] of Object.entries(channels)) {
-            if (!chan.username) continue;
-            try {
-                let followers = 0;
-                let subscribers = 0;
-
-                // 1. Kick V2 üzerinden takipçi sayısını çek (Public)
-                const v2Res = await axios.get(`https://kick.com/api/v2/channels/${chan.username}`, {
-                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
-                    timeout: 5000
-                }).catch(() => null);
-
-                if (v2Res && v2Res.data) {
-                    followers = v2Res.data.followers_count || v2Res.data.followersCount || 0;
-                    subscribers = v2Res.data.subscriber_count || 0;
-                }
-
-                // 2. Eğer Access Token varsa Resmi V1 API'den detayları çek (Subscriber count için)
-                if (chan.access_token) {
-                    try {
-                        const v1Res = await axios.get(`https://api.kick.com/public/v1/channels?slug=${chan.username}`, {
-                            headers: { 'Authorization': `Bearer ${chan.access_token}` },
-                            timeout: 5000
-                        });
-                        if (v1Res.data && v1Res.data.data && v1Res.data.data[0]) {
-                            const d = v1Res.data.data[0];
-                            if (d.followers_count > 0) followers = d.followers_count;
-                            // Subscriber count resmi API'de yetkili girişte döner
-                            if (d.subscriber_count !== undefined) subscribers = d.subscriber_count;
-                        }
-                    } catch (e1) {
-                        if (e1.response?.status === 401) await refreshChannelToken(chanId);
-                    }
-                }
-
-                console.log(`[Sync] ${chan.username} -> F: ${followers}, S: ${subscribers}`);
-
-                await db.ref(`channels/${chanId}/stats`).update({
-                    followers,
-                    subscribers,
-                    last_sync: Date.now()
-                });
-            } catch (e) {
-                console.error(`Sync Stats Error (${chan.username}):`, e.message);
-            }
+            await syncSingleChannelStats(chanId, chan);
             await sleep(500);
         }
     } catch (e) { }
 }
 
-// Her 10 dakikada bir takipçi/abone sayılarını güncelle
-setInterval(syncChannelStats, 600000);
+// Her 3 dakikada bir takipçi/abone sayılarını güncelle
+setInterval(syncChannelStats, 180000);
 syncChannelStats(); // Başlangıçta bir kez çalıştır
 
 // --- ADMIN QUEST MANAGEMENT ---
@@ -2070,6 +2110,20 @@ app.get('/market', (req, res) => {
 
 app.get('/goals', (req, res) => {
     res.sendFile(path.join(__dirname, 'goals.html'));
+});
+
+app.get('/debug-stats', async (req, res) => {
+    const snap = await db.ref('channels').once('value');
+    const channels = snap.val() || {};
+    const result = {};
+    for (const [id, c] of Object.entries(channels)) {
+        const stats = await db.ref(`channels/${id}/stats`).once('value');
+        result[c.username || id] = {
+            stats: stats.val(),
+            last_sync: stats.val()?.last_sync ? new Date(stats.val().last_sync).toLocaleString() : 'Never'
+        };
+    }
+    res.json(result);
 });
 
 // Health Check (UptimeRobot için)
