@@ -491,7 +491,7 @@ app.post('/kick/webhook', async (req, res) => {
 
         // --- OTOMATİK KAYIT & AKTİFLİK TAKİBİ ---
         const userSnap = await userRef.once('value');
-        const today = new Date().toLocaleDateString('tr-TR').replace(/\./g, '-');
+        const today = getTodayKey();
 
         if (!userSnap.exists()) {
             await userRef.set({
@@ -499,11 +499,12 @@ app.post('/kick/webhook', async (req, res) => {
                 last_seen: Date.now(),
                 last_channel: broadcasterId,
                 created_at: Date.now(),
-                lifetime_m: 1, lifetime_g: 0, lifetime_d: 0, // Lifetime Stats
+                lifetime_m: 1, lifetime_g: 0, lifetime_d: 0, lifetime_w: 0,
                 quests: { [today]: { m: 1, g: 0, d: 0, w: 0, claimed: {} } }
             });
         } else {
             const uData = userSnap.val();
+            const today = getTodayKey();
             const quests = uData.quests || {};
             if (!quests[today]) quests[today] = { m: 0, g: 0, d: 0, w: 0, claimed: {} };
             quests[today].m = (quests[today].m || 0) + 1;
@@ -1601,7 +1602,7 @@ app.post('/api/leaderboard', async (req, res) => {
 // --- YENİ: GÖREV ÖDÜLÜ AL ---
 app.post('/api/claim-quest', async (req, res) => {
     const { username, questId } = req.body;
-    const today = new Date().toLocaleDateString('tr-TR').replace(/\./g, '-');
+    const today = getTodayKey();
     const userRef = db.ref('users/' + username.toLowerCase());
 
     try {
@@ -1642,29 +1643,36 @@ app.post('/api/claim-quest', async (req, res) => {
 });
 
 // --- SERVER-SIDE PASSIVE INCOME & QUEST TRACKING ---
+function getTodayKey() {
+    // TR Saatiyle Tarih (Format: YYYY-MM-DD)
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
+}
+
 async function trackWatchTime() {
-    // console.log(`[PassiveIncome] Polling started at ${new Date().toLocaleTimeString()}`);
     try {
         const channelsSnap = await db.ref('channels').once('value');
         const channels = channelsSnap.val() || {};
-        const today = new Date().toLocaleDateString('tr-TR').replace(/\./g, '-');
+        const today = getTodayKey();
 
         for (const [chanId, chan] of Object.entries(channels)) {
             if (!chan.username) continue;
             try {
                 // Check if live
                 const res = await axios.get(`https://kick.com/api/v2/channels/${chan.username}`, {
-                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
-                });
-                if (!res.data.livestream) continue;
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+                    timeout: 4000
+                }).catch(() => null);
+
+                if (!res || !res.data || !res.data.livestream) continue;
 
                 // Sync with Chatters API
                 const chattersRes = await axios.get(`https://kick.com/api/v2/channels/${chan.username}/chatters`, {
-                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
-                });
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+                    timeout: 4000
+                }).catch(() => null);
 
-                const cData = chattersRes.data;
-                if (cData && cData.chatters) {
+                if (chattersRes && chattersRes.data && chattersRes.data.chatters) {
+                    const cData = chattersRes.data;
                     const allChatters = [
                         ...(cData.chatters.broadcaster || []),
                         ...(cData.chatters.moderators || []),
@@ -1675,24 +1683,32 @@ async function trackWatchTime() {
 
                     const uniqueChatters = [...new Set(allChatters)];
                     const settings = chan.settings || {};
-                    const passiveRewardPerMin = (settings.passive_reward || 100) / 10; // "Pasif (10dk)" admin panel labelına göre
+                    const passiveRewardPerMin = (settings.passive_reward || 100) / 10;
 
                     for (const user of uniqueChatters) {
                         const userRef = db.ref('users/' + user);
-                        const uSnap = await userRef.once('value');
-                        if (!uSnap.exists()) continue;
-
                         await userRef.transaction(u => {
                             if (u) {
-                                // 1. Give Passive Income (Money)
+                                // 1. Pasif Gelir
                                 if (passiveRewardPerMin > 0 && !u.is_infinite) {
                                     u.balance = (u.balance || 0) + passiveRewardPerMin;
                                 }
 
-                                // 2. Track Quest Progress (w = watch/izleme)
+                                // 2. Günlük Görev İlerlemesi (w = watch)
                                 if (!u.quests) u.quests = {};
                                 if (!u.quests[today]) u.quests[today] = { m: 0, g: 0, d: 0, w: 0, claimed: {} };
                                 u.quests[today].w = (u.quests[today].w || 0) + 1;
+
+                                // 3. Kanal Bazlı Toplam İzleme
+                                if (!u.channel_watch_time) u.channel_watch_time = {};
+                                u.channel_watch_time[chanId] = (u.channel_watch_time[chanId] || 0) + 1;
+
+                                // 4. Ömür Boyu Toplam İzleme
+                                u.lifetime_w = (u.lifetime_w || 0) + 1;
+
+                                // Reset fallback values if they exist
+                                u.last_seen = Date.now();
+                                u.last_channel = chanId;
                             }
                             return u;
                         });
@@ -1826,11 +1842,11 @@ app.get('/', (req, res) => {
 app.get('/health', (req, res) => res.status(200).send('OK (Bot Uyanık)'));
 
 // ---------------------------------------------------------
-// 6. PASSIVE INCOME (10 DK İZLEME ÖDÜLÜ)
+// 6. PASSIVE INCOME & WATCH TIME TRACKING (5 MIN - FALLBACK)
 // ---------------------------------------------------------
 setInterval(async () => {
-    console.log("💰 Pasif bakiye dağıtımı başlıyor...");
-    const tenMinsAgo = Date.now() - (10 * 60 * 1000);
+    const fiveMinsAgo = Date.now() - (5 * 60 * 1000);
+    const today = getTodayKey();
 
     const [usersSnap, channelsSnap] = await Promise.all([
         db.ref('users').once('value'),
@@ -1840,23 +1856,31 @@ setInterval(async () => {
     const allUsers = usersSnap.val() || {};
     const allChannels = channelsSnap.val() || {};
 
-    let rewardedCount = 0;
     for (const [username, data] of Object.entries(allUsers)) {
-        if (data.last_seen && data.last_seen > tenMinsAgo && data.last_channel) {
+        if (data.last_seen && data.last_seen > fiveMinsAgo && data.last_channel) {
             const channelSettings = allChannels[data.last_channel]?.settings || {};
-            const rewardAmt = parseInt(channelSettings.passive_reward) || 100;
+            const rewardAmt = (parseInt(channelSettings.passive_reward) || 100) / 2; // 5 dakikalık pay
 
             await db.ref('users/' + username).transaction(u => {
                 if (u) {
-                    u.balance = (u.balance || 0) + rewardAmt;
+                    // 1. Para ekle
+                    if (!u.is_infinite) u.balance = (u.balance || 0) + rewardAmt;
+
+                    // 2. İzleme Süresi (Fallback - Quest için)
+                    if (!u.quests) u.quests = {};
+                    if (!u.quests[today]) u.quests[today] = { m: 0, g: 0, d: 0, w: 0, claimed: {} };
+                    u.quests[today].w = (u.quests[today].w || 0) + 5;
+
+                    // 3. Kanal ve Ömür Boyu İzleme
+                    if (!u.channel_watch_time) u.channel_watch_time = {};
+                    u.channel_watch_time[data.last_channel] = (u.channel_watch_time[data.last_channel] || 0) + 5;
+                    u.lifetime_w = (u.lifetime_w || 0) + 5;
                 }
                 return u;
             });
-            rewardedCount++;
         }
     }
-    console.log(`✅ ${rewardedCount} aktif kullanıcıya kanal ayarlarına göre ödülleri dağıtıldı.`);
-}, 10 * 60 * 1000); // 10 Dakikada bir
+}, 5 * 60 * 1000); // 5 Dakikada bir
 
 // ---------------------------------------------------------
 // 7. BACKGROUND EVENT LISTENERS (SHOP MUTE ETC)

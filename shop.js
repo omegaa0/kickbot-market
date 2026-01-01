@@ -12,6 +12,10 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
+function getTodayKey() {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
+}
+
 let currentUser = null;
 let currentChannelId = null;
 
@@ -356,8 +360,8 @@ async function loadQuests() {
 
         db.ref('users/' + currentUser).once('value', snap => {
             const u = snap.val() || {};
-            const today = new Date().toLocaleDateString('tr-TR').replace(/\./g, '-');
-            const userToday = u.quests?.[today] || { m: 0, g: 0, d: 0, claimed: {} };
+            const today = getTodayKey();
+            const userToday = u.quests?.[today] || { m: 0, g: 0, d: 0, w: 0, claimed: {} };
 
             container.innerHTML = "";
             if (Object.keys(globalQuests).length === 0) {
@@ -440,23 +444,31 @@ async function loadProfile() {
                 </div>
                 
                 <div class="stats-section">
-                    <h3 style="margin-bottom:15px; font-size:1rem; opacity:0.8;">📈 Ömür Boyu İstatistikler</h3>
+                    <h3 style="margin-bottom:15px; font-size:1rem; opacity:0.8;">📈 İstatistikler</h3>
                     <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:15px; margin-bottom:15px;">
+                        <div class="stat-mini" style="background:rgba(255,255,255,0.05); border:1px solid var(--primary);">
+                            <label style="color:var(--primary);">Günlük İzleme</label>
+                            <div class="v" style="color:var(--primary);">${u.quests?.[getTodayKey()]?.w || 0} dk</div>
+                        </div>
+                        <div class="stat-mini" style="background:rgba(5, 234, 106, 0.1);">
+                            <label>Kanal İzleme</label>
+                            <div class="v">${u.channel_watch_time?.[currentChannelId] || 0} dk</div>
+                        </div>
                         <div class="stat-mini">
-                            <label>Mesaj</label>
+                            <label>Toplam İzleme</label>
+                            <div class="v">${u.lifetime_w || 0} dk</div>
+                        </div>
+                        <div class="stat-mini">
+                            <label>Toplam Mesaj</label>
                             <div class="v">${u.lifetime_m || 0}</div>
                         </div>
                         <div class="stat-mini">
-                            <label>Kumar</label>
+                            <label>Toplam Kumar</label>
                             <div class="v">${u.lifetime_g || 0}</div>
                         </div>
                         <div class="stat-mini">
-                            <label>Düello</label>
+                            <label>Düello Galibiyet</label>
                             <div class="v">${u.lifetime_d || 0}</div>
-                        </div>
-                        <div class="stat-mini" style="background:rgba(255,255,255,0.05); border:1px solid var(--primary);">
-                            <label style="color:var(--primary);">Günlük İzleme</label>
-                            <div class="v" style="color:var(--primary);">${u.quests?.[new Date().toLocaleDateString('tr-TR').replace(/\./g, '-')]?.w || 0} dk</div>
                         </div>
                     </div>
                 </div>
