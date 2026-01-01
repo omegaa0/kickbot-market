@@ -1644,10 +1644,15 @@ app.post('/dashboard-api/data', authDashboard, async (req, res) => {
         }
     });
 
+    const statsSnap = await db.ref(`channels/${channelId}/stats`).once('value');
+    const liveStats = statsSnap.val() || { followers: 0, subscribers: 0 };
+
     channelData.stats = {
         users: Object.keys(users).length,
         msgs: totalMsgs,
-        watch: totalWatch
+        watch: totalWatch,
+        followers: liveStats.followers || 0,
+        subscribers: liveStats.subscribers || 0
     };
 
     res.json(channelData);
@@ -1884,6 +1889,43 @@ async function trackWatchTime() {
 // Bu fonksiyon hem Kick API üzerinden hem de son mesaj atanlardan süreyi takip eder
 setInterval(trackWatchTime, 60000);
 
+async function syncChannelStats() {
+    try {
+        const channelsSnap = await db.ref('channels').once('value');
+        const channels = channelsSnap.val() || {};
+
+        for (const [chanId, chan] of Object.entries(channels)) {
+            if (!chan.username) continue;
+            try {
+                // Kick V2 üzerinden takipçi sayısını çek
+                const v2Res = await axios.get(`https://kick.com/api/v2/channels/${chan.username}`, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+                    timeout: 5000
+                }).catch(() => null);
+
+                if (v2Res && v2Res.data) {
+                    const followers = v2Res.data.followersCount || 0;
+                    // Not: Abone sayısı her zaman açık olmayabilir, varsayılan 0
+                    const subscribers = v2Res.data.subscriber_count || 0;
+
+                    await db.ref(`channels/${chanId}/stats`).update({
+                        followers,
+                        subscribers,
+                        last_sync: Date.now()
+                    });
+                }
+            } catch (e) {
+                console.error(`Sync Stats Error (${chan.username}):`, e.message);
+            }
+            await sleep(500); // API'yi yormamak için
+        }
+    } catch (e) { }
+}
+
+// Her 10 dakikada bir takipçi/abone sayılarını güncelle
+setInterval(syncChannelStats, 600000);
+syncChannelStats(); // Başlangıçta bir kez çalıştır
+
 // --- ADMIN QUEST MANAGEMENT ---
 app.post('/admin-api/add-quest', authAdmin, async (req, res) => {
     const { name, type, goal, reward } = req.body;
@@ -1996,8 +2038,12 @@ app.get('/dashboard', (req, res) => {
     res.sendFile(path.join(__dirname, 'dashboard.html'));
 });
 
-app.get('/', (req, res) => {
+app.get('/market', (req, res) => {
     res.sendFile(path.join(__dirname, 'shop.html'));
+});
+
+app.get('/goals', (req, res) => {
+    res.sendFile(path.join(__dirname, 'goals.html'));
 });
 
 // Health Check (UptimeRobot için)

@@ -471,6 +471,8 @@
                         class="fas fa-terminal"></i> Komutlar</button></li>
             <li class="nav-item"><button class="nav-btn" onclick="showSection('sounds', event)"><i
                         class="fas fa-volume-up"></i> Ses Paketleri</button></li>
+            <li class="nav-item"><button class="nav-btn" onclick="showSection('goals', event)"><i
+                        class="fas fa-tasks"></i> Hedef Çubukları</button></li>
             <li class="nav-item"><button class="nav-btn" onclick="showSection('overlay', event)"><i
                         class="fas fa-desktop"></i> Yayın Overlay</button></li>
         </ul>
@@ -514,6 +516,22 @@
                     <div class="stat-info">
                         <h4>Toplam İzleme</h4>
                         <div class="value" id="stat-watch">--- dk</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: rgba(255, 174, 0, 0.1); color: #ffae00;"><i
+                            class="fas fa-heart"></i></div>
+                    <div class="stat-info">
+                        <h4>Takipçi Sayısı</h4>
+                        <div class="value" id="stat-followers">---</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: rgba(255, 0, 255, 0.1); color: #ff00ff;"><i
+                            class="fas fa-gem"></i></div>
+                    <div class="stat-info">
+                        <h4>Abone Sayısı</h4>
+                        <div class="value" id="stat-subscribers">---</div>
                     </div>
                 </div>
             </div>
@@ -575,6 +593,83 @@
                     <input type="range" id="sound_volume" class="range-slider" min="0" max="100"
                         oninput="document.getElementById('v-snd').innerText=this.value"
                         onchange="updateSetting('sound_volume', this.value)">
+                </div>
+            </div>
+        </div>
+
+        <!-- GOALS / HEDEF ÇUBUKLARI -->
+        <div id="goals" class="section">
+            <div class="content-card">
+                <h3><i class="fas fa-users" style="color:var(--primary)"></i> Takipçi Hedefi</h3>
+                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
+                    <div class="input-group">
+                        <label>Hedef Başlığı</label>
+                        <input type="text" id="goal_f_title" class="inp" placeholder="Takipçi Hedefimiz"
+                            onchange="updateSetting('goal_f_title', this.value)">
+                    </div>
+                    <div class="input-group">
+                        <label>Hedef Sayı</label>
+                        <input type="number" id="goal_f_target" class="inp" placeholder="1000"
+                            onchange="updateSetting('goal_f_target', this.value)">
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label>Tasarım Seçimi</label>
+                    <select id="goal_f_design" class="inp" onchange="updateSetting('goal_f_design', this.value)">
+                        <option value="minimal">Sade / Minimalist</option>
+                        <option value="cyber">Cyberpunk (Neon)</option>
+                        <option value="glass">Modern Glass (Buzlu Cam)</option>
+                        <option value="gaming">RPG / Gaming Style</option>
+                        <option value="retro">Retro / 8-Bit</option>
+                    </select>
+                </div>
+                <div
+                    style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 12px; border: 1px solid var(--border);">
+                    <label style="font-size: 0.8rem; color: var(--muted); display: block; margin-bottom: 8px;">Takipçi
+                        Barı Overlay Linki</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="overlay_f_link" class="inp" style="height: 40px; font-size: 0.8rem;"
+                            readonly>
+                        <button class="btn btn-outline" style="height: 40px; padding: 0 20px;"
+                            onclick="copyLink('overlay_f_link')">Kopyala</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="content-card">
+                <h3><i class="fas fa-gem" style="color:var(--secondary)"></i> Abone Hedefi</h3>
+                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
+                    <div class="input-group">
+                        <label>Hedef Başlığı</label>
+                        <input type="text" id="goal_s_title" class="inp" placeholder="Abone Hedefimiz"
+                            onchange="updateSetting('goal_s_title', this.value)">
+                    </div>
+                    <div class="input-group">
+                        <label>Hedef Sayı</label>
+                        <input type="number" id="goal_s_target" class="inp" placeholder="100"
+                            onchange="updateSetting('goal_s_target', this.value)">
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label>Tasarım Seçimi</label>
+                    <select id="goal_s_design" class="inp" onchange="updateSetting('goal_s_design', this.value)">
+                        <option value="minimal">Sade / Minimalist</option>
+                        <option value="cyber">Cyberpunk (Neon)</option>
+                        <option value="glass">Modern Glass (Buzlu Cam)</option>
+                        <option value="gaming">RPG / Gaming Style</option>
+                        <option value="retro">Retro / 8-Bit</option>
+                    </select>
+                </div>
+                <div
+                    style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 12px; border: 1px solid var(--border);">
+                    <label style="font-size: 0.8rem; color: var(--muted); display: block; margin-bottom: 8px;">Abone
+                        Barı Overlay Linki</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="overlay_s_link" class="inp" style="height: 40px; font-size: 0.8rem;"
+                            readonly>
+                        <button class="btn btn-outline" style="height: 40px; padding: 0 20px;"
+                            onclick="copyLink('overlay_s_link')">Kopyala</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -661,9 +756,12 @@
                 document.getElementById('overlay-url').value = `${window.location.origin}/overlay?key=${data.overlay_key}`;
 
                 // Stats
-                document.getElementById('stat-users').innerText = data.stats?.users || 0;
-                document.getElementById('stat-msgs').innerText = data.stats?.msgs || 0;
-                document.getElementById('stat-watch').innerText = (data.stats?.watch || 0) + " dk";
+                const st = data.stats || {};
+                document.getElementById('stat-users').innerText = (st.users || 0).toLocaleString();
+                document.getElementById('stat-msgs').innerText = (st.msgs || 0).toLocaleString();
+                document.getElementById('stat-watch').innerText = (st.watch || 0).toLocaleString() + " dk";
+                document.getElementById('stat-followers').innerText = (st.followers || 0).toLocaleString();
+                document.getElementById('stat-subscribers').innerText = (st.subscribers || 0).toLocaleString();
 
                 const s = data.settings || {};
                 const getVal = (v, def) => (v !== undefined ? v : def);
@@ -672,6 +770,16 @@
                 document.getElementById('passive_reward').value = getVal(s.passive_reward, 100);
                 document.getElementById('sr_cost').value = getVal(s.sr_cost, 5000);
                 document.getElementById('tts_cost').value = getVal(s.tts_cost, 2500);
+                document.getElementById('sr_volume').value = getVal(s.sr_volume, 80);
+                document.getElementById('v-sr').innerText = getVal(s.sr_volume, 80);
+
+                // Goals
+                document.getElementById('goal_f_title').value = getVal(s.goal_f_title, "Takipçi Hedefimiz");
+                document.getElementById('goal_f_target').value = getVal(s.goal_f_target, 1000);
+                document.getElementById('goal_f_design').value = getVal(s.goal_f_design, "minimal");
+                document.getElementById('goal_s_title').value = getVal(s.goal_s_title, "Abone Hedefimiz");
+                document.getElementById('goal_s_target').value = getVal(s.goal_s_target, 100);
+                document.getElementById('goal_s_design').value = getVal(s.goal_s_design, "minimal");
 
                 const sliders = { tts_volume: 'v-tts', sound_volume: 'v-snd', sr_volume: 'v-sr' };
                 Object.keys(sliders).forEach(key => {
@@ -679,6 +787,10 @@
                     document.getElementById(key).value = val;
                     document.getElementById(sliders[key]).innerText = val;
                 });
+
+                const overlayLinkBase = `${window.location.origin}/goals?key=${data.overlay_key}`;
+                document.getElementById('overlay_f_link').value = overlayLinkBase + "&type=follower";
+                document.getElementById('overlay_s_link').value = overlayLinkBase + "&type=subscriber";
 
                 renderToggles(s);
                 renderSounds(s.custom_sounds || {});
@@ -829,6 +941,12 @@
         }
 
         init();
+        function copyLink(id) {
+            const input = document.getElementById(id);
+            input.select();
+            document.execCommand('copy');
+            alert('Bağlantı kopyalandı!');
+        }
     </script>
 </body>
 
