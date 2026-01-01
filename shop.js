@@ -47,7 +47,7 @@ let currentPreview = null;
 let currentPreviewTimeout = null;
 
 function init() {
-    const savedUser = localStorage.getItem('kickbot_user');
+    const savedUser = localStorage.getItem('aloskegang_user');
     renderFreeCommands();
     if (savedUser) { login(savedUser); } else { showAuth(); }
     document.getElementById('generate-code-btn').addEventListener('click', startAuth);
@@ -116,7 +116,7 @@ function startAuth() {
 
 function login(user) {
     currentUser = user;
-    localStorage.setItem('kickbot_user', user);
+    localStorage.setItem('aloskegang_user', user);
     authContainer.classList.add('hidden');
     mainContent.classList.remove('hidden');
     document.getElementById('display-name').innerText = user.toUpperCase();
@@ -301,7 +301,7 @@ async function executePurchase(type, trigger, price) {
     showToast("İşlem Başarılı! 🚀", "success");
 }
 
-function logout() { localStorage.removeItem('kickbot_user'); location.reload(); }
+function logout() { localStorage.removeItem('aloskegang_user'); location.reload(); }
 function showToast(msg, type) {
     toast.innerText = msg; toast.className = `toast ${type}`; toast.classList.remove('hidden');
     setTimeout(() => toast.classList.add('hidden'), 3000);
@@ -334,7 +334,7 @@ async function loadLeaderboard() {
         const res = await fetch('/api/leaderboard', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: lbType, channelId: targetBroadcasterId })
+            body: JSON.stringify({ type: lbType, channelId: currentChannelId })
         });
         const list = await res.json();
         container.innerHTML = "";
@@ -350,7 +350,10 @@ async function loadLeaderboard() {
             `;
             container.appendChild(item);
         });
-    } catch (e) { container.innerHTML = "<p>Hata oluştu.</p>"; }
+    } catch (e) {
+        console.error("Leaderboard Tablosu Hatası:", e);
+        container.innerHTML = "<p>Leaderboard şu an yüklenemiyor.</p>";
+    }
 }
 
 async function loadQuests() {
