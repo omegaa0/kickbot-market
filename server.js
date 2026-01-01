@@ -127,7 +127,8 @@ const heistHistory = {}; // { broadcasterId: [timestamp1, timestamp2] }
 const riggedGambles = {};
 const riggedShips = {};
 
-// PKCE
+// PKCE & HELPERS
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 function base64UrlEncode(str) { return str.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''); }
 function generatePKCE() {
     const verifier = base64UrlEncode(crypto.randomBytes(32));
@@ -489,41 +490,35 @@ app.post('/kick/webhook', async (req, res) => {
         const args = rawMsg.trim().split(/\s+/).slice(1);
         const userRef = db.ref('users/' + user.toLowerCase());
 
-        // --- OTOMATİK KAYIT & AKTİFLİK TAKİBİ ---
-        const userSnap = await userRef.once('value');
+        // --- OTOMATİK KAYIT & AKTİFLİK TAKİBİ (ATOMIC TRANSACTION) ---
         const today = getTodayKey();
+        await userRef.transaction(u => {
+            if (!u) {
+                return {
+                    balance: 1000,
+                    last_seen: Date.now(),
+                    last_channel: broadcasterId,
+                    created_at: Date.now(),
+                    lifetime_m: 1, lifetime_g: 0, lifetime_d: 0, lifetime_w: 0,
+                    channel_m: { [broadcasterId]: 1 },
+                    quests: { [today]: { m: 1, g: 0, d: 0, w: 0, claimed: {} } }
+                };
+            } else {
+                if (!u.quests) u.quests = {};
+                if (!u.quests[today]) u.quests[today] = { m: 0, g: 0, d: 0, w: 0, claimed: {} };
+                u.quests[today].m = (u.quests[today].m || 0) + 1;
 
-        if (!userSnap.exists()) {
-            await userRef.set({
-                balance: 1000,
-                last_seen: Date.now(),
-                last_channel: broadcasterId,
-                created_at: Date.now(),
-                lifetime_m: 1, lifetime_g: 0, lifetime_d: 0, lifetime_w: 0,
-                channel_m: { [broadcasterId]: 1 },
-                quests: { [today]: { m: 1, g: 0, d: 0, w: 0, claimed: {} } }
-            });
-        } else {
-            const uData = userSnap.val();
-            const today = getTodayKey();
-            const quests = uData.quests || {};
-            // Initialize today's quest if not exists
-            if (!quests[today]) quests[today] = { m: 0, g: 0, d: 0, w: 0, claimed: {} };
+                if (!u.channel_m) u.channel_m = {};
+                u.channel_m[broadcasterId] = (u.channel_m[broadcasterId] || 0) + 1;
 
-            // Increment message count for today
-            quests[today].m = (quests[today].m || 0) + 1;
-
-            const channelM = uData.channel_m || {};
-            channelM[broadcasterId] = (channelM[broadcasterId] || 0) + 1;
-
-            await userRef.update({
-                last_seen: Date.now(),
-                last_channel: broadcasterId,
-                quests,
-                lifetime_m: (uData.lifetime_m || 0) + 1,
-                channel_m: channelM
-            });
-        }
+                u.last_seen = Date.now();
+                u.last_channel = broadcasterId;
+                u.lifetime_m = (u.lifetime_m || 0) + 1;
+                return u;
+            }
+        }, (err) => {
+            if (err && err.message !== 'set') console.error("Webhook User Update Error:", err.message);
+        }, false);
 
         // KICK ID KAYDET (Susturma işlemleri için)
         if (event.sender?.user_id) {
@@ -894,21 +889,40 @@ app.post('/kick/webhook', async (req, res) => {
                         if (roll < wrSoy) {
                             const totalPot = settings.soygun_reward || 30000;
                             const share = Math.floor(totalPot / activeH.p.length);
-                            activeH.p.forEach(async p => {
-                                const pSnap = await db.ref('users/' + p.toLowerCase()).once('value');
-                                if (!pSnap.val()?.is_infinite) {
-                                    await db.ref('users/' + p.toLowerCase()).transaction(u => {
-                                        if (!u) u = { balance: 0 };
+                            // Ödülleri dağıt (Atomic Transaction)
+                            for (const p of activeH.p) {
+                                const pRef = db.ref('users/' + p.toLowerCase());
+                                await pRef.transaction(u => {
+                                    if (!u) {
+                                        return {
+                                            balance: 1000 + share,
+                                            last_seen: Date.now(),
+                                            last_channel: broadcasterId,
+                                            created_at: Date.now(),
+                                            lifetime_m: 0, lifetime_g: 0, lifetime_d: 0, lifetime_w: 0,
+                                            channel_m: {},
+                                            quests: {}
+                                        };
+                                    }
+                                    if (!u.is_infinite) {
                                         u.balance = (u.balance || 0) + share;
-                                        return u;
-                                    });
-                                }
-                            });
+                                    }
+                                    return u;
+                                }, (err) => {
+                                    if (err) console.error(`Soygun Payout Error (${p}):`, err.message);
+                                }, false);
+                            }
                             await reply(`💥 BANKA PATLADI! Ekip toplam ${totalPot.toLocaleString()} 💰 kaptı! Kişi başı: +${share.toLocaleString()} 💰`);
                         } else {
-                            activeH.p.forEach(async p => {
-                                await db.ref('users/' + p.toLowerCase()).update({ job: "İşsiz" });
-                            });
+                            // Polis baskını (Kaybetme durumu)
+                            for (const p of activeH.p) {
+                                await db.ref('users/' + p.toLowerCase()).transaction(u => {
+                                    if (u) u.job = "İşsiz";
+                                    return u;
+                                }, (err) => {
+                                    if (err) console.error(`Soygun Jail Error (${p}):`, err.message);
+                                }, false);
+                            }
                             await reply(`🚔 POLİS BASKINI! Soygun başarısız, herkes paket oldu ve işinden kovuldu! 👮‍♂️🚨`);
                         }
                     }, 90000);
@@ -1730,10 +1744,14 @@ async function trackWatchTime() {
                 const settings = chan.settings || {};
                 const rewardPerMin = (parseFloat(settings.passive_reward) || 100) / 10;
 
-                // 3. Tek döngüde herkesi işle
+                // 3. Tek döngüde herkesi işle (THROTTLED BATCH)
                 const processedUsers = new Set();
-                for (const user of watchList) {
+                const usersToProcess = Array.from(watchList);
+
+                for (let i = 0; i < usersToProcess.length; i++) {
+                    const user = usersToProcess[i];
                     if (!user) continue;
+
                     const userRef = db.ref('users/' + user.toLowerCase());
                     userRef.transaction(u => {
                         if (!u) {
@@ -1766,7 +1784,11 @@ async function trackWatchTime() {
                     }, (err) => {
                         if (err && err.message !== 'set') console.error(`Watch Error (${user}):`, err.message);
                     }, false);
+
                     processedUsers.add(user.toLowerCase());
+
+                    // Her 10 kullanıcıda bir küçük ara ver (DB yükünü dağıtmak için)
+                    if (i % 10 === 0) await sleep(50);
                 }
                 if (processedUsers.size > 0) {
                     console.log(`✅ İzleme işlendi: Kanal ${chan.username}, ${processedUsers.size} kullanıcı.`);
