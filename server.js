@@ -1685,16 +1685,27 @@ async function trackWatchTime() {
                 const watchList = new Set();
                 const today = getTodayKey();
 
-                // 1. Chatters API
+                // Sync with Chatters API
+                const chattersRes = await axios.get(`https://kick.com/api/v2/channels/${chan.username}/chatters`, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+                    timeout: 4000
+                }).catch(() => null);
+
+                // 1. Chatters API'den gelenler
                 if (chattersRes && chattersRes.data && chattersRes.data.chatters) {
                     const cData = chattersRes.data;
-                    [
-                        ...(cData.chatters.broadcaster || []),
-                        ...(cData.chatters.moderators || []),
-                        ...(cData.chatters.staff || []),
-                        ...(cData.chatters.vips || []),
-                        ...(cData.chatters.viewers || [])
-                    ].forEach(u => watchList.add(u.toLowerCase()));
+                    const c = cData.chatters;
+                    const allStrings = [
+                        ...(c.broadcaster || []),
+                        ...(c.moderators || []),
+                        ...(c.staff || []),
+                        ...(c.vips || []),
+                        ...(c.viewers || [])
+                    ];
+                    allStrings.forEach(u => {
+                        if (u && typeof u === 'string') watchList.add(u.toLowerCase());
+                        else if (u && u.username) watchList.add(u.username.toLowerCase());
+                    });
                 }
 
                 // 2. Fallback: Son 10 dk içinde bu kanalda aktif olanlar
