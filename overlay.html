@@ -124,6 +124,36 @@
         let ttsVol = 1.0;
         let soundVol = 0.8;
 
+        let songQueue = [];
+        let isPlaying = false;
+        let playerReady = false;
+        let player;
+
+        // YouTube API Hazır Olduğunda Çalışır
+        window.onYouTubeIframeAPIReady = function () {
+            logDebug("YouTube API Yüklendi. Player oluşturuluyor...");
+            player = new YT.Player('player', {
+                height: '170',
+                width: '300',
+                playerVars: {
+                    'autoplay': 1,
+                    'controls': 0,
+                    'modestbranding': 1,
+                    'origin': window.location.origin,
+                    'enablejsapi': 1
+                },
+                events: {
+                    'onReady': () => {
+                        logDebug("✅ Player Fiziksel Olarak Hazır!");
+                        playerReady = true;
+                        if (typeof processQueue === 'function') processQueue();
+                    },
+                    'onStateChange': (e) => { if (typeof onPlayerStateChange === 'function') onPlayerStateChange(e); },
+                    'onError': (e) => { if (typeof onPlayerError === 'function') onPlayerError(e); }
+                }
+            });
+        };
+
         function showNotification(title, text, icon, duration) {
             if (!duration) duration = 5000;
             const box = document.getElementById('notification-box');
@@ -240,42 +270,23 @@
                         });
 
                     // Song Requests Dinle
-                    let songQueue = [];
-                    let isPlaying = false;
-                    let playerReady = false;
-                    let player;
-
-                    window.onYouTubeIframeAPIReady = function () {
-                        logDebug("YouTube API Hazır. Player oluşturuluyor...");
-                        player = new YT.Player('player', {
-                            height: '170',
-                            width: '300',
-                            playerVars: { 'autoplay': 1, 'controls': 0, 'modestbranding': 1, 'origin': window.location.origin },
-                            events: {
-                                'onReady': () => { logDebug("Player Hazır!"); playerReady = true; processQueue(); },
-                                'onStateChange': onPlayerStateChange,
-                                'onError': onPlayerError
-                            }
-                        });
-                    };
-
-                    function onPlayerStateChange(event) {
+                    window.onPlayerStateChange = function (event) {
                         logDebug("Player Durum Değişti: " + event.data);
                         if (event.data === YT.PlayerState.ENDED) {
                             isPlaying = false;
                             document.getElementById('yt-player-container').style.display = 'none';
                             processQueue();
                         }
-                    }
+                    };
 
-                    function onPlayerError(e) {
+                    window.onPlayerError = function (e) {
                         logDebug("Player Hatası: " + e.data);
                         isPlaying = false;
                         document.getElementById('yt-player-container').style.display = 'none';
                         processQueue();
-                    }
+                    };
 
-                    function processQueue() {
+                    window.processQueue = function () {
                         if (songQueue.length > 0 && !isPlaying) {
                             if (!playerReady) {
                                 logDebug("Player henüz tamamen hazır değil, bekleniyor...");
@@ -285,7 +296,7 @@
                             logDebug("Kuyruktan şarkı alınıyor: " + next.query);
                             playSong(next);
                         }
-                    }
+                    };
 
                     function getYouTubeId(url) {
                         const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?)|(shorts\/))\??v?=?([^#&?]*).*/;
