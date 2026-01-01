@@ -262,23 +262,35 @@
                     }
 
                     function playSong(data) {
-                        isPlaying = true;
-                        document.getElementById('yt-player-container').style.display = 'block';
-                        showNotification("ŞARKI İSTEĞİ", data.user + " bir şarkı açtı!", "🎵");
-
-                        // Link mi yoksa arama terimi mi?
-                        if (data.query.includes('youtube.com/') || data.query.includes('youtu.be/')) {
-                            const url = new URL(data.query.replace('watch?v=', 'v/'));
+                        try {
+                            const query = data.query.trim();
                             let videoId = "";
-                            if (data.query.includes('youtu.be/')) videoId = data.query.split('/').pop();
-                            else videoId = new URLSearchParams(new URL(data.query).search).get('v');
-                            player.loadVideoById(videoId);
-                        } else {
-                            // Link değilse direkt link olarak kabul edemeyiz ama YouTube API search gerektirir.
-                            // Basitlik için link zorunlu tutulabilir veya arama başlığı gösterilir.
-                            showNotification("BİLGİ", "Lütfen YouTube linki kullanın!", "⚠️");
+
+                            if (query.includes('youtu.be/')) {
+                                videoId = query.split('/').pop().split('?')[0];
+                            } else if (query.includes('youtube.com/')) {
+                                if (query.includes('v=')) {
+                                    videoId = query.split('v=')[1].split('&')[0];
+                                } else if (query.includes('embed/')) {
+                                    videoId = query.split('embed/')[1].split('?')[0];
+                                }
+                            }
+
+                            if (videoId && player && typeof player.loadVideoById === 'function') {
+                                isPlaying = true;
+                                document.getElementById('yt-player-container').style.display = 'block';
+                                showNotification("ŞARKI İSTEĞİ", data.user + " bir şarkı açtı!", "🎵");
+                                player.loadVideoById(videoId);
+                            } else {
+                                console.log("Geçersiz link veya player hazır değil:", query);
+                                isPlaying = false;
+                                document.getElementById('yt-player-container').style.display = 'none';
+                                processQueue();
+                            }
+                        } catch (e) {
+                            console.error("Şarkı oynatma hatası:", e);
                             isPlaying = false;
-                            document.getElementById('yt-player-container').style.display = 'none';
+                            processQueue();
                         }
                     }
 

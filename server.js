@@ -1145,9 +1145,9 @@ app.post('/kick/webhook', async (req, res) => {
                 await reply(`🎵 @${user}, ${soundTrigger} sesi çalınıyor! (-${soundCost.toLocaleString()} 💰)`);
             }
 
-            else if (lowMsg.startsWith('!sr ') || lowMsg.startsWith('!şarkı ')) {
+            else if ((lowMsg === '!sr' || lowMsg.startsWith('!sr ') || lowMsg === '!şarkı' || lowMsg.startsWith('!şarkı ')) && isEnabled('sr')) {
                 const query = args.join(' ');
-                if (!query) return await reply(`@${user}, !sr [şarkı adı veya link] şeklinde kullanmalısın!`);
+                if (!query) return await reply(`@${user}, !sr [şarkı adı veya YouTube linki] şeklinde kullanmalısın! 🎵`);
 
                 const srCost = settings.sr_cost || 5000;
                 const snap = await userRef.once('value');
@@ -1164,7 +1164,7 @@ app.post('/kick/webhook', async (req, res) => {
                     timestamp: Date.now()
                 });
 
-                await reply(`🎵 @${user}, Şarkı isteğin sıraya eklendi! (-${srCost.toLocaleString()} 💰)`);
+                await reply(`🎵 @${user}, Şarkı isteğin sıraya eklendi! Şarkı: ${query.length > 30 ? query.substring(0, 30) + '...' : query} (-${srCost.toLocaleString()} 💰)`);
             }
 
             else if (lowMsg.startsWith('!kredi')) {
