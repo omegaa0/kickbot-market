@@ -256,25 +256,26 @@
 
                     function processQueue() {
                         if (songQueue.length > 0 && !isPlaying) {
+                            if (!player || typeof player.loadVideoById !== 'function') {
+                                console.log("Player henüz hazır değil, bekleniyor...");
+                                setTimeout(processQueue, 1000);
+                                return;
+                            }
                             const next = songQueue.shift();
                             playSong(next);
                         }
                     }
 
+                    function getYouTubeId(url) {
+                        const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?)|(shorts\/))\??v?=?([^#&?]*).*/;
+                        const match = url.match(regExp);
+                        return (match && (match[8].length === 11)) ? match[8] : null;
+                    }
+
                     function playSong(data) {
                         try {
                             const query = data.query.trim();
-                            let videoId = "";
-
-                            if (query.includes('youtu.be/')) {
-                                videoId = query.split('/').pop().split('?')[0];
-                            } else if (query.includes('youtube.com/')) {
-                                if (query.includes('v=')) {
-                                    videoId = query.split('v=')[1].split('&')[0];
-                                } else if (query.includes('embed/')) {
-                                    videoId = query.split('embed/')[1].split('?')[0];
-                                }
-                            }
+                            const videoId = getYouTubeId(query);
 
                             if (videoId && player && typeof player.loadVideoById === 'function') {
                                 isPlaying = true;
