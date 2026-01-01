@@ -569,7 +569,7 @@ app.post('/kick/webhook', async (req, res) => {
                 const lastTrigger = iiremCooldowns[user.toLowerCase()] || 0;
                 if (now - lastTrigger > 10800000) { // 3 Saat
                     iiremCooldowns[user.toLowerCase()] = now;
-                    await reply("Chatte ardahanlı tespit edildi.");
+                    await reply("Chatte Ardahanlı tespit edildi.");
                 }
             }
 
