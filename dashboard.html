@@ -718,18 +718,30 @@
                 </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                <div class="content-card">
-                    <h3><i class="fas fa-vial"></i> Test</h3>
-                    <button class="btn btn-outline" style="width:100%;" onclick="testFireworks()"><i
-                            class="fas fa-firework"></i> FİŞEK TESTİ</button>
-                </div>
-                <div class="content-card">
-                    <h3><i class="fas fa-sync"></i> Yenile</h3>
-                    <button class="btn btn-outline" style="width:100%;" onclick="reloadOverlay()"><i
-                            class="fas fa-sync"></i> OVERLAY YENİLE</button>
+            <div class="content-card">
+                <h3><i class="fas fa-horse" style="color:#f1c40f"></i> At Yarışı Overlay Bağlantısı</h3>
+                <div
+                    style="background: rgba(0,0,0,0.4); padding: 20px; border-radius: 16px; border: 1px dashed #f1c40f; display: flex; align-items: center; gap: 15px;">
+                    <input type="text" id="horse-race-url" readonly
+                        style="flex:1; background:none; border:none; color:#f1c40f; font-family:monospace;">
+                    <button class="btn btn-primary" style="background:#f1c40f; border-color:#f1c40f; color:black;"
+                        onclick="copyHorseRace()">KOPYALA</button>
                 </div>
             </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div class="content-card">
+                <h3><i class="fas fa-vial"></i> Test</h3>
+                <button class="btn btn-outline" style="width:100%;" onclick="testFireworks()"><i
+                        class="fas fa-firework"></i> FİŞEK TESTİ</button>
+            </div>
+            <div class="content-card">
+                <h3><i class="fas fa-sync"></i> Yenile</h3>
+                <button class="btn btn-outline" style="width:100%;" onclick="reloadOverlay()"><i
+                        class="fas fa-sync"></i> OVERLAY YENİLE</button>
+            </div>
+        </div>
         </div>
     </main>
 
@@ -754,6 +766,7 @@
                 channelData = data;
                 document.getElementById('channel-name').innerText = `@${data.username}`;
                 document.getElementById('overlay-url').value = `${window.location.origin}/overlay?key=${data.overlay_key}`;
+                document.getElementById('horse-race-url').value = `${window.location.origin}/horse-race?key=${data.overlay_key}`;
 
                 // Stats
                 const st = data.stats || {};
@@ -918,6 +931,13 @@
             el.select();
             document.execCommand('copy');
             alert("Kopyalandı!");
+        }
+
+        function copyHorseRace() {
+            const el = document.getElementById('horse-race-url');
+            el.select();
+            document.execCommand('copy');
+            alert("At Yarışı Overlay Linki Kopyalandı!");
         }
 
         async function testFireworks() {

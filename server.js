@@ -26,7 +26,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // GÜVENLİK: Tüm dosyaların dışarı sızmasını engelle (manifest, .env vb.)
 // Sadece gerekli dosyaları public yapıyoruz
-const publicFiles = ['shop.js', 'shop.css', 'admin.html', 'dashboard.html', 'shop.html', 'overlay.html', 'goals.html'];
+const publicFiles = ['shop.js', 'shop.css', 'admin.html', 'dashboard.html', 'shop.html', 'overlay.html', 'goals.html', 'horse-race.html'];
 publicFiles.forEach(file => {
     app.get(`/${file}`, (req, res) => res.sendFile(path.join(__dirname, file)));
 });
@@ -2073,8 +2073,12 @@ async function startHorseRace(broadcasterId) {
     const winner = Math.floor(Math.random() * 5) + 1;
 
     // Overlay'e event gönder
+    const winners = race.bets.filter(b => b.horse === winner);
+    const winnerNames = winners.length > 0 ? winners.map(w => w.user) : [];
+
     await db.ref(`channels/${broadcasterId}/stream_events/horse_race`).push({
         winner: winner,
+        winnerNames: winnerNames,
         timestamp: Date.now(),
         played: false
     });
@@ -2224,6 +2228,10 @@ app.get('/market', (req, res) => {
 
 app.get('/goals', (req, res) => {
     res.sendFile(path.join(__dirname, 'goals.html'));
+});
+
+app.get('/horse-race', (req, res) => {
+    res.sendFile(path.join(__dirname, 'horse-race.html'));
 });
 
 app.get('/debug-stats', async (req, res) => {

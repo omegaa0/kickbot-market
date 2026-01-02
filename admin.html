@@ -708,7 +708,7 @@
         <script>
             let sessionKey = "";
             let rawUsers = {};
-            const COMMANDS = ['slot', 'yazitura', 'kutu', 'duello', 'soygun', 'fal', 'ship', 'hava', 'zenginler', 'tts', 'ses'];
+            const COMMANDS = ['slot', 'yazitura', 'kutu', 'duello', 'soygun', 'fal', 'ship', 'hava', 'zenginler', 'tts', 'ses', 'atyarisi', 'sr'];
             const JOBS = ["İşsiz", "Simitçi", "Çöpçü", "Kurye", "Garson", "Berber", "Tamirci", "Madenci", "Memur", "Öğretmen", "Avukat", "Yazılımcı", "Mimar", "Doktor", "Kaptan", "Pilot", "Bilim İnsanı", "Kumarbaz", "CEO", "Astronot"];
             let logInterval = null;
 
@@ -863,6 +863,7 @@
                     const s = data.settings || {};
                     const getVal = (v, def) => (v !== undefined ? v : def);
                     const overlayUrl = `${window.location.origin}/overlay?key=${data.overlay_key || 'YOK'}`;
+                    const horseRaceUrl = `${window.location.origin}/horse-race?key=${data.overlay_key || 'YOK'}`;
 
                     const html = `
                     <div class="card">
@@ -886,6 +887,10 @@
                             <div style="background:#000; padding:12px; border-radius:10px; border:1px solid #222; margin-bottom:12px;">
                                 <label style="font-size:0.7rem; color:var(--primary);">OVERLAY BAĞLANTISI</label>
                                 <input type="text" readonly value="${overlayUrl}" class="inp" style="height:32px; font-size:0.7rem; margin:5px 0;" onclick="this.select(); document.execCommand('copy'); alert('Overlay linki kopyalandı!')">
+                                
+                                <label style="font-size:0.7rem; color:#f1c40f; margin-top:10px; display:block;">AT YARIŞI BAĞLANTISI</label>
+                                <input type="text" readonly value="${horseRaceUrl}" class="inp" style="height:32px; font-size:0.7rem; margin:5px 0; border-color:#f1c40f; color:#f1c40f;" onclick="this.select(); document.execCommand('copy'); alert('At Yarışı linki kopyalandı!')">
+
                                 <button class="btn btn-small" onclick="resetOverlayKey('${id}')">🔑 ANAHTARI SIFIRLA</button>
                                 <div style="display:flex; gap:5px; margin-top:10px;">
                                     <button class="btn btn-small" style="background:#ff0055; flex:1;" onclick="testFireworks('${id}')">🎆 FİŞEK TEST</button>
