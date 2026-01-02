@@ -1068,18 +1068,31 @@ app.post('/kick/webhook', async (req, res) => {
                 await reply(`🚬 @${user} Efkar Seviyesi: %${p} ${p > 70 ? '😩🚬' : '🍷'}`);
             }
 
-            else if (isEnabled('fal') && lowMsg.startsWith('!burç')) {
+            else if (isEnabled('fal') && (lowMsg.startsWith('!burç') || lowMsg.startsWith('!burc'))) {
                 const signs = ['koc', 'boga', 'ikizler', 'yengec', 'aslan', 'basak', 'terazi', 'akrep', 'yay', 'oglak', 'kova', 'balik'];
-                let sign = args[0]?.toLowerCase()
-                    .replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ü/g, 'u')
+                let signInput = args[0]?.toLowerCase() || "";
+                let sign = signInput.replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ü/g, 'u')
                     .replace(/ş/g, 's').replace(/ç/g, 'c').replace(/ğ/g, 'g');
 
                 if (!sign || !signs.includes(sign)) return await reply(`@${user}, Kullanım: !burç koç, aslan, balık...`);
 
                 try {
-                    const res = await axios.get(`https://isaretapi.herokuapp.com/burc/${sign}`, { timeout: 4000 }).catch(() => null);
-                    if (res && res.data && res.data.yorum) {
-                        await reply(`✨ @${user} [${sign.toUpperCase()}]: ${res.data.yorum}`);
+                    // Daha stabil bir Vercel API endpoint'i deniyoruz
+                    const res = await axios.get(`https://burc-yorumlari.vercel.app/get/${sign}`, {
+                        timeout: 5000,
+                        headers: { 'User-Agent': 'Mozilla/5.0' }
+                    }).catch(() => null);
+
+                    let yorum = "";
+                    if (res && res.data) {
+                        const data = Array.isArray(res.data) ? res.data[0] : res.data;
+                        yorum = data.GunlukYorum || data.yorum || data.Yorum;
+                    }
+
+                    if (yorum && yorum.length > 10) {
+                        // Fazla boşlukları temizle
+                        yorum = yorum.replace(/\s+/g, ' ').trim();
+                        await reply(`✨ @${user} [${sign.toUpperCase()}]: ${yorum}`);
                     } else {
                         const generic = ["Bugün yıldızlar senin için parlıyor! 🌟", "Maddi konularda şanslı bir gün. 💰", "Aşk hayatında sürprizler olabilir. ❤️", "Enerjin bugün çok yüksek! ⚡", "Dinlenmeye vakit ayırmalısın. 🛌"];
                         await reply(`✨ @${user} [${sign.toUpperCase()}]: ${generic[Math.floor(Math.random() * generic.length)]}`);
@@ -1109,11 +1122,6 @@ app.post('/kick/webhook', async (req, res) => {
                 await reply(`🔪 @${user} Keko Seviyesi: %${p} ${p > 70 ? '🚬 Semt çocuğu!' : '🏙️'}`);
             }
 
-            else if (isEnabled('fal') && lowMsg.startsWith('!ask') || lowMsg.startsWith('!aşk')) {
-                const target = args[0]?.replace('@', '') || "Bot";
-                const p = Math.floor(Math.random() * 101);
-                await reply(`❤️ @${user} & @${target} Aşk Uyumu: %${p} ${p > 80 ? '💍' : '💔'}`);
-            }
 
             // --- YENİ BAKİYE HARCAMA KOMUTLARI: TTS & SES ---
             else if (lowMsg.startsWith('!tts')) {

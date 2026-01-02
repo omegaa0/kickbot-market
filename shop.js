@@ -20,18 +20,26 @@ let currentUser = null;
 let currentChannelId = null;
 
 const FREE_COMMANDS = [
-    { cmd: "!bakiye", desc: "Mevcut paranı sorgula" },
-    { cmd: "!günlük", desc: "Günlük hediye paranı al" },
-    { cmd: "!çalış", desc: "Mesleğinde çalışıp para kazan" },
-    { cmd: "!slot [miktar]", desc: "Slot makinesinde şansını dene" },
-    { cmd: "!yazitura [miktar] [yazı/tura]", desc: "Yazı-tura bahis oyunu" },
-    { cmd: "!kutu [miktar]", desc: "Gizemli kutu aç" },
-    { cmd: "!duello @isim [miktar]", desc: "Başkasına meydan oku" },
-    { cmd: "!soygun", desc: "Bebeklerle banka soy" },
-    { cmd: "!zenginler", desc: "Kanalın en zenginlerini gör" },
-    { cmd: "!fal", desc: "Geleceğine dair ipucu al" },
-    { cmd: "!ship @isim", desc: "Aşk uyumunuzu test et" },
-    { cmd: "!hava [şehir]", desc: "Hava durumunu öğren" }
+    { cmd: "!bakiye", desc: "Mevcut paranı sorgular" },
+    { cmd: "!günlük", desc: "Günlük hediye paranı alır" },
+    { cmd: "!kredi", desc: "Timeout karşılığı bakiye alır" },
+    { cmd: "!zenginler", desc: "Kanalın en zenginlerini listeler" },
+    { cmd: "!slot [miktar]", desc: "Slot makinesinde şansını dener" },
+    { cmd: "!yazitura [miktar] [y/t]", desc: "Yazı-tura bahis oyunu" },
+    { cmd: "!kutu [miktar]", desc: "Gizemli kutu açar" },
+    { cmd: "!duello @isim [miktar]", desc: "Başkasına meydan okur" },
+    { cmd: "!soygun", desc: "Banka soygunu başlatır/katılır" },
+    { cmd: "!atyarışı [miktar] [1-5]", desc: "At yarışına bahis yatırır" },
+    { cmd: "!piyango katıl", desc: "Aktif piyangoya bilet alır" },
+    { cmd: "!fal", desc: "Geleceğine dair ipucu alır" },
+    { cmd: "!burç [burç]", desc: "Günlük burç yorumunu çeker" },
+    { cmd: "!söz", desc: "Rastgele anlamlı bir söz paylaşır" },
+    { cmd: "!efkar", desc: "Efkar seviyesini ölçer" },
+    { cmd: "!hava [şehir]", desc: "Hava durumunu öğrenir" },
+    { cmd: "!toxic", desc: "Toksiklik oranını ölçer" },
+    { cmd: "!karizma", desc: "Karizma oranını ölçer" },
+    { cmd: "!gay", desc: "Gaylik oranını ölçer" },
+    { cmd: "!keko", desc: "Kekoluk oranını ölçer" }
 ];
 
 // UI Elements
