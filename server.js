@@ -174,7 +174,7 @@ async function updateGlobalStocks() {
 
 // Borsa güncelleme (Her 1 dakikada bir)
 setInterval(updateGlobalStocks, 60000);
-setTimeout(updateGlobalStocks, 5000); // Server açıldıktan 5sn sonra ilk güncelleme
+updateGlobalStocks(); // Server açıldığında hemen ilk verileri oluştur
 
 // PKCE & HELPERS
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
