@@ -1067,7 +1067,27 @@ app.post('/kick/webhook', async (req, res) => {
                     "Bugün şansın %99, bir piyango bileti denemeye ne dersin? 🎫",
                     "Eski bir arkadaşın seni anıyor, bir mesaj atmanın vakti geldi. 📩",
                     "Hayatın sana fısıldadığı küçük mutlulukları görmezden gelme. 🌸",
-                    "Kendi değerini bildiğin sürece kimse seni yolundan alıkoyamaz. 🛡️"
+                    "Kendi değerini bildiğin sürece kimse seni yolundan alıkoyamaz. 🛡️",
+                    "Bugün şansın yaver gidecek, beklemediğin bir yerden sürpriz bir hediye alabilirsin. 🎁",
+                    "Biraz daha sabırlı olursan, arzuladığın şeylerin gerçekleştiğini göreceksin. 🧘‍♂️",
+                    "Sosyal bir aktivite sana yeni kapılar açabilir, davetleri geri çevirme. 🎟️",
+                    "Finansal konularda bir ferahlama dönemine giriyorsun, harcamalarına yine de dikkat et. 💳",
+                    "İş hayatında üstlerinden takdir alabilirsin, emeğinin karşılığını alma vaktin yaklaşıyor. 💼",
+                    "Eski bir hatıra bugün yüzünde bir gülümseme oluşturacak. ✨",
+                    "Önemli bir karar vermeden önce en yakın dostuna danışmayı unutma. 🤝",
+                    "Bugün yaratıcılığın zirvede, yarım kalan projelerine odaklanmak için harika bir gün. 🎨",
+                    "Huzur bulacağın bir ortama gireceksin, tüm stresin uçup gidecek. 🌿",
+                    "Kendine daha fazla zaman ayırmalısın, ruhunu dinlendirmek sana çok iyi gelecek. 🛀",
+                    "Beklenmedik bir seyahat teklifi gelebilir, yeni yerler keşfetmeye hazır ol. 🚗",
+                    "Ailenden birinin sana bir müjdesi var, akşamı heyecanla bekleyebilirsin. 🏠",
+                    "Bugün cesur ol, istediğin o adımı atmanın tam zamanı. 💪",
+                    "İçindeki kıvılcımı söndürme, hayallerin sandığından çok daha yakın. 🔥",
+                    "Birinin hayatına dokunacaksın, yaptığın küçük bir iyilik büyük bir geri dönüş yapacak. ❤️",
+                    "Zihnindeki karmaşa bugün netleşiyor, aradığın cevapları bulacaksın. 🧠",
+                    "Bugün doğa ile iç içe vakit geçirmen enerjini yükseltecek. 🌳",
+                    "Başarı basamaklarını azimle tırmanıyorsun, kimsenin seni durdurmasına izin verme. 🚀",
+                    "Bugün aldığın bir haber moralini çok yükseltecek, kutlamaya hazır ol! 🎉",
+                    "İyimserliğini koru, evren senin için güzel şeyler hazırlıyor. ✨"
                 ];
                 await reply(`🔮 @${user}, Falın: ${list[Math.floor(Math.random() * list.length)]}`);
             }
@@ -1110,6 +1130,7 @@ app.post('/kick/webhook', async (req, res) => {
             }
 
             else if (settings.hava !== false && (lowMsg === '!hava' || lowMsg.startsWith('!hava '))) {
+                const city = args.join(' ');
                 const cityLower = city.toLowerCase();
                 if (cityLower === "kürdistan" || cityLower === "rojova" || cityLower === "rojava") {
                     return await reply("T.C. sınırları içerisinde böyle bir yer bulunamadı! 🇹🇷");
@@ -1164,7 +1185,27 @@ app.post('/kick/webhook', async (req, res) => {
                     "Engeller, gözlerini hedeften ayırdığında karşına çıkan korkunç şeylerdir.",
                     "Bir insanın gerçek zenginliği, bu dünyada yaptığı iyiliklerdir.",
                     "Karanlıktan şikayet edeceğine bir mum da sen yak.",
-                    "En büyük zafer, hiç düşmemek değil, her düştüğünde ayağa kalkmaktır. - Konfüçyüs"
+                    "En büyük zafer, hiç düşmemek değil, her düştüğünde ayağa kalkmaktır. - Konfüçyüs",
+                    "Düşlemek, her şeyin başlangıcıdır.",
+                    "Büyük başarılar, küçük adımların birikimidir.",
+                    "Kendine inan, dünyanın sana inanması için ilk adım budur.",
+                    "Güneşin doğuşu her gün yeni bir şansın habercisidir.",
+                    "Yüreğin neredeyse, hazinen de oradadır.",
+                    "Engeller, yolu uzatan değil, seni güçlendiren basamaklardır.",
+                    "Hayat, senin ona ne kattığınla anlam kazanır.",
+                    "Küçük bir gülümseme, en karanlık günü bile aydınlatabilir.",
+                    "Asla pes etme; mucizeler bazen sabrın sonundadır.",
+                    "Kendi yolunu çiz, başkalarının izinden gitmek seni özgün yapmaz.",
+                    "Sevgi, dilleri konuşulmayan ama kalplerle anlaşılan en büyük güçtür.",
+                    "Bilgi ışık gibidir, paylaştıkça çevreni daha çok aydınlatır.",
+                    "Zaman, en kıymetli hazinedir; onu nasıl harcadığına dikkat et.",
+                    "Zorluklar, karakterin çelikleştiği fırınlardır.",
+                    "İyilik yap, denize at; balık bilmezse Halik bilir.",
+                    "Gelecek, bugün ne yaptığına bağlıdır.",
+                    "Hayallerin, ruhunun kanatlarıdır; onları asla kırma.",
+                    "Dürüstlük, en iyi politikadır.",
+                    "Başka birinin ışığını söndürmek, senin ışığını daha parlak yapmaz.",
+                    "Hayat bir yankıdır; ne gönderirsen o geri gelir."
                 ];
                 await reply(`✍️ @${user}: ${list[Math.floor(Math.random() * list.length)]}`);
             }
