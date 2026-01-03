@@ -152,7 +152,7 @@ async function updateGlobalStocks() {
         for (const [code, data] of Object.entries(stocks)) {
             const oldPrice = data.price;
             // %50 şansla artış veya azalış
-            const changePercent = (Math.random() * 8 - 4) / 100; // -%4 ile +%4 arası
+            const changePercent = (Math.random() * 40 - 20) / 100; // -%20 ile +%20 arası
             let newPrice = Math.floor(oldPrice * (1 + changePercent));
 
             if (newPrice < 10) newPrice = 10;
