@@ -1287,6 +1287,41 @@ app.post('/kick/webhook', async (req, res) => {
                 if (rig !== undefined) delete riggedStats[user.toLowerCase()].prenses;
             }
 
+            else if (lowMsg.startsWith('!ai')) {
+                const isSub = event.sender?.identity?.badges?.some(b => b.type === 'subscriber' || b.type === 'broadcaster' || b.type === 'moderator' || b.type === 'founder');
+                if (!isSub) return await reply(`🤫 @${user}, Bu komut sadece ABONELERE özeldir! ✨`);
+
+                const prompt = args.join(' ');
+                if (!prompt) return await reply(`🤖 @${user}, AI'ya bir şey sormak için: !ai [sorun]`);
+
+                const GROK_KEY = process.env.GROK_API_KEY;
+                if (!GROK_KEY) return await reply(`⚠️ @${user}, AI sistemi şu an yapılandırılmamış.`);
+
+                try {
+                    const response = await axios.post('https://api.x.ai/v1/chat/completions', {
+                        messages: [
+                            { role: "system", content: "Sen samimi, dürüst ve yardımsever bir yayıncı asistanısın. Kısa ve öz cevaplar ver. Her zaman Türkçe konuş." },
+                            { role: "user", content: prompt }
+                        ],
+                        model: "grok-beta",
+                        temperature: 0.7
+                    }, {
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${GROK_KEY}`
+                        },
+                        timeout: 10000
+                    });
+
+                    const replyText = response.data.choices[0].message.content;
+                    const finalReply = replyText.length > 400 ? replyText.substring(0, 397) + "..." : replyText;
+                    await reply(`🤖 @${user}: ${finalReply}`);
+                } catch (error) {
+                    console.error("Grok API Error:", error.response?.data || error.message);
+                    await reply(`❌ @${user}, AI şu an dinleniyor, daha sonra tekrar dene!`);
+                }
+            }
+
 
             // --- YENİ BAKİYE HARCAMA KOMUTLARI: TTS & SES ---
             else if (lowMsg.startsWith('!tts')) {
@@ -1661,7 +1696,7 @@ app.post('/kick/webhook', async (req, res) => {
             else if (lowMsg === '!komutlar') {
                 const toggleable = ['slot', 'yazitura', 'kutu', 'duello', 'soygun', 'fal', 'ship', 'hava', 'zenginler', 'soz'];
                 const enabled = toggleable.filter(k => settings[k] !== false).map(k => "!" + k);
-                const fixed = ['!bakiye', '!günlük', '!sustur', '!efkar', '!veriler', '!prenses'];
+                const fixed = ['!bakiye', '!günlük', '!sustur', '!efkar', '!veriler', '!prenses', '!ai'];
                 await reply(`📋 Komutlar: ${[...enabled, ...fixed].join(', ')}`);
             }
         }
