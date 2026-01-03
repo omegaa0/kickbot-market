@@ -2371,6 +2371,15 @@ app.get('/debug-stats', async (req, res) => {
 // Health Check (UptimeRobot için)
 app.get('/health', (req, res) => res.status(200).send('OK (Bot Uyanık)'));
 
+app.get('/api/borsa', async (req, res) => {
+    try {
+        const snap = await db.ref('global_stocks').once('value');
+        res.json(snap.val() || INITIAL_STOCKS);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // Arka plan görevleri (Mute, TTS, Ses bildirimleri)
 
 // ---------------------------------------------------------

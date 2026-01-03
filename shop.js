@@ -333,46 +333,73 @@ function switchTab(id) {
     if (id === 'profile') loadProfile();
 }
 
+let borsaActive = false;
 async function loadBorsa() {
     const container = document.getElementById('borsa-items');
     if (!container) return;
-    container.innerHTML = `<div class="loading-spinner"></div>`;
 
-    db.ref('global_stocks').on('value', snap => {
-        const stocks = snap.val();
+    if (borsaActive) return;
+    borsaActive = true;
+
+    container.innerHTML = `<div style="text-align:center; width:100%; padding:60px;"><div class="loader"></div><p style="margin-top:10px;">Borsa verileri yükleniyor...</p></div>`;
+
+    const renderStocks = (stocks) => {
         container.innerHTML = "";
-
         if (!stocks || Object.keys(stocks).length === 0) {
-            container.innerHTML = `<p style="grid-column: span 3; text-align:center; padding: 40px; color: var(--text-dim);">📈 Borsa verileri şu an yüklenemiyor. Lütfen biraz sonra tekrar deneyin...</p>`;
+            container.innerHTML = `
+                <div style="grid-column: 1 / -1; text-align:center; padding: 40px 20px; background: rgba(255,255,255,0.02); border-radius: 20px; border: 1px dashed var(--glass-border);">
+                    <div style="font-size: 2rem; margin-bottom: 20px;">📉</div>
+                    <h3 style="margin-bottom: 10px;">Borsa Şu An Kapalı</h3>
+                    <p>Sunucudan veri alınamadı. Lütfen bir süre sonra tekrar deneyin.</p>
+                </div>
+            `;
             return;
         }
 
         Object.entries(stocks).forEach(([code, data]) => {
-            if (!data) return;
             const trend = data.trend === 1 ? '📈' : '📉';
             const color = data.trend === 1 ? '#05ea6a' : '#ff4d4d';
-            const sign = data.trend === 1 ? '+' : '';
             const diff = data.oldPrice ? (((data.price - data.oldPrice) / data.oldPrice) * 100).toFixed(2) : "0.00";
 
             const card = document.createElement('div');
             card.className = 'item-card';
             card.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
                     <span style="font-size:1.5rem;">🏦</span>
-                    <span style="color:${color}; font-weight:800; font-size:0.9rem; background:rgba(0,0,0,0.2); padding:2px 8px; border-radius:5px;">${sign}${diff}% ${trend}</span>
+                    <span style="color:${color}; font-weight:800; font-size:0.8rem; background:rgba(0,0,0,0.3); padding:4px 8px; border-radius:6px; border:1px solid ${color}33;">
+                        ${data.trend === 1 ? '+' : ''}${diff}% ${trend}
+                    </span>
                 </div>
-                <h3 style="margin:10px 0;">${code}</h3>
-                <div style="font-size:1.5rem; font-weight:800; color:white; margin-bottom:15px;">
-                    ${(data.price || 0).toLocaleString()} <span style="font-size:0.8rem; color:var(--primary);">💰</span>
+                <h3 style="margin:5px 0; font-size:1.2rem;">${code}</h3>
+                <div style="font-size:1.7rem; font-weight:800; color:white; margin:15px 0;">
+                    ${(data.price || 0).toLocaleString()} <span style="font-size:0.9rem; color:var(--primary);">💰</span>
                 </div>
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                    <button class="buy-btn" onclick="executeBorsaBuy('${code}', ${data.price})" style="background:#05ea6a; color:black; border:none; border-radius:8px; font-weight:bold; cursor:pointer; padding:10px;">AL</button>
-                    <button class="buy-btn" onclick="executeBorsaSell('${code}', ${data.price})" style="background:rgba(255,255,255,0.05); color:white; border:1px solid rgba(255,255,255,0.1); border-radius:8px; font-weight:bold; cursor:pointer; padding:10px;">SAT</button>
+                    <button class="buy-btn" onclick="executeBorsaBuy('${code}', ${data.price})" style="background:var(--primary); color:black; font-weight:800; padding:10px;">AL</button>
+                    <button class="buy-btn" onclick="executeBorsaSell('${code}', ${data.price})" style="background:rgba(255,255,255,0.05); color:white; border:1px solid var(--glass-border); padding:10px;">SAT</button>
                 </div>
             `;
             container.appendChild(card);
         });
+    };
+
+    // 1. Firebase Listener
+    db.ref('global_stocks').on('value', snap => {
+        if (snap.exists()) renderStocks(snap.val());
     });
+
+    // 2. HTTP Fallback (Emniyet için 1sn sonra API'yi sorgula eğer veri gelmediyse)
+    setTimeout(async () => {
+        if (container.querySelector('.loader')) {
+            try {
+                const res = await fetch('/api/borsa');
+                const data = await res.json();
+                if (container.querySelector('.loader')) renderStocks(data);
+            } catch (e) {
+                console.error("Borsa API Fallback Error:", e);
+            }
+        }
+    }, 1500);
 }
 
 async function executeBorsaBuy(code, price) {
