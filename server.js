@@ -127,6 +127,7 @@ const channelPredictions = {};
 const heistHistory = {}; // { broadcasterId: [timestamp1, timestamp2] }
 const riggedGambles = {};
 const riggedShips = {};
+const riggedStats = {};
 const horseRaces = {};
 const activeRR = {};
 
@@ -1211,8 +1212,10 @@ app.post('/kick/webhook', async (req, res) => {
             }
 
             else if (isEnabled('fal') && lowMsg === '!efkar') {
-                const p = Math.floor(Math.random() * 101);
+                const rig = riggedStats[user.toLowerCase()]?.efkar;
+                const p = rig !== undefined ? rig : Math.floor(Math.random() * 101);
                 await reply(`🚬 @${user} Efkar Seviyesi: %${p} ${p > 70 ? '😩🚬' : '🍷'}`);
+                if (rig !== undefined) delete riggedStats[user.toLowerCase()].efkar;
             }
 
             else if (isEnabled('fal') && (lowMsg.startsWith('!burç') || lowMsg.startsWith('!burc'))) {
@@ -1250,23 +1253,31 @@ app.post('/kick/webhook', async (req, res) => {
             }
 
             else if (isEnabled('fal') && lowMsg === '!toxic') {
-                const p = Math.floor(Math.random() * 101);
+                const rig = riggedStats[user.toLowerCase()]?.toxic;
+                const p = rig !== undefined ? rig : Math.floor(Math.random() * 101);
                 await reply(`🤢 @${user} Toksiklik Seviyesi: %${p} ${p > 80 ? '☢️ UZAKLAŞIN!' : '🍃'}`);
+                if (rig !== undefined) delete riggedStats[user.toLowerCase()].toxic;
             }
 
             else if (isEnabled('fal') && lowMsg === '!karizma') {
-                const p = Math.floor(Math.random() * 101);
+                const rig = riggedStats[user.toLowerCase()]?.karizma;
+                const p = rig !== undefined ? rig : Math.floor(Math.random() * 101);
                 await reply(`😎 @${user} Karizma Seviyesi: %${p} ${p > 90 ? '🕶️ ŞEKİLSİN!' : '🔥'}`);
+                if (rig !== undefined) delete riggedStats[user.toLowerCase()].karizma;
             }
 
             else if (isEnabled('fal') && lowMsg === '!gay') {
-                const p = Math.floor(Math.random() * 101);
+                const rig = riggedStats[user.toLowerCase()]?.gay;
+                const p = rig !== undefined ? rig : Math.floor(Math.random() * 101);
                 await reply(`🌈 @${user} Gaylik Seviyesi: %${p} ${p > 50 ? '✨' : '👀'}`);
+                if (rig !== undefined) delete riggedStats[user.toLowerCase()].gay;
             }
 
             else if (isEnabled('fal') && lowMsg === '!keko') {
-                const p = Math.floor(Math.random() * 101);
+                const rig = riggedStats[user.toLowerCase()]?.keko;
+                const p = rig !== undefined ? rig : Math.floor(Math.random() * 101);
                 await reply(`🔪 @${user} Keko Seviyesi: %${p} ${p > 70 ? '🚬 Semt çocuğu!' : '🏙️'}`);
+                if (rig !== undefined) delete riggedStats[user.toLowerCase()].keko;
             }
 
 
@@ -1741,17 +1752,36 @@ app.post('/admin-api/rig-gamble', authAdmin, (req, res) => {
     res.json({ success: true });
 });
 
+// RIG STATS (Fun commands)
+app.post('/admin-api/rig-stat', authAdmin, (req, res) => {
+    const { user, stat, percent } = req.body;
+    const u = user.toLowerCase();
+    if (!riggedStats[u]) riggedStats[u] = {};
+    riggedStats[u][stat] = parseInt(percent);
+    addLog("Rig Ayarı", `Stat Riglendi: ${user} -> ${stat} (%${percent})`);
+    res.json({ success: true });
+});
+
 // GET ACTIVE RIGS
 app.post('/admin-api/get-rigs', authAdmin, (req, res) => {
-    res.json({ ships: riggedShips, gambles: riggedGambles });
+    res.json({ ships: riggedShips, gambles: riggedGambles, stats: riggedStats });
 });
 
 // CLEAR RIG
 app.post('/admin-api/clear-rig', authAdmin, (req, res) => {
-    const { type, user } = req.body;
-    if (type === 'ship') delete riggedShips[user.toLowerCase()];
-    if (type === 'gamble') delete riggedGambles[user.toLowerCase()];
-    addLog("Rig Temizleme", `${type} rigi kaldırıldı: ${user}`);
+    const { type, user, stat } = req.body;
+    const u = user.toLowerCase();
+    if (type === 'ship') delete riggedShips[u];
+    if (type === 'gamble') delete riggedGambles[u];
+    if (type === 'stat') {
+        if (stat && riggedStats[u]) {
+            delete riggedStats[u][stat];
+            if (Object.keys(riggedStats[u]).length === 0) delete riggedStats[u];
+        } else {
+            delete riggedStats[u];
+        }
+    }
+    addLog("Rig Temizleme", `${type} rigi kaldırıldı: ${user} ${stat || ''}`);
     res.json({ success: true });
 });
 
