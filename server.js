@@ -1288,13 +1288,20 @@ app.post('/kick/webhook', async (req, res) => {
             }
 
             else if (lowMsg.startsWith('!aiemir')) {
-                if (user.toLowerCase() !== "omegacyr") {
-                    return; // Yetkisi yoksa sessizce geç veya mesaj at
-                }
+                if (user.toLowerCase() !== "omegacyr") return;
                 const emir = args.join(' ');
                 if (!emir) return await reply(`⚠️ @${user}, Lütfen bir emir gir!`);
-                await db.ref('users/ai_system/instructions').set(emir);
-                await reply(`✅ @${user}, AI emirleri güncellendi: "${emir}"`);
+                await db.ref('users/ai_system/instructions').transaction(cur => {
+                    if (!cur) return emir;
+                    return cur + " " + emir;
+                });
+                await reply(`✅ @${user}, Yeni emir eklendi! Hafızada saklanıyor.`);
+            }
+
+            else if (lowMsg === '!aireset') {
+                if (user.toLowerCase() !== "omegacyr") return;
+                await db.ref('users/ai_system/instructions').remove();
+                await reply(`🧹 @${user}, Tüm AI emirleri sıfırlandı!`);
             }
 
             else if (isEnabled('ai') && (lowMsg.startsWith('!ai ') || lowMsg === '!ai')) {
