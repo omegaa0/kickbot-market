@@ -2442,26 +2442,24 @@ async function syncSingleChannelStats(chanId, chan) {
                     console.log(`[Sync DEBUG] Channels API Fail (${currentSlug}): ${e.response?.status || e.message}`);
                 }
 
-                // ADIM 2: Users Endpoint (Eğer üstteki boşsa veya takipçi yoksa)
-                // Bu endpoint genellikle profil bilgisini (ve takipçiyi) verir
-                if (!d || (!d.followers_count && !d.followersCount)) {
+                // ADIM 2: Users Endpoint (ID ile) - Çünkü ilk çağrıdan ID'yi öğrendik
+                // Slug ile users endpoint 404 verdiğine göre ID ile denemeliyiz.
+                if (d && d.broadcaster_user_id) {
                     try {
-                        const uRes = await axios.get(`https://api.kick.com/public/v1/users/${currentSlug}`, {
-                            headers: officialHeaders,
-                            timeout: 8000
-                        });
-                        const uData = uRes.data?.data || uRes.data;
-                        if (uData) {
-                            // Eğer önceki data varsa birleştir, yoksa bunu kullan
-                            if (d) {
-                                console.log(`[Sync DEBUG] Merging Channel + User Data for ${currentSlug}`);
+                        // Eğer takipçi sayısı zaten geldiyse gerek yok, ama gelmediyse sor
+                        if (!d.followers_count && !d.followersCount) {
+                            const uRes = await axios.get(`https://api.kick.com/public/v1/users/${d.broadcaster_user_id}`, {
+                                headers: officialHeaders,
+                                timeout: 8000
+                            });
+                            const uData = uRes.data?.data || uRes.data;
+                            if (uData) {
+                                console.log(`[Sync DEBUG] User Data FOUND via ID (${d.broadcaster_user_id})`);
                                 d = { ...d, ...uData };
-                            } else {
-                                d = uData;
                             }
                         }
                     } catch (e) {
-                        console.log(`[Sync DEBUG] Users API Fail (${currentSlug}): ${e.response?.status || e.message}`);
+                        console.log(`[Sync DEBUG] Users ID API Fail (${d.broadcaster_user_id}): ${e.response?.status || e.message}`);
                     }
                 }
 
