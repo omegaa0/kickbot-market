@@ -2465,29 +2465,41 @@ async function syncSingleChannelStats(chanId, chan) {
 
                 if (d) console.log(`[Sync DEBUG] Official Data Keys (${currentSlug}): ${Object.keys(d).join(',')}`);
 
-                // EKSTRA YEDEK: KICKSTATS (Resmi API vermezse buraya sor)
+                // ADIM 3: Followers Endpoint (Özel Takipçi Sayısı Yolu)
                 if (!d || (!d.followers_count && !d.followersCount)) {
                     try {
-                        // KickStats API genellikle 403 yemez
-                        const ksRes = await axios.get(`https://kickstats.com/api/v1/channel/${currentSlug}`, {
-                            headers: { 'User-Agent': 'Mozilla/5.0' },
-                            timeout: 5000
+                        // Birçok API'de takipçi sayısı ayrı bir yoldadır
+                        const fRes = await axios.get(`https://api.kick.com/public/v1/channels/${currentSlug}/followers`, {
+                            headers: officialHeaders,
+                            timeout: 8000
                         });
-                        if (ksRes.data) {
-                            console.log(`[Sync] KickStats VERİSİ ALINDI: ${currentSlug}`);
-                            // Kickstats yapısına göre veriyi birleştir
-                            const ksData = ksRes.data;
-                            const combined = { ...d, ...ksData };
-                            // Kickstats followers ve subscribers alanlarını düz verir
-                            if (ksData.followers) combined.followers_count = ksData.followers;
-                            if (ksData.subscribers) combined.subscriber_count = ksData.subscribers;
-                            d = combined;
+                        // Yanıt yapısı { count: 123 } veya { followers: [...] } olabilir
+                        if (fRes.data) {
+                            console.log(`[Sync] Followers Endpoint VERİSİ ALINDI: ${currentSlug}`);
+                            const fData = fRes.data;
+                            if (fData.count !== undefined) d = { ...d, followers_count: fData.count };
+                            else if (fData.total !== undefined) d = { ...d, followers_count: fData.total };
+                            else if (Array.isArray(fData)) d = { ...d, followers_count: fData.length };
                         }
                     } catch (e) {
-                        console.log(`[Sync DEBUG] KickStats Fail (${currentSlug}): ${e.message}`);
+                        console.log(`[Sync DEBUG] Followers Endpoint Fail (${currentSlug}): ${e.response?.status || e.message}`);
                     }
                 }
 
+                // EKSTRA YEDEK: 7TV API (Çok Sağlamdır)
+                if (!d || (!d.followers_count && !d.followersCount)) {
+                    try {
+                        const sRes = await axios.get(`https://7tv.io/v3/users/kick/${d?.broadcaster_user_id || currentSlug}`, { timeout: 5000 });
+                        if (sRes.data && sRes.data.user) {
+                            console.log(`[Sync] 7TV VERİSİ ALINDI: ${currentSlug}`);
+                            d = { ...d, followers_count: sRes.data.user.followers || 0 };
+                        }
+                    } catch (e) {
+                        console.log(`[Sync DEBUG] 7TV Fail (${currentSlug}): ${e.message}`);
+                    }
+                }
+
+                if (d) console.log(`[Sync DEBUG] Data Keys After All Tries (${currentSlug}): ${Object.keys(d).join(',')}`);
                 return d;
 
             } catch (err) {
