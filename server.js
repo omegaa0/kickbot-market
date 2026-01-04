@@ -275,7 +275,10 @@ async function subscribeToChat(token, broadcasterId) {
             broadcaster_user_id: parseInt(broadcasterId),
             events: [
                 { name: "chat.message.sent", version: 1 },
-                { name: "channel.subscription.new", version: 1 }
+                { name: "channel.subscription.new", version: 1 },
+                { name: "channel.subscription.renewal", version: 1 },
+                { name: "channel.subscription.gifts", version: 1 },
+                { name: "channel.followed", version: 1 }
             ],
             method: "webhook"
         }, { headers: { 'Authorization': `Bearer ${token}` } });
@@ -522,17 +525,50 @@ app.post('/kick/webhook', async (req, res) => {
         }
 
         // --- ABONE ÖDÜLÜ SİSTEMİ ---
-        if (payload.event === "channel.subscription.new") {
+        const eventName = payload.event;
+        const settings = channelData.settings || {};
+        const subReward = parseInt(settings.sub_reward) || 5000;
+
+        if (eventName === "channel.subscription.new" || eventName === "channel.subscription.renewal") {
             const subUser = event.username;
             if (subUser) {
-                console.log(`🎊 YENİ ABONE: ${subUser} (${broadcasterId})`);
+                // Goal Bar Update
+                await db.ref(`channels/${broadcasterId}/stats/subscribers`).transaction(val => (val || 0) + 1);
+
+                let welcomeMsg = settings.sub_welcome_msg || `🎊 @{user} ABONE OLDU! Hoş geldin, hesabına {reward} 💰 bakiye eklendi! ✨`;
+                welcomeMsg = welcomeMsg.replace('{user}', subUser).replace('{reward}', subReward.toLocaleString());
+
                 await db.ref('users/' + subUser.toLowerCase()).transaction(u => {
                     if (!u) u = { balance: 1000, last_seen: Date.now(), last_channel: broadcasterId, created_at: Date.now() };
-                    u.balance = (u.balance || 0) + 5000;
+                    u.balance = (u.balance || 0) + subReward;
                     return u;
                 });
-                await sendChatMessage(`🎊 @${subUser} ABONE OLDU! Hoş geldin, hesabına 5.000 💰 bakiye eklendi! ✨`, broadcasterId);
+                await sendChatMessage(welcomeMsg, broadcasterId);
             }
+            return;
+        }
+
+        if (eventName === "channel.subscription.gifts") {
+            const gifter = event.username;
+            const count = parseInt(event.total) || 1;
+            const totalReward = subReward * count;
+            if (gifter) {
+                await db.ref('users/' + gifter.toLowerCase()).transaction(u => {
+                    if (!u) u = { balance: 1000, last_seen: Date.now(), last_channel: broadcasterId, created_at: Date.now() };
+                    u.balance = (u.balance || 0) + totalReward;
+                    return u;
+                });
+                await sendChatMessage(`🎁 @${gifter}, tam ${count} adet abonelik hediye etti! Cömertliğin için hesabına ${totalReward.toLocaleString()} 💰 bakiye eklendi! ✨`, broadcasterId);
+
+                // Goal Bar Update
+                await db.ref(`channels/${broadcasterId}/stats/subscribers`).transaction(val => (val || 0) + count);
+            }
+            return;
+        }
+
+        if (eventName === "channel.followed") {
+            // Goal Bar Update
+            await db.ref(`channels/${broadcasterId}/stats/followers`).transaction(val => (val || 0) + 1);
             return;
         }
 
@@ -544,7 +580,6 @@ app.post('/kick/webhook', async (req, res) => {
             console.log(`🔄 Kanal slug güncellendi: ${currentSlug}`);
         }
 
-        const settings = channelData.settings || {};
         const user = event.sender?.username;
         const rawMsg = event.content;
 
