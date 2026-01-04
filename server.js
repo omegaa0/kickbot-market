@@ -1833,10 +1833,11 @@ app.post('/kick/webhook', async (req, res) => {
                 }
 
                 const code = args[1]?.toUpperCase();
-                const amount = parseInt(args[2]);
+                // Sayıdaki virgülü noktaya çevirip parseFloat ile alalım (Örn: 0,001 -> 0.001)
+                const amount = parseFloat(args[2]?.replace(',', '.'));
 
                 if (!code || !stocks[code] || isNaN(amount) || amount <= 0) {
-                    return await reply(`@${user}, Geçersiz kod veya miktar! Örn: !borsa al APPLE 5`);
+                    return await reply(`@${user}, Geçersiz kod veya miktar! Örn: !borsa al APPLE 0,5`);
                 }
 
                 const stock = stocks[code];
@@ -1846,26 +1847,28 @@ app.post('/kick/webhook', async (req, res) => {
                     const uSnap = await userRef.once('value');
                     const uData = uSnap.val() || { balance: 0 };
                     if (!uData.is_infinite && uData.balance < totalCost) {
-                        return await reply(`@${user}, Bakiye yetersiz! ${totalCost.toLocaleString()} 💰 lazım.`);
+                        return await reply(`@${user}, Bakiye yetersiz! ${Math.floor(totalCost).toLocaleString()} 💰 lazım.`);
                     }
 
                     await userRef.transaction(u => {
                         if (u) {
                             if (!u.is_infinite) u.balance -= totalCost;
                             if (!u.stocks) u.stocks = {};
+                            // Küsüratlı miktarı ekle (Örn: 0.005)
                             u.stocks[code] = (u.stocks[code] || 0) + amount;
                         }
                         return u;
                     });
-                    await reply(`✅ @${user}, ${amount} adet ${code} hissesi alındı! Maliyet: ${totalCost.toLocaleString()} 💰`);
+                    await reply(`✅ @${user}, ${amount} adet ${code} hissesi alındı! Maliyet: ${Math.floor(totalCost).toLocaleString()} 💰`);
                 }
                 else if (sub === 'sat') {
                     const uSnap = await userRef.once('value');
                     const uData = uSnap.val() || {};
                     const userStockCount = uData.stocks?.[code] || 0;
 
+                    // Float karşılaştırması için küçük bir tolerans eklenebilir ama direkt kontrol yeterli
                     if (userStockCount < amount) {
-                        return await reply(`@${user}, Elinde yeterli ${code} hissesi yok! (Mevcut: ${userStockCount})`);
+                        return await reply(`@${user}, Elinde yeterli ${code} hissesi yok! (Mevcut: ${userStockCount.toFixed(4)})`);
                     }
 
                     const totalGain = stock.price * amount;
@@ -1873,11 +1876,27 @@ app.post('/kick/webhook', async (req, res) => {
                         if (u) {
                             u.balance = (u.balance || 0) + totalGain;
                             u.stocks[code] -= amount;
-                            if (u.stocks[code] <= 0) delete u.stocks[code];
+                            // Float hassasiyeti nedeniyle 0'dan çok küçükse temizle
+                            if (u.stocks[code] <= 0.00001) delete u.stocks[code];
                         }
                         return u;
                     });
-                    await reply(`💰 @${user}, ${amount} adet ${code} hissesi satıldı! Kazanç: ${totalGain.toLocaleString()} 💰`);
+                    await reply(`💰 @${user}, ${amount} adet ${code} hissesi satıldı! Kazanç: ${Math.floor(totalGain).toLocaleString()} 💰`);
+                }
+                else if (sub === 'cüzdan' || sub === 'portföy') {
+                    const uSnap = await userRef.once('value');
+                    const uData = uSnap.val() || {};
+                    const userStocks = uData.stocks || {};
+
+                    if (Object.keys(userStocks).length === 0) {
+                        return await reply(`@${user}, Portföyün şu an boş.`);
+                    }
+
+                    let portfolioTxt = `💼 @${user} Portföyü: `;
+                    Object.entries(userStocks).forEach(([c, amt]) => {
+                        portfolioTxt += `${c}: ${amt.toFixed(3)} | `;
+                    });
+                    await reply(portfolioTxt);
                 }
             }
 
@@ -2512,76 +2531,48 @@ async function syncSingleChannelStats(chanId, chan) {
         const currentStatsSnap = await db.ref(`channels/${chanId}/stats`).once('value');
         const currentStats = currentStatsSnap.val() || { followers: 0, subscribers: 0 };
 
-        console.log(`[Sync] ${username} için RESMİ API üzerinden veri isteniyor...`);
+        console.log(`[Sync] ${username} için veri eşitleme denemesi...`);
 
-        // 1. ÖNCELİK: Resmi API (Bearer Token ile)
-        // api.kick.com Cloudflare engeline genellikle takılmaz.
-        if (chan.access_token) {
+        // 1. ÖNCELİK: V2 INTERNAL (İzleme sisteminde çalışan yapı)
+        try {
+            const v2Res = await axios.get(`https://kick.com/api/v2/channels/${username.toLowerCase()}`, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+                timeout: 5000
+            });
+            if (v2Res.data) {
+                const f = v2Res.data.followers_count ?? v2Res.data.followersCount;
+                const s = v2Res.data.subscriber_count ?? v2Res.data.subscribers_count;
+                if (f !== undefined) followers = parseInt(f);
+                if (s !== undefined) subscribers = parseInt(s);
+
+                if (followers > 0) {
+                    console.log(`[Sync SUCCESS] ${username} -> ${followers} takipçi (V2 Internal)`);
+                }
+            }
+        } catch (eV2) {
+            console.log(`[Sync DEBUG] V2 Fail (${username}): ${eV2.response?.status || eV2.message}`);
+        }
+
+        // 2. YEDEK: Resmi API (v1)
+        if (followers === 0 && chan.access_token) {
             try {
-                const officialHeaders = {
-                    'Authorization': `Bearer ${chan.access_token}`,
-                    'Accept': 'application/json',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                };
-
-                // Önce kanalı bul (broadcaster_user_id'yi garantilemek için)
                 const res = await axios.get(`https://api.kick.com/public/v1/channels?slug=${username.toLowerCase()}`, {
-                    headers: officialHeaders,
-                    timeout: 10000
+                    headers: { 'Authorization': `Bearer ${chan.access_token}` },
+                    timeout: 5000
                 });
-
                 const data = res.data?.data?.[0] || res.data?.data;
-
-                if (data && data.broadcaster_user_id) {
-                    const bId = data.broadcaster_user_id;
-
-                    // ŞİMDİ TAKİPÇİ SAYISI İÇİN KANAL DETAYINA GİT (broadcasterId ile)
-                    const detailRes = await axios.get(`https://api.kick.com/public/v1/channels/${bId}`, {
-                        headers: officialHeaders,
-                        timeout: 10000
-                    });
-
-                    const d = detailRes.data?.data || detailRes.data;
-
-                    // Veriyi ayıkla (Farklı isimlendirme olasılıklarına karşı)
-                    const f = d.followers_count ?? d.followersCount ?? d.followers ?? d.follower_count;
-                    const s = d.subscriber_count ?? d.subscribers_count ?? d.subscribers ?? d.subscription_count;
-
-                    if (f !== undefined && f !== null) followers = parseInt(f);
-                    if (s !== undefined && s !== null) subscribers = parseInt(s);
-
-                    if (followers > 0) {
-                        console.log(`[Sync SUCCESS] ${username} -> ${followers} takipçi (Resmi API)`);
-                    }
+                if (data) {
+                    const f = data.followers_count ?? data.followersCount;
+                    if (f !== undefined && f > 0) followers = parseInt(f);
                 }
             } catch (e1) {
-                if (e1.response?.status === 401) {
-                    console.log(`[Sync] Token süresi geçmiş, yenileniyor...`);
-                    await refreshChannelToken(chanId).catch(() => { });
-                } else {
-                    console.log(`[Sync DEBUG] Resmi API Hatası (${username}): ${e1.response?.status || e1.message}`);
-                }
+                if (e1.response?.status === 401) await refreshChannelToken(chanId).catch(() => { });
             }
         }
 
-        // FALLBACK: Eğer hala 0 ise ve token yoksa GraphQL'den son bir şans dene 
-        // (GraphQL kalsın ama sadece yedek olarak arkada dursun)
-        if (followers === 0) {
-            try {
-                const gqlRes = await axios.post('https://kick.com/graphql', {
-                    query: `query GetChannel($slug: String!) { channel(slug: $slug) { followersCount } }`,
-                    variables: { slug: username.toLowerCase() }
-                }, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 5000 }).catch(() => null);
-
-                if (gqlRes?.data?.data?.channel?.followersCount) {
-                    followers = parseInt(gqlRes.data.data.channel.followersCount);
-                }
-            } catch (e) { }
-        }
-
-        // GÜVENLİK KONTROLÜ
+        // GÜVENLİK VE VERİ KORUMA
         if (followers === 0 && subscribers === 0) {
-            console.log(`[Sync] ${username} için resmi kanallardan veri alınamadı, mevcut veriler korunuyor.`);
+            console.log(`[Sync] ${username} için veri alınamadı, mevcut veri (${currentStats.followers}) korunuyor.`);
             return currentStats;
         }
 
@@ -2591,11 +2582,14 @@ async function syncSingleChannelStats(chanId, chan) {
             last_sync: Date.now()
         };
 
-        console.log(`[Sync] ${username} Güncellendi -> F: ${result.followers}, S: ${result.subscribers}`);
-        await db.ref(`channels/${chanId}/stats`).update(result);
+        if (result.followers !== currentStats.followers) {
+            console.log(`[Sync] ${username} Güncellendi -> F: ${result.followers} (Eski: ${currentStats.followers})`);
+            await db.ref(`channels/${chanId}/stats`).update(result);
+        }
+
         return result;
     } catch (e) {
-        console.error(`Sync Stats Final Error for ${chanId}:`, e.message);
+        console.error(`Sync Stats Error for ${chanId}:`, e.message);
         return null;
     }
 }
@@ -2619,9 +2613,7 @@ async function syncChannelStats() {
     }
 }
 
-// Her 3 dakikada bir takipçi/abone sayılarını güncelle
-setInterval(syncChannelStats, 180000);
-syncChannelStats(); // Başlangıçta bir kez çalıştır
+// Senkronizasyon intervali uygulama sonunda app.listen içinde yönetiliyor.
 
 async function startHorseRace(broadcasterId) {
     const race = horseRaces[broadcasterId];
