@@ -2517,12 +2517,21 @@ async function syncSingleChannelStats(chanId, chan) {
                     const processData = (d) => {
                         if (Array.isArray(d)) d = d[0];
                         if (d?.slug) currentSlug = d.slug;
+
+                        // DETAYLI LOG: Gelen değerleri göster
+                        console.log(`[Sync DEBUG] ${slug} Raw Values -> followers_count: ${d?.followers_count}, followersCount: ${d?.followersCount}, followers: ${d?.followers}`);
+
                         const f = d?.followers_count ?? d?.followersCount ?? d?.followers ?? d?.follower_count;
                         const s = d?.subscriber_count ?? d?.subscribers_count ?? d?.subscribers ?? d?.subscription_count;
-                        if (f !== undefined && f !== null) followers = parseInt(f);
-                        if (s !== undefined && s !== null) subscribers = parseInt(s);
+
+                        console.log(`[Sync DEBUG] ${slug} Parsed -> f: ${f}, s: ${s}`);
+
+                        if (f !== undefined && f !== null && f > 0) {
+                            followers = parseInt(f);
+                            console.log(`[Sync SUCCESS] ${slug} -> ${followers} takipçi (Resmi API)`);
+                        }
+                        if (s !== undefined && s !== null && s > 0) subscribers = parseInt(s);
                         if (followers === 0 && d?.chatroom?.followers_count) followers = parseInt(d.chatroom.followers_count);
-                        if (followers > 0) console.log(`[Sync Success] ${slug} verisi Resmi API'den alındı.`);
                     };
                     processData(data);
                 } else {
