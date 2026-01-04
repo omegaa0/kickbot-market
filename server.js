@@ -182,7 +182,6 @@ async function updateGlobalStocks() {
         }
 
         await stockRef.set(stocks);
-        console.log("📈 Global Borsa Verileri Güncellendi.");
     } catch (e) {
         console.error("Borsa Update Error:", e.message);
     }
@@ -2093,9 +2092,9 @@ app.post('/dashboard-api/data', authDashboard, async (req, res) => {
     const statsSnap = await db.ref(`channels/${channelId}/stats`).once('value');
     let liveStats = statsSnap.val() || { followers: 0, subscribers: 0 };
 
-    // Eğer veri yoksa veya 5 dakikadan eskiyse anlık güncelle
+    // Eğer veri yoksa, 5 dakikadan eskiyse veya takipçi/abone 0 ise (hata payına karşı) anlık güncelle
     const fiveMinsAgo = Date.now() - 300000;
-    if (!liveStats.last_sync || liveStats.last_sync < fiveMinsAgo) {
+    if (!liveStats.last_sync || liveStats.last_sync < fiveMinsAgo || (liveStats.followers === 0 && liveStats.subscribers === 0)) {
         const synced = await syncSingleChannelStats(channelId, channelData);
         if (synced) liveStats = synced;
     }
@@ -2357,43 +2356,50 @@ async function trackWatchTime() {
 setInterval(trackWatchTime, 60000);
 
 async function syncSingleChannelStats(chanId, chan) {
-    if (!chan.username) return null;
     try {
         let followers = 0;
         let subscribers = 0;
+        const slug = chan.slug || chan.username;
+        if (!slug) return null;
 
-        // 1. Kick V2 üzerinden takipçi sayısını çek (Public)
-        const v2Res = await axios.get(`https://kick.com/api/v2/channels/${chan.username}`, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
-            timeout: 5000
-        }).catch(() => null);
-
-        if (v2Res && v2Res.data) {
-            const d = v2Res.data;
-            followers = d.followers_count || d.followersCount || (d.chatroom && d.chatroom.followers_count) || 0;
-            subscribers = d.subscriber_count || 0;
-        }
-
-        // 2. Eğer Access Token varsa Resmi V1 API'den detayları çek (Subscriber count için)
+        // 1. ÖNCELİK: Eğer Access Token varsa Resmi V1 API'den çek (En doğrusu)
         if (chan.access_token) {
             try {
-                const v1Res = await axios.get(`https://api.kick.com/public/v1/channels?slug=${chan.username}`, {
+                const v1Res = await axios.get(`https://api.kick.com/public/v1/channels?slug=${slug}`, {
                     headers: { 'Authorization': `Bearer ${chan.access_token}` },
-                    timeout: 5000
+                    timeout: 7000
                 });
                 if (v1Res.data && v1Res.data.data && v1Res.data.data[0]) {
                     const d = v1Res.data.data[0];
-                    if (d.followers_count > 0) followers = d.followers_count;
-                    if (d.subscriber_count !== undefined) subscribers = d.subscriber_count;
+                    followers = d.followers_count || d.followersCount || d.followers_count || 0;
+                    subscribers = d.subscriber_count || 0;
                 }
             } catch (e1) {
                 if (e1.response?.status === 401) await refreshChannelToken(chanId);
             }
         }
 
-        // 3. Fallback: Internal V1 (Eski ama bazen daha stabil)
+        // 2. YEDEK: Eğer hala 0 ise Public V2 üzerinden dene
         if (followers === 0) {
-            const iv1Res = await axios.get(`https://kick.com/api/v1/channels/${chan.username}`, {
+            const v2Res = await axios.get(`https://kick.com/api/v2/channels/${slug}`, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+                timeout: 5000
+            }).catch(() => null);
+
+            if (v2Res && v2Res.data) {
+                const d = v2Res.data;
+                // Tüm olası follower alanlarını tara
+                followers = d.followers_count || d.followersCount ||
+                    (d.chatroom && (d.chatroom.followers_count || d.chatroom.followersCount)) ||
+                    (d.livestream && d.livestream.followers_count) || 0;
+
+                if (subscribers === 0) subscribers = d.subscriber_count || d.subscribers_count || 0;
+            }
+        }
+
+        // 3. SON ÇARE: Public V1 (Eski tip)
+        if (followers === 0) {
+            const iv1Res = await axios.get(`https://kick.com/api/v1/channels/${slug}`, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
                 timeout: 5000
             }).catch(() => null);
