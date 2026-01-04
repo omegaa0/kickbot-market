@@ -2547,39 +2547,71 @@ async function syncSingleChannelStats(chanId, chan) {
             }
         }
 
-        // 2. YEDEK: Public V2 (Eğer hala 0 ise)
+        // 2. YEDEK: Dahili V1 API (Tarayıcı gibi davranarak Cloudflare bypass)
+        // Bu API'de takipçi sayısı "followersCount" olarak geliyor (camelCase)
         if (followers === 0) {
             try {
-                const uas = [
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
-                ];
-                const v2Res = await axios.get(`https://kick.com/api/v2/channels/${currentSlug}`, {
-                    headers: { 'User-Agent': uas[Math.floor(Math.random() * uas.length)], 'Accept': 'application/json' },
-                    timeout: 8000
+                // Tam tarayıcı başlıkları (Cloudflare bypass için kritik)
+                const browserHeaders = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Referer': 'https://kick.com/',
+                    'Origin': 'https://kick.com',
+                    'Sec-Ch-Ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+                    'Sec-Ch-Ua-Mobile': '?0',
+                    'Sec-Ch-Ua-Platform': '"Windows"',
+                    'Sec-Fetch-Dest': 'empty',
+                    'Sec-Fetch-Mode': 'cors',
+                    'Sec-Fetch-Site': 'same-origin',
+                    'Connection': 'keep-alive',
+                    'Cache-Control': 'no-cache'
+                };
+
+                const v1Res = await axios.get(`https://kick.com/api/v1/channels/${currentSlug}`, {
+                    headers: browserHeaders,
+                    timeout: 15000
                 });
-                if (v2Res.data) {
-                    const d = v2Res.data;
-                    let f = d.followers_count ?? d.chatroom?.followers_count;
-                    let s = d.subscriber_count ?? d.subscription_config?.subscriber_count;
-                    if (f !== undefined) followers = parseInt(f);
-                    if (s !== undefined) subscribers = parseInt(s);
+
+                if (v1Res.data) {
+                    const d = v1Res.data;
+                    // Dahili V1 API: followersCount (camelCase)
+                    const f = d.followersCount ?? d.followers_count ?? d.followers;
+                    if (f !== undefined && f !== null) {
+                        followers = parseInt(f);
+                        console.log(`[Sync SUCCESS] ${currentSlug} -> followersCount: ${followers} (V1 Internal API)`);
+                    }
                 }
-            } catch (e2) {
-                console.log(`[Sync DEBUG] V2 Fail for ${slug}: ${e2.response?.status || e2.message}`);
+            } catch (e1) {
+                console.log(`[Sync DEBUG] V1 Internal Fail for ${currentSlug}: ${e1.response?.status || e1.message}`);
             }
         }
 
-        // 3. YEDEK: Public V1
+        // 3. YEDEK: Dahili V2 API
         if (followers === 0) {
             try {
-                const v1Res = await axios.get(`https://kick.com/api/v1/channels/${currentSlug}`, { headers, timeout: 8000 });
-                if (v1Res.data) {
-                    const d = v1Res.data;
-                    followers = parseInt(d.followers_count || d.followersCount || 0);
-                    subscribers = parseInt(d.subscriber_count || d.subscribers_count || 0);
+                const v2Res = await axios.get(`https://kick.com/api/v2/channels/${currentSlug}`, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                        'Accept': 'application/json',
+                        'Referer': 'https://kick.com/',
+                        'Origin': 'https://kick.com'
+                    },
+                    timeout: 10000
+                });
+                if (v2Res.data) {
+                    const d = v2Res.data;
+                    // V2 API: followers_count veya followersCount
+                    const f = d.followersCount ?? d.followers_count ?? d.chatroom?.followers_count;
+                    if (f !== undefined && f !== null) {
+                        followers = parseInt(f);
+                        console.log(`[Sync SUCCESS] ${currentSlug} -> followers: ${followers} (V2 Internal API)`);
+                    }
                 }
-            } catch (e3) { }
+            } catch (e2) {
+                console.log(`[Sync DEBUG] V2 Internal Fail for ${currentSlug}: ${e2.response?.status || e2.message}`);
+            }
         }
 
         // GÜVENLİK VE GÜNCELLEME
