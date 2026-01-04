@@ -2373,8 +2373,9 @@ async function syncSingleChannelStats(chanId, chan) {
     try {
         let followers = 0;
         let subscribers = 0;
-        const slug = chan.slug || chan.username;
-        if (!slug) return null;
+        const rawSlug = chan.slug || chan.username;
+        if (!rawSlug) return null;
+        const slug = rawSlug.toLowerCase();
 
         const headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -2406,8 +2407,9 @@ async function syncSingleChannelStats(chanId, chan) {
             try {
                 const iv1Res = await axios.get(`https://kick.com/api/v1/channels/${slug}`, { headers, timeout: 6000 });
                 if (iv1Res.data) {
-                    followers = iv1Res.data.followers_count || iv1Res.data.followersCount || 0;
-                    if (subscribers === 0) subscribers = iv1Res.data.subscribers_count || iv1Res.data.subscriber_count || 0;
+                    const d = iv1Res.data;
+                    followers = d.followers_count || d.followersCount || d.followers_count || 0;
+                    if (subscribers === 0) subscribers = d.subscriber_count || d.subscribers_count || 0;
                 }
             } catch (e) { }
         }
@@ -2425,18 +2427,25 @@ async function syncSingleChannelStats(chanId, chan) {
             } catch (e) { }
         }
 
+        // --- GÜVENLİK KONTROLÜ ---
+        // Eğer her iki değer de 0 geldiyse, muhtemelen Cloudflare engelledi veya kanal bulunamadı.
+        // Bu durumda DB'deki eski verileri (mesela 69) 0 ile ezmemek için işlemi iptal et.
         if (followers === 0 && subscribers === 0) {
-            console.log(`[Sync] Atlandı: ${slug} için veri çekilemedi (0 döndü). Mevcut veriler korunuyor.`);
+            // console.log(`[Sync] Atlandı: ${slug} için veri çekilemedi (0 döndü).`);
             return null;
         }
 
+        // Bir değer geldi ama diğeri 0 ise (örn: Takipçi var ama Abone 0), 0 olanı DB'deki ile koru
+        const currentStatsSnap = await db.ref(`channels/${chanId}/stats`).once('value');
+        const currentStats = currentStatsSnap.val() || {};
+
         const result = {
-            followers: parseInt(followers) || 0,
-            subscribers: parseInt(subscribers) || 0,
+            followers: parseInt(followers) || currentStats.followers || 0,
+            subscribers: parseInt(subscribers) || currentStats.subscribers || 0,
             last_sync: Date.now()
         };
 
-        console.log(`[Sync] ${slug} -> F: ${followers}, S: ${subscribers}`);
+        console.log(`[Sync] ${slug} -> F: ${result.followers}, S: ${result.subscribers}`);
         await db.ref(`channels/${chanId}/stats`).update(result);
         return result;
     } catch (e) {
