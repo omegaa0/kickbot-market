@@ -180,19 +180,25 @@ async function registerKickWebhook(broadcasterId, accessToken) {
     try {
         const webhookUrl = `${REDIRECT_URI.replace('/auth/kick/callback', '')}/webhook/kick`;
 
-        // Takipçi event'ine abone ol
+        // Takipçi ve diğer event'lere abone ol
         const response = await axios.post('https://api.kick.com/public/v1/events/subscriptions', {
             broadcaster_user_id: parseInt(broadcasterId),
             events: [
                 { name: 'channel.followed', version: 1 },
                 { name: 'channel.subscription.new', version: 1 },
-                { name: 'channel.subscription.gifts', version: 1 }
+                { name: 'channel.subscription.renewal', version: 1 },
+                { name: 'channel.subscription.gifts', version: 1 },
+                { name: 'chat.message.sent', version: 1 }
             ],
-            method: 'webhook'
+            method: 'webhook',
+            transport: {
+                url: webhookUrl
+            }
         }, {
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
         });
 
@@ -372,7 +378,7 @@ app.get('/auth/kick/callback', async (req, res) => {
         }
 
         await chanRef.update(updateObj);
-        await subscribeToChat(response.data.access_token, bid);
+        await registerKickWebhook(bid, response.data.access_token);
 
         // Dashboard'a yönlendir
         res.redirect(`/dashboard?c=${bid}&k=${loginKey}`);
@@ -382,21 +388,7 @@ app.get('/auth/kick/callback', async (req, res) => {
     }
 });
 
-async function subscribeToChat(token, broadcasterId) {
-    try {
-        await axios.post('https://api.kick.com/public/v1/events/subscriptions', {
-            broadcaster_user_id: parseInt(broadcasterId),
-            events: [
-                { name: "chat.message.sent", version: 1 },
-                { name: "channel.subscription.new", version: 1 },
-                { name: "channel.subscription.renewal", version: 1 },
-                { name: "channel.subscription.gifts", version: 1 },
-                { name: "channel.followed", version: 1 }
-            ],
-            method: "webhook"
-        }, { headers: { 'Authorization': `Bearer ${token}` } });
-    } catch (e) { console.log('Sub Error:', e.response?.data || e.message); }
-}
+// (Eski subscribeToChat yerine registerKickWebhook kullanılıyor)
 
 async function sendChatMessage(content, broadcasterId) {
     if (!broadcasterId) return;
@@ -2529,7 +2521,7 @@ async function syncSingleChannelStats(chanId, chan) {
                 const officialHeaders = {
                     'Authorization': `Bearer ${chan.access_token}`,
                     'Accept': 'application/json',
-                    'User-Agent': 'KickChatBot/1.0'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 };
 
                 // Önce kanalı bul (broadcaster_user_id'yi garantilemek için)
@@ -2909,5 +2901,10 @@ app.listen(PORT, () => {
     setTimeout(() => {
         console.log('[Webhook] Tüm kanallar için webhook kaydı başlatılıyor...');
         registerAllWebhooks();
+        // İstatistik senkronizasyonunu da başlat
+        syncChannelStats();
     }, 5000);
+
+    // Her 10 dakikada bir istatistikleri zorunlu senkronize et (Webhook fallback)
+    setInterval(syncChannelStats, 600000);
 });
