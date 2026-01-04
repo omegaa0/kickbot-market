@@ -2609,19 +2609,6 @@ async function syncSingleChannelStats(chanId, chan) {
                     }
                 }
 
-                // EKSTRA YEDEK: 7TV API (Çok Sağlamdır)
-                if (!d || (!d.followers_count && !d.followersCount)) {
-                    try {
-                        const sRes = await axios.get(`https://7tv.io/v3/users/kick/${d?.broadcaster_user_id || currentSlug}`, { timeout: 5000 });
-                        if (sRes.data && sRes.data.user) {
-                            console.log(`[Sync] 7TV VERİSİ ALINDI: ${currentSlug}`);
-                            d = { ...d, followers_count: sRes.data.user.followers || 0 };
-                        }
-                    } catch (e) {
-                        console.log(`[Sync DEBUG] 7TV Fail (${currentSlug}): ${e.message}`);
-                    }
-                }
-
                 if (d) console.log(`[Sync DEBUG] Data Keys After All Tries (${currentSlug}): ${Object.keys(d).join(',')}`);
                 return d;
 
@@ -2720,28 +2707,38 @@ async function syncSingleChannelStats(chanId, chan) {
             }
         }
 
-        // 3. YEDEK: Dahili V2 API
+        // 2. ÖNCELİKLİ YEDEK: Dahili V2 API (Bu API followers_count veriyor)
         if (followers === 0) {
             try {
+                // Çok gerçekçi tarayıcı başlıkları
                 const v2Res = await axios.get(`https://kick.com/api/v2/channels/${currentSlug}`, {
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-                        'Accept': 'application/json',
-                        'Referer': 'https://kick.com/',
-                        'Origin': 'https://kick.com'
+                        'Accept': 'application/json, text/plain, */*',
+                        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'Referer': `https://kick.com/${currentSlug}`,
+                        'Origin': 'https://kick.com',
+                        'Sec-Ch-Ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+                        'Sec-Ch-Ua-Mobile': '?0',
+                        'Sec-Ch-Ua-Platform': '"Windows"',
+                        'Sec-Fetch-Dest': 'empty',
+                        'Sec-Fetch-Mode': 'cors',
+                        'Sec-Fetch-Site': 'same-origin'
                     },
-                    timeout: 10000
+                    timeout: 15000
                 });
                 if (v2Res.data) {
                     const d = v2Res.data;
-                    // V2 API: followers_count veya followersCount
-                    const f = d.followersCount ?? d.followers_count ?? d.chatroom?.followers_count;
-                    if (f !== undefined && f !== null) {
+                    // V2 API: followers_count (snake_case!)
+                    const f = d.followers_count ?? d.followersCount;
+                    if (f !== undefined && f !== null && f > 0) {
                         followers = parseInt(f);
-                        console.log(`[Sync SUCCESS] ${currentSlug} -> followers: ${followers} (V2 Internal API)`);
+                        console.log(`[Sync SUCCESS] ${currentSlug} -> ${followers} takipçi (V2 API)`);
                     }
                 }
             } catch (e2) {
+                console.log(`[Sync DEBUG] V2 API Fail for ${currentSlug}: ${e2.response?.status || e2.message}`);
             }
         }
 
