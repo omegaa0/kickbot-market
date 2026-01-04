@@ -2465,21 +2465,31 @@ async function syncSingleChannelStats(chanId, chan) {
 
                 if (d) console.log(`[Sync DEBUG] Official Data Keys (${currentSlug}): ${Object.keys(d).join(',')}`);
 
-                // ADIM 3: Followers Endpoint (Özel Takipçi Sayısı Yolu)
-                if (!d || (!d.followers_count && !d.followersCount)) {
+                // ADIM 3: Followers Endpoint (broadcaster_user_id ile)
+                if (d && d.broadcaster_user_id && (!d.followers_count && !d.followersCount)) {
                     try {
-                        // Birçok API'de takipçi sayısı ayrı bir yoldadır
-                        const fRes = await axios.get(`https://api.kick.com/public/v1/channels/${currentSlug}/followers`, {
+                        // Resmi API followers endpoint'i - ID ile
+                        const fRes = await axios.get(`https://api.kick.com/public/v1/channels/${d.broadcaster_user_id}/followers`, {
                             headers: officialHeaders,
                             timeout: 8000
                         });
-                        // Yanıt yapısı { count: 123 } veya { followers: [...] } olabilir
+
+                        // Response'u logla (debug için)
+                        console.log(`[Sync DEBUG] Followers Endpoint Response (${currentSlug}):`, JSON.stringify(fRes.data).substring(0, 200));
+
                         if (fRes.data) {
-                            console.log(`[Sync] Followers Endpoint VERİSİ ALINDI: ${currentSlug}`);
-                            const fData = fRes.data;
-                            if (fData.count !== undefined) d = { ...d, followers_count: fData.count };
-                            else if (fData.total !== undefined) d = { ...d, followers_count: fData.total };
-                            else if (Array.isArray(fData)) d = { ...d, followers_count: fData.length };
+                            const fData = fRes.data.data || fRes.data;
+                            // Farklı response yapıları
+                            if (fData.total !== undefined) {
+                                d = { ...d, followers_count: fData.total };
+                                console.log(`[Sync SUCCESS] ${currentSlug} -> ${fData.total} takipçi (Followers API - total)`);
+                            } else if (fData.count !== undefined) {
+                                d = { ...d, followers_count: fData.count };
+                                console.log(`[Sync SUCCESS] ${currentSlug} -> ${fData.count} takipçi (Followers API - count)`);
+                            } else if (Array.isArray(fData)) {
+                                // Eğer liste dönüyorsa, sayısını al
+                                d = { ...d, followers_count: fData.length };
+                            }
                         }
                     } catch (e) {
                         console.log(`[Sync DEBUG] Followers Endpoint Fail (${currentSlug}): ${e.response?.status || e.message}`);
@@ -2620,6 +2630,22 @@ async function syncSingleChannelStats(chanId, chan) {
                 }
             } catch (e2) {
                 console.log(`[Sync DEBUG] V2 Internal Fail for ${currentSlug}: ${e2.response?.status || e2.message}`);
+            }
+        }
+
+        // 4. SON ÇARE: Puppeteer ile Cloudflare Bypass (Gerçek tarayıcı)
+        if (followers === 0) {
+            try {
+                const puppeteerData = await fetchKickInternalAPI(currentSlug);
+                if (puppeteerData) {
+                    const f = puppeteerData.followersCount ?? puppeteerData.followers_count;
+                    if (f !== undefined && f !== null && f > 0) {
+                        followers = parseInt(f);
+                        console.log(`[Sync SUCCESS] ${currentSlug} -> ${followers} takipçi (Puppeteer)`);
+                    }
+                }
+            } catch (e) {
+                console.log(`[Sync DEBUG] Puppeteer Fail for ${currentSlug}: ${e.message}`);
             }
         }
 
