@@ -207,7 +207,7 @@ app.get('/login', async (req, res) => {
     const state = crypto.randomBytes(16).toString('hex');
     const { verifier, challenge } = generatePKCE();
     await db.ref('temp_auth/' + state).set({ verifier, createdAt: Date.now() });
-    const scopes = "chat:write events:subscribe user:read channel:read moderation:ban channel:subscription:read";
+    const scopes = "chat:write events:subscribe user:read channel:read moderation:ban channel:subscription:read channel:followed:read";
     const authUrl = `https://id.kick.com/oauth/authorize?client_id=${KICK_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(scopes)}&state=${state}&code_challenge=${challenge}&code_challenge_method=S256`;
     res.redirect(authUrl);
 });
@@ -277,7 +277,8 @@ async function subscribeToChat(token, broadcasterId) {
                 { name: "channel.subscription.new", version: 1 },
                 { name: "channel.subscription.renewal", version: 1 },
                 { name: "channel.subscription.gifts", version: 1 },
-                { name: "channel.followed", version: 1 }
+                { name: "channel.followed", version: 1 },
+                { name: "channel.follow", version: 1 }
             ],
             method: "webhook"
         }, { headers: { 'Authorization': `Bearer ${token}` } });
@@ -502,7 +503,9 @@ app.post('/kick/webhook', async (req, res) => {
         // Robust Broadcaster ID Discovery
         let broadcasterId =
             payload.broadcaster_user_id ||
+            payload.broadcaster_id ||
             event.broadcaster_user_id ||
+            event.broadcaster_id ||
             event.broadcaster?.user_id ||
             event.broadcaster?.id ||
             event.channel?.user_id ||
@@ -510,10 +513,15 @@ app.post('/kick/webhook', async (req, res) => {
             event.chatroom_id;
 
         if (!broadcasterId) {
-            // console.log("⚠️ Broadcaster ID bulunamadı. Payload:", JSON.stringify(payload).substring(0, 200));
+            // console.log("⚠️ Broadcaster ID bulunamadı. Payload keys:", Object.keys(payload));
             return;
         }
-        broadcasterId = String(broadcasterId); // String'e çevir ki cooldown objesi şaşmasın
+        broadcasterId = String(broadcasterId);
+
+        // Olay Logu (Konsolda görmek için)
+        if (payload.event && payload.event !== 'chat.message.sent') {
+            console.log(`[Webhook] Yeni Olay: ${payload.event} (Kanal: ${broadcasterId})`);
+        }
 
         const channelRef = await db.ref('channels/' + broadcasterId).once('value');
         const channelData = channelRef.val();
@@ -523,12 +531,15 @@ app.post('/kick/webhook', async (req, res) => {
             return;
         }
 
+        // Webhook Debug
+        // console.log(`[Webhook] Olay: ${payload.event || 'Bilinmiyor'} (Kanal: ${broadcasterId})`);
+
         // --- ABONE ÖDÜLÜ SİSTEMİ ---
-        const eventName = payload.event;
+        const eventName = payload.event || payload.event_type || payload.type;
         const settings = channelData.settings || {};
         const subReward = parseInt(settings.sub_reward) || 5000;
 
-        if (eventName === "channel.subscription.new" || eventName === "channel.subscription.renewal") {
+        if (eventName === "channel.subscription.new" || eventName === "channel.subscription.renewal" || eventName === "subscription.new") {
             const subUser = event.username;
             if (subUser && subUser.toLowerCase() !== "botrix") {
                 // Goal Bar Update
@@ -547,7 +558,7 @@ app.post('/kick/webhook', async (req, res) => {
             return;
         }
 
-        if (eventName === "channel.subscription.gifts") {
+        if (eventName === "channel.subscription.gifts" || eventName === "subscription.gifts") {
             const gifter = event.username;
             if (gifter && gifter.toLowerCase() === "botrix") return;
             const count = parseInt(event.total) || 1;
@@ -566,8 +577,8 @@ app.post('/kick/webhook', async (req, res) => {
             return;
         }
 
-        if (eventName === "channel.followed") {
-            const follower = event.username || event.user_name;
+        if (eventName === "channel.followed" || eventName === "channel.follow") {
+            const follower = event.username || event.user_name || event.user?.username;
             if (follower && follower.toLowerCase() === "botrix") return;
             // Goal Bar Update
             await db.ref(`channels/${broadcasterId}/stats/followers`).transaction(val => (val || 0) + 1);
