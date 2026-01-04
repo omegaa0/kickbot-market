@@ -119,6 +119,119 @@ async function addLog(action, details, channelId = 'Global') {
     }
 }
 
+// =====================================================
+// KICK WEBHOOK SİSTEMİ - Takipçi Bildirimlerini Dinle
+// =====================================================
+
+// Webhook Endpoint - Kick buraya bildirim gönderecek
+app.post('/webhook/kick', async (req, res) => {
+    try {
+        const event = req.body;
+        console.log(`[Webhook] Kick Event Alındı:`, JSON.stringify(event).substring(0, 200));
+
+        // Event tipini kontrol et
+        const eventType = event.event || event.type || event.subscription?.type;
+
+        if (eventType === 'channel.followed' || eventType === 'channel.follow') {
+            // Yeni takipçi!
+            const broadcasterId = event.broadcaster_user_id || event.data?.broadcaster_user_id;
+            const followerName = event.follower_username || event.data?.user_name || 'Bilinmeyen';
+
+            if (broadcasterId) {
+                // Takipçi sayısını +1 yap
+                const statsRef = db.ref(`channels/${broadcasterId}/stats`);
+                const currentStats = (await statsRef.once('value')).val() || { followers: 0 };
+                const newFollowers = (currentStats.followers || 0) + 1;
+
+                await statsRef.update({
+                    followers: newFollowers,
+                    last_webhook_update: Date.now()
+                });
+
+                console.log(`[Webhook] ✅ Yeni Takipçi! ${followerName} -> Kanal ${broadcasterId} (Toplam: ${newFollowers})`);
+            }
+        } else if (eventType === 'channel.subscription.new' || eventType === 'channel.subscribe') {
+            // Yeni abone!
+            const broadcasterId = event.broadcaster_user_id || event.data?.broadcaster_user_id;
+
+            if (broadcasterId) {
+                const statsRef = db.ref(`channels/${broadcasterId}/stats`);
+                const currentStats = (await statsRef.once('value')).val() || { subscribers: 0 };
+                const newSubs = (currentStats.subscribers || 0) + 1;
+
+                await statsRef.update({
+                    subscribers: newSubs,
+                    last_webhook_update: Date.now()
+                });
+
+                console.log(`[Webhook] ✅ Yeni Abone! Kanal ${broadcasterId} (Toplam: ${newSubs})`);
+            }
+        }
+
+        res.status(200).json({ success: true });
+    } catch (e) {
+        console.error('[Webhook] Hata:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Kick'e Webhook Kaydet (Her kanal için)
+async function registerKickWebhook(broadcasterId, accessToken) {
+    try {
+        const webhookUrl = `${REDIRECT_URI.replace('/auth/kick/callback', '')}/webhook/kick`;
+
+        // Takipçi event'ine abone ol
+        const response = await axios.post('https://api.kick.com/public/v1/events/subscriptions', {
+            broadcaster_user_id: parseInt(broadcasterId),
+            events: [
+                { name: 'channel.followed', version: 1 },
+                { name: 'channel.subscription.new', version: 1 },
+                { name: 'channel.subscription.gifts', version: 1 }
+            ],
+            method: 'webhook'
+        }, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        console.log(`[Webhook] ✅ Kanal ${broadcasterId} için webhook kaydedildi!`);
+
+        // Kayıt bilgisini veritabanına yaz
+        await db.ref(`channels/${broadcasterId}/webhook`).update({
+            registered: true,
+            registered_at: Date.now(),
+            subscription_ids: response.data?.data?.map(s => s.subscription_id) || []
+        });
+
+        return true;
+    } catch (e) {
+        console.error(`[Webhook] Kayıt hatası (${broadcasterId}):`, e.response?.data || e.message);
+        return false;
+    }
+}
+
+// Tüm kanallar için webhook kaydet
+async function registerAllWebhooks() {
+    try {
+        const channelsSnap = await db.ref('channels').once('value');
+        const channels = channelsSnap.val() || {};
+
+        for (const [chanId, chan] of Object.entries(channels)) {
+            // Zaten kayıtlıysa atla
+            if (chan.webhook?.registered) continue;
+
+            if (chan.access_token) {
+                await registerKickWebhook(chanId, chan.access_token);
+                await new Promise(r => setTimeout(r, 1000)); // Rate limit için bekle
+            }
+        }
+    } catch (e) {
+        console.error('[Webhook] Toplu kayıt hatası:', e.message);
+    }
+}
+
 // GLOBAL STATES
 const activeDuels = {};
 const channelHeists = {};
@@ -2964,4 +3077,12 @@ db.ref('channels').on('child_added', (snapshot) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 MASTER FINAL (MULTI-CHANNEL) AKTIF!`));
+app.listen(PORT, () => {
+    console.log(`🚀 MASTER FINAL (MULTI-CHANNEL) AKTIF!`);
+
+    // Sunucu başladığında webhook'ları kaydet
+    setTimeout(() => {
+        console.log('[Webhook] Tüm kanallar için webhook kaydı başlatılıyor...');
+        registerAllWebhooks();
+    }, 5000);
+});
