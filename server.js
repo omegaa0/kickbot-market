@@ -2403,7 +2403,8 @@ async function syncSingleChannelStats(chanId, chan) {
         let subscribers = 0;
         const rawSlug = chan.slug || chan.username;
         if (!rawSlug) return null;
-        const slug = rawSlug; // Orijinal halini koru (Kick API bazen case-sensitive olabiliyor)
+        const slug = rawSlug; // Casing'i koru
+        let currentSlug = slug;
 
         const currentStatsSnap = await db.ref(`channels/${chanId}/stats`).once('value');
         const currentStats = currentStatsSnap.val() || { followers: 0, subscribers: 0 };
@@ -2416,61 +2417,60 @@ async function syncSingleChannelStats(chanId, chan) {
             'Origin': 'https://kick.com'
         };
 
-        // 1. ÖNCELİK: Resmi V1 API (Gelişmiş)
-        let currentSlug = slug;
+        const fetchOfficial = async (token) => {
+            try {
+                // 1A: ID Bazlı
+                const res = await axios.get(`https://api.kick.com/public/v1/channels/${chanId}`, {
+                    headers: { 'Authorization': `Bearer ${token}`, ...headers },
+                    timeout: 10000
+                });
+                return res.data?.data || res.data;
+            } catch (err) {
+                if (err.response?.status === 401) throw err;
+                // 1B: Slug Bazlı
+                try {
+                    const resSlug = await axios.get(`https://api.kick.com/public/v1/channels?slug=${currentSlug}`, {
+                        headers: { 'Authorization': `Bearer ${token}`, ...headers },
+                        timeout: 10000
+                    });
+                    return resSlug.data?.data?.[0] || resSlug.data?.data || resSlug.data;
+                } catch (e) { return null; }
+            }
+        };
+
+        // 1. ÖNCELİK: Resmi V1 API
         if (chan.access_token) {
             try {
-                // Deneme 1A: ID Bazlı Path (Resmi dokümandaki yöntem)
-                const v1Res = await axios.get(`https://api.kick.com/public/v1/channels/${chanId}`, {
-                    headers: { 'Authorization': `Bearer ${chan.access_token}`, ...headers },
-                    timeout: 10000
-                }).catch(() => null);
+                let data = await fetchOfficial(chan.access_token);
+                if (!data) throw new Error("No data"); // 401 değilse de refresh dışı kalmasın diye
 
-                let data = v1Res?.data?.data || v1Res?.data;
-                if (Array.isArray(data)) data = data[0];
-                if (data?.slug) currentSlug = data.slug;
-
-                // Deneme 1B: Slug Bazlı (Eğer ID bazlı boş dönerse)
-                if (!data) {
-                    const v1SlugRes = await axios.get(`https://api.kick.com/public/v1/channels?slug=${currentSlug}`, {
-                        headers: { 'Authorization': `Bearer ${chan.access_token}`, ...headers },
-                        timeout: 10000
-                    }).catch(() => null);
-                    data = v1SlugRes?.data?.data?.[0] || v1SlugRes?.data?.data || v1SlugRes?.data;
-                    if (data?.slug) currentSlug = data.slug;
-                }
-
-                if (data) {
-                    // Sayıların varlığını kontrol et
-                    const f = data.followers_count ?? data.followersCount ?? data.followers ?? data.follower_count;
-                    const s = data.subscriber_count ?? data.subscribers_count ?? data.subscribers ?? data.subscription_count;
-
+                const processData = (d) => {
+                    if (Array.isArray(d)) d = d[0];
+                    if (d?.slug) currentSlug = d.slug;
+                    const f = d?.followers_count ?? d?.followersCount ?? d?.followers ?? d?.follower_count;
+                    const s = d?.subscriber_count ?? d?.subscribers_count ?? d?.subscribers ?? d?.subscription_count;
                     if (f !== undefined && f !== null) followers = parseInt(f);
                     if (s !== undefined && s !== null) subscribers = parseInt(s);
-
-                    // Eğer hala 0 geliyorsa, data objesinin içinde 'livestream' veya 'chatroom' aramayı dene
-                    if (followers === 0) {
-                        const lf = data.livestream?.followers_count || data.chatroom?.followers_count;
-                        if (lf) followers = parseInt(lf);
+                    // Chatroom fallback
+                    if (followers === 0 && d?.chatroom?.followers_count) followers = parseInt(d.chatroom.followers_count);
+                };
+                processData(data);
+            } catch (e1) {
+                if (e1.response?.status === 401) {
+                    console.log(`[Sync] 401 Hatası! ${slug} için token yenileniyor...`);
+                    await refreshChannelToken(chanId).catch(() => { });
+                    const newChan = (await db.ref('channels/' + chanId).once('value')).val();
+                    if (newChan?.access_token) {
+                        const data2 = await fetchOfficial(newChan.access_token).catch(() => null);
+                        if (data2) {
+                            const d = Array.isArray(data2) ? data2[0] : data2;
+                            const f = d.followers_count ?? d.followersCount ?? d.followers;
+                            const s = d.subscriber_count ?? d.subscribers_count ?? d.subscribers;
+                            if (f !== undefined && f !== null) followers = parseInt(f);
+                            if (s !== undefined && s !== null) subscribers = parseInt(s);
+                        }
                     }
                 }
-                // --- EKSTRA: Eğer hala 0 ise takipçi listesi endpointinden toplam sayıyı çekmeyi dene ---
-                if (followers === 0) {
-                    try {
-                        const fRes = await axios.get(`https://api.kick.com/public/v1/channels/${chanId}/followers?limit=1`, {
-                            headers: { 'Authorization': `Bearer ${chan.access_token}`, ...headers },
-                            timeout: 10000
-                        }).catch(() => null);
-
-                        if (fRes?.data) {
-                            console.log(`[Sync DEBUG] Followers Endpoint Keys: ${Object.keys(fRes.data)}`);
-                            if (fRes.data.total !== undefined) followers = parseInt(fRes.data.total);
-                            else if (fRes.data.count !== undefined) followers = parseInt(fRes.data.count);
-                        }
-                    } catch (e) { }
-                }
-            } catch (e1) {
-                if (e1.response?.status === 401) await refreshChannelToken(chanId).catch(() => { });
             }
         }
 
@@ -2479,63 +2479,38 @@ async function syncSingleChannelStats(chanId, chan) {
             try {
                 const uas = [
                     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/110.0'
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
                 ];
-                const randomUA = uas[Math.floor(Math.random() * uas.length)];
-
                 const v2Res = await axios.get(`https://kick.com/api/v2/channels/${currentSlug}`, {
-                    headers: {
-                        'User-Agent': randomUA,
-                        'Accept': 'application/json, text/plain, */*',
-                        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
-                    },
+                    headers: { 'User-Agent': uas[Math.floor(Math.random() * uas.length)], 'Accept': 'application/json' },
                     timeout: 8000
                 });
                 if (v2Res.data) {
                     const d = v2Res.data;
-                    let f = d.followers_count ?? d.followersCount ?? d.followers ?? d.chatroom?.followers_count;
-                    let s = d.subscriber_count ?? d.subscribers_count ?? d.subscribers ?? d.subscription_config?.subscriber_count;
-
-                    // Chatroom fallback (Bazen ana objede olmayıp burda olabiliyor)
-                    if (f === undefined && currentSlug) {
-                        try {
-                            const crRes = await axios.get(`https://kick.com/api/v2/channels/${currentSlug}/chatroom`, { headers, timeout: 5000 });
-                            if (crRes.data) {
-                                f = crRes.data.followers_count || crRes.data.followersCount;
-                            }
-                        } catch (e) { }
-                    }
-
-                    if (f !== undefined && f !== null) followers = parseInt(f);
-                    if (s !== undefined && s !== null) subscribers = parseInt(s);
+                    let f = d.followers_count ?? d.chatroom?.followers_count;
+                    let s = d.subscriber_count ?? d.subscription_config?.subscriber_count;
+                    if (f !== undefined) followers = parseInt(f);
+                    if (s !== undefined) subscribers = parseInt(s);
                 }
-            } catch (e2) { console.log(`[Sync DEBUG] V2 Fail for ${slug}: ${e2.response?.status || e2.message}`); }
+            } catch (e2) {
+                console.log(`[Sync DEBUG] V2 Fail for ${slug}: ${e2.response?.status || e2.message}`);
+            }
         }
 
         // 3. YEDEK: Public V1
         if (followers === 0) {
             try {
-                const iv1Res = await axios.get(`https://kick.com/api/v1/channels/${currentSlug}`, { headers, timeout: 8000 });
-                if (iv1Res.data) {
-                    const d = iv1Res.data;
-                    const f = d.followers_count ?? d.followersCount ?? d.followers;
-                    const s = d.subscriber_count ?? d.subscribers_count ?? d.subscribers;
-
-                    if (f !== undefined && f !== null) followers = parseInt(f);
-                    if (s !== undefined && s !== null) subscribers = parseInt(s);
+                const v1Res = await axios.get(`https://kick.com/api/v1/channels/${currentSlug}`, { headers, timeout: 8000 });
+                if (v1Res.data) {
+                    const d = v1Res.data;
+                    followers = parseInt(d.followers_count || d.followersCount || 0);
+                    subscribers = parseInt(d.subscriber_count || d.subscribers_count || 0);
                 }
-            } catch (e) { console.log(`[Sync DEBUG] V1 Public Fail for ${slug}: ${e.message}`); }
+            } catch (e3) { }
         }
 
-        // --- GÜVENLİK KONTROLÜ ---
-        // (currentStatsSnap ve currentStats üstte tanımlandı)
-
-        // Eğer tüm kaynaklar 0 döndüyse, mevcut veriyi koru ve çık
-        if (followers === 0 && subscribers === 0) {
-            console.log(`[Sync] Başarısız: ${slug} için veri çekilemedi (Tüm kaynaklar 0), mevcut veriler korunuyor.`);
-            return currentStats;
-        }
+        // GÜVENLİK VE GÜNCELLEME
+        if (followers === 0 && subscribers === 0) return currentStats;
 
         const result = {
             followers: (followers > 0) ? followers : currentStats.followers,
@@ -2547,7 +2522,7 @@ async function syncSingleChannelStats(chanId, chan) {
         await db.ref(`channels/${chanId}/stats`).update(result);
         return result;
     } catch (e) {
-        console.error(`Sync Stats Final Error:`, e.message);
+        console.error(`Sync Stats Final Error for ${chanId}:`, e.message);
         return null;
     }
 }
