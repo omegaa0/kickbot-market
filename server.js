@@ -43,6 +43,19 @@ if (!fs.existsSync(uploadDir)) {
 }
 app.use('/uploads/sounds', express.static(uploadDir)); // Sesler için doğru yer
 
+// AI IMAGES TEMP STORAGE
+const aiImagesDir = fs.existsSync(persistPath)
+    ? path.join(persistPath, 'ai-images')
+    : path.join(__dirname, 'uploads', 'ai-images');
+
+if (!fs.existsSync(aiImagesDir)) {
+    fs.mkdirSync(aiImagesDir, { recursive: true });
+}
+app.use('/ai-images', express.static(aiImagesDir));
+
+// Geçici AI resimleri (2 dk sonra silinecek)
+const tempAiImages = {};
+
 // MULTER SETUP
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -122,6 +135,61 @@ async function addLog(action, details, channelId = 'Global') {
 // =====================================================
 // KICK WEBHOOK SİSTEMİ - Takipçi Bildirimlerini Dinle
 // =====================================================
+
+// AI Resim Görüntüleme Sayfası
+app.get('/ai-view/:id', (req, res) => {
+    const imageId = req.params.id;
+    const imageData = tempAiImages[imageId];
+
+    if (!imageData) {
+        return res.status(404).send(`
+            <!DOCTYPE html>
+            <html><head><title>Resim Bulunamadı</title>
+            <style>body{font-family:Arial;display:flex;justify-content:center;align-items:center;height:100vh;background:#1a1a2e;color:#fff;margin:0;}
+            .box{text-align:center;padding:40px;background:#16213e;border-radius:16px;}</style></head>
+            <body><div class="box"><h1>⏰ Süre Doldu</h1><p>Bu resim artık mevcut değil. AI resimleri 2 dakika sonra silinir.</p></div></body></html>
+        `);
+    }
+
+    const elapsed = Date.now() - imageData.createdAt;
+    const remaining = Math.max(0, Math.floor((120000 - elapsed) / 1000));
+
+    res.send(`
+        <!DOCTYPE html>
+        <html><head><title>AI Resim - ${imageData.prompt.substring(0, 30)}...</title>
+        <meta charset="UTF-8">
+        <style>
+            body{font-family:'Segoe UI',Arial;display:flex;flex-direction:column;align-items:center;min-height:100vh;background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;margin:0;padding:20px;box-sizing:border-box;}
+            .container{max-width:600px;width:100%;text-align:center;}
+            img{max-width:100%;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,0.5);margin:20px 0;}
+            .prompt{background:rgba(255,255,255,0.1);padding:15px 20px;border-radius:10px;font-style:italic;margin:15px 0;}
+            .timer{font-size:24px;color:#ff6b6b;margin:10px 0;}
+            .info{color:#aaa;font-size:14px;}
+            h1{background:linear-gradient(90deg,#667eea,#764ba2);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:28px;}
+        </style></head>
+        <body>
+            <div class="container">
+                <h1>🎨 AI Tarafından Üretilen Resim</h1>
+                <img src="/ai-images/${imageData.filename}" alt="AI Generated Image">
+                <div class="prompt">"${imageData.prompt}"</div>
+                <div class="timer">⏳ Kalan süre: <span id="timer">${remaining}</span> saniye</div>
+                <div class="info">Oluşturan: @${imageData.createdBy}</div>
+            </div>
+            <script>
+                let remaining = ${remaining};
+                const timerEl = document.getElementById('timer');
+                setInterval(() => {
+                    remaining--;
+                    if (remaining <= 0) {
+                        location.reload();
+                    } else {
+                        timerEl.textContent = remaining;
+                    }
+                }, 1000);
+            </script>
+        </body></html>
+    `);
+});
 
 // Webhook Endpoint - Kick buraya bildirim gönderecek
 app.post('/webhook/kick', async (req, res) => {
@@ -456,6 +524,40 @@ async function fetchKickV2Channel(slug) {
         // Cloudflare engeli - sessiz hata
     }
     return null;
+}
+
+// AI RESİM ÜRETME (Pollinations.ai - Ücretsiz)
+async function generateAiImage(prompt, imageId) {
+    try {
+        const encodedPrompt = encodeURIComponent(prompt);
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&nologo=true`;
+
+        const response = await axios.get(imageUrl, {
+            responseType: 'arraybuffer',
+            timeout: 60000 // 60 saniye (resim üretimi zaman alabilir)
+        });
+
+        const filename = `${imageId}.png`;
+        const filePath = path.join(aiImagesDir, filename);
+
+        fs.writeFileSync(filePath, response.data);
+
+        // 2 dakika sonra sil
+        setTimeout(() => {
+            try {
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath);
+                    console.log(`[AI] Resim silindi: ${filename}`);
+                }
+                delete tempAiImages[imageId];
+            } catch (e) { }
+        }, 120000); // 2 dakika
+
+        return filename;
+    } catch (e) {
+        console.log(`[AI] Resim üretme hatası: ${e.message}`);
+        return null;
+    }
 }
 
 async function refreshChannelToken(broadcasterId) {
@@ -876,6 +978,38 @@ app.post('/kick/webhook', async (req, res) => {
 
                 await reply(`/host ${cleanTarget}`);
                 addLog("Moderasyon", `!host komutu kullanıldı: ${user} -> ${cleanTarget}`, broadcasterId);
+            }
+
+            // AI RESİM ÜRETME (Sadece Mod/Broadcaster)
+            else if (lowMsg.startsWith('!airesim ')) {
+                if (!isAuthorized) return await reply(`@${user}, bu komutu sadece yayıncı ve moderatörler kullanabilir!`);
+
+                const prompt = message.substring(9).trim(); // "!airesim " = 9 karakter
+                if (!prompt || prompt.length < 3) {
+                    return await reply(`@${user}, kullanım: !airesim [resim açıklaması] - Örnek: !airesim güneş batarken deniz manzarası`);
+                }
+
+                await reply(`🎨 @${user}, resim üretiliyor... (Bu 30-60 saniye sürebilir)`);
+
+                const imageId = `ai_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+                const filename = await generateAiImage(prompt, imageId);
+
+                if (filename) {
+                    const baseUrl = process.env.BASE_URL || 'https://aloskegangbot-market.onrender.com';
+                    const imageUrl = `${baseUrl}/ai-images/${filename}`;
+                    const viewUrl = `${baseUrl}/ai-view/${imageId}`;
+
+                    tempAiImages[imageId] = {
+                        filename,
+                        prompt,
+                        createdBy: user,
+                        createdAt: Date.now()
+                    };
+
+                    await reply(`🖼️ @${user}, resmin hazır! Görüntüle (2 dk geçerli): ${viewUrl}`);
+                } else {
+                    await reply(`@${user}, resim üretilemedi. Lütfen tekrar dene.`);
+                }
             }
 
             else if (lowMsg === '!bakiye') {
