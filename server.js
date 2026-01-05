@@ -2430,7 +2430,7 @@ async function trackWatchTime() {
                     apiSource = "V2_INTERNAL";
                 }
 
-                // 2. EĞER V2 SONUÇ VERMEDİYSE RESMİ API (v1) DENE
+                // 2. RESMİ API (v1) - Stream objesinden canlılık kontrolü
                 if (!isLive && chan.access_token) {
                     try {
                         const v1Res = await axios.get(`https://api.kick.com/public/v1/channels?slug=${chan.username}`, {
@@ -2439,16 +2439,18 @@ async function trackWatchTime() {
                         });
                         if (v1Res.data && v1Res.data.data && v1Res.data.data[0]) {
                             const d = v1Res.data.data[0];
-                            // Sadece stream objesinin varlığı yetmez, içindeki is_live true olmalı
-                            isLive = d.is_live || !!d.livestream || (d.stream && d.stream.is_live === true);
-                            apiSource = "V1_OFFICIAL";
+                            // KRITIK: stream.is_live değerini kesin kontrol et
+                            if (d.stream && d.stream.is_live === true) {
+                                isLive = true;
+                                apiSource = "V1_OFFICIAL";
+                            }
                         }
                     } catch (e1) {
                         if (e1.response?.status === 401) await refreshChannelToken(chanId);
                     }
                 }
 
-                // 3. EĞER HALA BULAMADIKSA V1 (INTERNAL) DENE
+                // 3. V1 INTERNAL API
                 if (!isLive) {
                     const iv1Res = await axios.get(`https://kick.com/api/v1/channels/${chan.username}`, {
                         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
@@ -2457,8 +2459,11 @@ async function trackWatchTime() {
 
                     if (iv1Res && iv1Res.data) {
                         const d = iv1Res.data;
-                        isLive = d.is_live || !!d.livestream || (d.stream && d.stream.is_live === true);
-                        if (isLive) apiSource = "V1_INTERNAL";
+                        // Sadece livestream objesi varsa veya is_live true ise
+                        if (d.livestream && d.livestream !== null) {
+                            isLive = true;
+                            apiSource = "V1_INTERNAL";
+                        }
                     }
                 }
 
@@ -2582,75 +2587,50 @@ async function syncSingleChannelStats(chanId, chan) {
         const currentStats = currentStatsSnap.val() || { followers: 0, subscribers: 0 };
         console.log(`[Sync] ${username} >> Başladı...`);
 
-        // SADECE RESMİ API (Çünkü Render IP'si sadece buraya izin veriyor)
-        if (chan.access_token) {
-            try {
-                // trackWatchTime'ın kullandığı birebir aynı istek yapısı
-                const v1Res = await axios.get(`https://api.kick.com/public/v1/channels?slug=${username}`, {
-                    headers: { 'Authorization': `Bearer ${chan.access_token}` },
-                    timeout: 7000
-                });
-
-                if (v1Res.data && (v1Res.data.data || v1Res.data[0] || v1Res.data.id)) {
-                    const data = v1Res.data.data?.[0] || v1Res.data?.[0] || v1Res.data;
-
-                    // Derin tarama: Kick'in tüm ihtimallerini kontrol et
-                    const f = data.followersCount ?? data.followers_count ?? data.followers ?? data.follower_count;
-                    const s = data.subscriber_count ?? data.subscribers_count ?? data.subscribers ?? data.sub_count;
-
-                    if (f !== undefined && f !== null) followers = parseInt(f);
-                    if (s !== undefined && s !== null) subscribers = parseInt(s);
-
-                    // Eğer hala bulamadıysak alternative keys check
-                    if (followers === 0) {
-                        const bf = data.broadcaster?.followersCount ?? data.broadcaster?.followers_count ?? data.broadcaster?.followers;
-                        if (bf) followers = parseInt(bf);
-                        else if (data.followers) followers = parseInt(data.followers);
-                        else if (data.followersCount) followers = parseInt(data.followersCount);
-                    }
-
-                    if (followers > 0) {
-                        console.log(`[Sync SUCCESS] ${username} >> Takipçi Bulundu: ${followers}`);
-                    } else {
-                        // Eğer data geldiyse ama sayı bulamadıysak keyleri bas ki görelim
-                        console.log(`[Sync DEBUG] Veri Geldi Ama Sayı Yok. Keyler: ${Object.keys(data).join(', ')}`);
-                        // DEBUG: Eğer livestream/stream varsa oradan bir şeyler çekebilir miyiz?
-                        if (data.stream) console.log(`[Sync DEBUG] Stream Keys: ${Object.keys(data.stream).join(', ')}`);
-                    }
-                }
-            } catch (e1) {
-                console.log(`[Sync ERROR] Resmi API Hatası: ${e1.response?.status || e1.message}`);
-                if (e1.response?.status === 401) await refreshChannelToken(chanId).catch(() => { });
+        // 1. ÖNCE GRAPHQL (En güncel ve kesin veriyi bu verir)
+        const gqlData = await fetchKickGraphQL(username);
+        if (gqlData) {
+            if (gqlData.followersCount) followers = parseInt(gqlData.followersCount);
+            if (followers > 0) {
+                console.log(`[Sync SUCCESS-GQL] ${username} >> Takipçi: ${followers}`);
             }
         }
 
-        // 2. ALTERNATİF: GRAPHQL (Eğer resmi API sonuç vermediyse)
-        if (followers === 0) {
-            const gqlData = await fetchKickGraphQL(username);
-            if (gqlData) {
-                if (gqlData.followersCount) followers = parseInt(gqlData.followersCount);
-                // Not: Sub count GraphQL'de direkt olmayabilir ama bazen subscriptionPackages vs var
-                console.log(`[Sync GraphQL] ${username} >> Follower: ${followers}`);
-            }
-        }
-
-        // 3. ALTERNATİF: INTERNAL API (Son Çare)
+        // 2. EĞER GRAPHQL BAŞARISIZSA INTERNAL V1 API (Takipçi sayısı burada var)
         if (followers === 0) {
             try {
                 const iv1Res = await axios.get(`https://kick.com/api/v1/channels/${username}`, {
                     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
                     timeout: 5000
-                }).catch(() => null);
+                });
 
                 if (iv1Res && iv1Res.data) {
                     const d = iv1Res.data;
-                    const f = d.followersCount ?? d.followers_count ?? d.followers;
-                    const s = d.subscriber_count ?? d.subscribers_count ?? d.subscribers;
+                    // Internal API'de followers_count olmalı
+                    const f = d.followers_count ?? d.followersCount ?? d.followers;
+                    const s = d.subscriber_badges?.length ?? 0;
                     if (f) followers = parseInt(f);
                     if (s) subscribers = parseInt(s);
-                    if (followers > 0) console.log(`[Sync INTERNAL] ${username} >> Follower: ${followers}`);
+                    if (followers > 0) console.log(`[Sync SUCCESS-INTERNAL] ${username} >> Takipçi: ${followers}`);
+                    else console.log(`[Sync DEBUG] Internal API Keys: ${Object.keys(d).join(', ')}`);
                 }
-            } catch (e) { }
+            } catch (e) {
+                console.log(`[Sync] Internal API hatası: ${e.message}`);
+            }
+        }
+
+        // 3. RESMİ PUBLIC V1 API (Sadece token yenileme için kontrol)
+        if (followers === 0 && chan.access_token) {
+            try {
+                const v1Res = await axios.get(`https://api.kick.com/public/v1/channels?slug=${username}`, {
+                    headers: { 'Authorization': `Bearer ${chan.access_token}` },
+                    timeout: 7000
+                });
+                // Public API takipçi sayısı vermiyor, sadece token kontrolü
+                console.log(`[Sync] Public V1 erişimi başarılı (takçi sayısı bu endpoint'te yok)`);
+            } catch (e1) {
+                if (e1.response?.status === 401) await refreshChannelToken(chanId).catch(() => { });
+            }
         }
 
         // VERİ SAKLAMA
