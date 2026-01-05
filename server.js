@@ -559,18 +559,48 @@ async function fetchKickV2Channel(slug) {
 // AI RESİM ÜRETME (Flux Modeli - Grok/Flux Kalitesinde)
 async function generateAiImage(prompt, imageId) {
     try {
-        // Promptu daha kaliteli sonuç vermesi için zenginleştiriyoruz
-        const qualityBoost = ", highly detailed, 4k resolution, cinematic lighting, masterpiece, photorealistic";
-        const enhancedPrompt = prompt + qualityBoost;
-        const encodedPrompt = encodeURIComponent(enhancedPrompt);
+        let enhancedPrompt = prompt.toLowerCase();
 
+        // --- AKILLI PROMPT ZENGİNLEŞTİRME ---
+
+        // Şehir ve Yerelleştirme Desteği
+        const cityMap = {
+            'amasya': 'Amasya city Turkey, historical Ottoman houses by the Yeşilırmak river, ancient Pontic Rock Tombs, castle on the mountain',
+            'istanbul': 'Istanbul city Turkey, Bosphorus, Hagia Sophia, Galata Tower, minarets and skyline',
+            'ankara': 'Ankara city Turkey, Anitkabir, Atakule, city panorama',
+            'izmir': 'Izmir city Turkey, clock tower, gulf view, palm trees'
+        };
+
+        for (const [tr, en] of Object.entries(cityMap)) {
+            if (enhancedPrompt.includes(tr)) {
+                enhancedPrompt = enhancedPrompt.replace(new RegExp(tr, 'gi'), en);
+            }
+        }
+
+        // Zaman ve Stil Desteği
+        if (enhancedPrompt.includes('2100') || enhancedPrompt.includes('2050') || enhancedPrompt.includes('gelecek') || enhancedPrompt.includes('future')) {
+            enhancedPrompt += ", futuristic cyberpunk aesthetic, flying vehicles, neon lights, advanced architectural design, sci-fi atmosphere, glowing city lights";
+        }
+
+        if (enhancedPrompt.includes('gece') || enhancedPrompt.includes('night')) {
+            enhancedPrompt += ", ultra night mode, cinematic lighting, deep shadows, neon glow";
+        }
+
+        // Genel Kalite Arttırıcılar (Flux Modeli için Optimize)
+        const qualityBoost = ", masterpiece, highly detailed, 8k resolution, photorealistic, cinematic composition, sharp focus, intricate textures, ray tracing";
+        enhancedPrompt += qualityBoost;
+
+        console.log(`[AI Prompt] Orijinal: ${prompt} -> Zenginleştirilmiş: ${enhancedPrompt}`);
+
+        const encodedPrompt = encodeURIComponent(enhancedPrompt);
         const seed = Math.floor(Math.random() * 1000000);
-        // model=flux, Grok-2'nin kullandığı motor ile aynı yüksek kaliteyi sağlar
+
+        // model=flux kullanarak en yüksek kaliteyi hedefliyoruz
         const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true&model=flux&seed=${seed}`;
 
         const response = await axios.get(imageUrl, {
             responseType: 'arraybuffer',
-            timeout: 90000 // Kaliteli modeller biraz daha yavaş olabilir
+            timeout: 90000
         });
 
         const filename = `${imageId}.png`;
@@ -1628,11 +1658,11 @@ app.post('/kick/webhook', async (req, res) => {
                 if (rig) {
                     target = rig.target || target || "Gizli Hayran";
                     const perc = rig.percent;
-                    await reply(`❤️ @${user} & @${target} Uyumu: %${perc} ${perc >= 100 ? '🔥 RUH EŞİ BULUNDU!' : '💔'}`);
+                    await reply(`❤️ @${user} & @${target} Uyumu: ${perc} ${perc >= 100 ? '🔥 RUH EŞİ BULUNDU!' : '💔'}`);
                     delete riggedShips[user.toLowerCase()];
                 } else {
                     const perc = Math.floor(Math.random() * 101);
-                    await reply(`❤️ @${user} & @${target} Uyumu: %${perc} ${perc > 80 ? '🔥' : perc > 50 ? '😍' : '💔'}`);
+                    await reply(`❤️ @${user} & @${target} Uyumu: ${perc} ${perc > 80 ? '🔥' : perc > 50 ? '😍' : '💔'}`);
                 }
             }
 
