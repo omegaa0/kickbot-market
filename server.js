@@ -437,7 +437,23 @@ async function fetchKickGraphQL(slug) {
             return res.data.data.channel;
         }
     } catch (e) {
-        // console.log(`[GraphQL Error] ${slug}:`, e.message);
+        console.log(`[GraphQL] ${slug}: ${e.response?.status || e.message}`);
+    }
+    return null;
+}
+
+// V2 Internal API - Takipçi sayısı burada olabilir
+async function fetchKickV2Channel(slug) {
+    try {
+        const res = await axios.get(`https://kick.com/api/v2/channels/${slug}`, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            },
+            timeout: 5000
+        });
+        return res.data;
+    } catch (e) {
+        console.log(`[V2 API] ${slug}: ${e.response?.status || e.message}`);
     }
     return null;
 }
@@ -2596,7 +2612,18 @@ async function syncSingleChannelStats(chanId, chan) {
             }
         }
 
-        // 2. EĞER GRAPHQL BAŞARISIZSA INTERNAL V1 API (Takipçi sayısı burada var)
+        // 2. V2 INTERNAL API (Takipçi sayısı burada var)
+        if (followers === 0) {
+            const v2Data = await fetchKickV2Channel(username);
+            if (v2Data) {
+                const f = v2Data.followers_count ?? v2Data.followersCount ?? v2Data.followers;
+                if (f) followers = parseInt(f);
+                if (followers > 0) console.log(`[Sync SUCCESS-V2] ${username} >> Takipçi: ${followers}`);
+                else console.log(`[Sync DEBUG] V2 API Keys: ${Object.keys(v2Data).join(', ')}`);
+            }
+        }
+
+        // 3. INTERNAL V1 API (Son Çare)
         if (followers === 0) {
             try {
                 const iv1Res = await axios.get(`https://kick.com/api/v1/channels/${username}`, {
@@ -2606,16 +2633,15 @@ async function syncSingleChannelStats(chanId, chan) {
 
                 if (iv1Res && iv1Res.data) {
                     const d = iv1Res.data;
-                    // Internal API'de followers_count olmalı
                     const f = d.followers_count ?? d.followersCount ?? d.followers;
                     const s = d.subscriber_badges?.length ?? 0;
                     if (f) followers = parseInt(f);
                     if (s) subscribers = parseInt(s);
-                    if (followers > 0) console.log(`[Sync SUCCESS-INTERNAL] ${username} >> Takipçi: ${followers}`);
-                    else console.log(`[Sync DEBUG] Internal API Keys: ${Object.keys(d).join(', ')}`);
+                    if (followers > 0) console.log(`[Sync SUCCESS-V1INT] ${username} >> Takipçi: ${followers}`);
+                    else console.log(`[Sync DEBUG] V1 Internal Keys: ${Object.keys(d).join(', ')}`);
                 }
             } catch (e) {
-                console.log(`[Sync] Internal API hatası: ${e.message}`);
+                console.log(`[Sync] V1 Internal API hatası: ${e.response?.status || e.message}`);
             }
         }
 
