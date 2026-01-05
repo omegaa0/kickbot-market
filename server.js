@@ -2726,20 +2726,21 @@ async function trackWatchTime() {
                         });
                         if (v1Res.data && v1Res.data.data && v1Res.data.data[0]) {
                             const d = v1Res.data.data[0];
+                            apiSource = "V1_OFFICIAL"; // API'ye ulaştık
                             // KRITIK: stream.is_live değerini kesin kontrol et
                             if (d.stream && d.stream.is_live === true) {
                                 isLive = true;
-                                apiSource = "V1_OFFICIAL";
                             }
                         }
                     } catch (e1) {
                         if (e1.response?.status === 401) {
                             console.log(`[Token] ${chan.username} için 401 alındı, token yenileniyor...`);
                             await refreshChannelToken(chanId);
+                        } else if (e1.response?.status) {
+                            console.log(`[API] ${chan.username} V1 hatası: ${e1.response.status}`);
                         }
                     }
                 } else if (!isLive && !chan.access_token) {
-                    // Token yok, logla
                     console.log(`[Token] ${chan.username} için access_token yok!`);
                 }
 
