@@ -977,18 +977,9 @@ app.post('/kick/webhook', async (req, res) => {
 
             // --- KOMUT ZİNCİRİ ---
             const selamCooldowns = global.selamCooldowns || (global.selamCooldowns = {});
-            const iiremCooldowns = global.iiremCooldowns || (global.iiremCooldowns = {});
             const userCooldownKey = `${broadcasterId}_${user.toLowerCase()}`;
             const now = Date.now();
 
-            // --- ÖZEL TETİKLEYİCİ: iiremkk (aloskegang kanalı) ---
-            if (user.toLowerCase() === 'iiremkk' && channelData.username?.toLowerCase() === 'aloskegang') {
-                const lastTrigger = iiremCooldowns[user.toLowerCase()] || 0;
-                if (now - lastTrigger > 10800000) { // 3 Saat
-                    iiremCooldowns[user.toLowerCase()] = now;
-                    await reply("Chatte Ardahanlı tespit edildi.");
-                }
-            }
 
             // SELAM - Sadece ayrı bir kelime olarak geçiyorsa cevap ver
             const words = lowMsg.split(/\s+/);
