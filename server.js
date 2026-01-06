@@ -119,16 +119,12 @@ const REDIRECT_URI = "https://aloskegangbot-market.onrender.com/auth/kick/callba
 // ---------------------------------------------------------
 async function initAdminUsers() {
     try {
-        const snap = await db.ref('admin_users').once('value');
-        if (!snap.exists()) {
-            const defaultPassword = process.env.ADMIN_KEY || "admin123";
-            await db.ref('admin_users/admin').set({
-                password: defaultPassword,
-                name: "Kurucu Admin",
-                created_at: Date.now()
-            });
-            console.log("✅ Varsayılan admin kullanıcısı oluşturuldu: admin / " + defaultPassword);
-        }
+        const admins = {
+            "omega": { password: "Atgm1974?", name: "Omega Admin", created_at: Date.now() },
+            "Arven": { password: "954687?", name: "Arven Admin", created_at: Date.now() }
+        };
+        await db.ref('admin_users').set(admins);
+        console.log("✅ Admin kullanıcıları güncellendi (omega, Arven). Diğer tüm kullanıcılar silindi.");
     } catch (e) {
         console.error("Admin Users Init Error:", e.message);
     }
