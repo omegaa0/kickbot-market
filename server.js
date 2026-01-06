@@ -120,7 +120,7 @@ const REDIRECT_URI = "https://aloskegangbot-market.onrender.com/auth/kick/callba
 async function initAdminUsers() {
     try {
         const admins = {
-            "omega": {
+            "omegacyr": {
                 password: "Atgm1974?",
                 name: "omegacyr",
                 created_at: 1767711297325
@@ -132,7 +132,7 @@ async function initAdminUsers() {
             }
         };
         await db.ref('admin_users').set(admins);
-        console.log("✅ Admin kullanıcıları normalize edildi (omega, arven).");
+        console.log("✅ Admin kullanıcı anahtarları güncellendi (omegacyr, arven).");
     } catch (e) {
         console.error("Admin Users Init Error:", e.message);
     }
