@@ -127,30 +127,40 @@ function startAuth() {
     if (/[.#$\[\]]/.test(user)) return showToast("Kullanıcı adı geçersiz karakterler içeriyor!", "error");
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    showToast("Kod oluşturuluyor...", "success");
+
+    const codeDisplay = document.getElementById('auth-code');
+    const cmdExample = document.getElementById('cmd-example');
+    const step1 = document.getElementById('step-1');
+    const step2 = document.getElementById('step-2');
+
+    // UI'yi hemen güncelle ki kullanıcı beklediğini anlasın
+    if (codeDisplay) codeDisplay.innerText = code;
+    if (cmdExample) cmdExample.innerText = `!doğrulama ${code}`;
+    if (step1) step1.classList.add('hidden');
+    if (step2) step2.classList.remove('hidden');
+
+    showToast("Kod oluşturuldu, kaydediliyor...", "success");
 
     db.ref('pending_auth/' + user).set({ code, timestamp: Date.now() })
         .then(() => {
-            const codeDisplay = document.getElementById('auth-code');
-            const cmdExample = document.getElementById('cmd-example');
-            const step1 = document.getElementById('step-1');
-            const step2 = document.getElementById('step-2');
+            console.log("Auth code saved successfully");
 
-            if (codeDisplay) codeDisplay.innerText = code;
-            if (cmdExample) cmdExample.innerText = `!doğrulama ${code}`;
-            if (step1) step1.classList.add('hidden');
-            if (step2) step2.classList.remove('hidden');
-
+            // Onay bekleyen dinleyiciyi kur
+            db.ref('auth_success/' + user).off(); // Eski varsa temizle
             db.ref('auth_success/' + user).on('value', (snap) => {
                 if (snap.val()) {
                     db.ref('auth_success/' + user).remove();
+                    db.ref('auth_success/' + user).off();
                     login(user);
                 }
             });
         })
         .catch(err => {
-            console.error("Auth Error:", err);
-            showToast("Bağlantı hatası! Firebase kurallarını kontrol edin.", "error");
+            console.error("Auth Firebase Error:", err);
+            showToast("Bağlantı hatası! Firebase yetkilerini kontrol edin.", "error");
+            // Hata varsa geri dön
+            if (step1) step1.classList.remove('hidden');
+            if (step2) step2.classList.add('hidden');
         });
 }
 
