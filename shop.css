@@ -45,14 +45,17 @@ body {
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--glass-border);
     border-radius: 24px;
-    padding: 40px;
-    width: 400px;
+    padding: 30px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.centered-panel {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
+    width: 400px;
     text-align: center;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
 }
 
 .logo {
@@ -437,17 +440,50 @@ header {
 
 .city-dot {
     position: absolute;
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     background: var(--primary);
     border-radius: 50%;
     cursor: pointer;
-    box-shadow: 0 0 10px var(--primary);
-    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    border: 2px solid rgba(0, 0, 0, 0.6);
-    z-index: 5;
+    box-shadow: 0 0 15px var(--primary);
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    border: 2.5px solid rgba(0, 0, 0, 0.7);
+    z-index: 10;
     pointer-events: auto;
     transform: translate(-50%, -50%);
+}
+
+.city-dot:hover {
+    background: white;
+    box-shadow: 0 0 25px white, 0 0 45px var(--primary);
+    transform: translate(-50%, -50%) scale(1.6);
+    z-index: 100;
+}
+
+.city-dot.active {
+    background: white;
+    border-color: var(--primary);
+    box-shadow: 0 0 30px var(--primary);
+    transform: translate(-50%, -50%) scale(1.4);
+}
+
+.property-card:hover {
+    background: rgba(255, 255, 255, 0.06) !important;
+    border-color: var(--primary) !important;
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .city-dot:hover {
