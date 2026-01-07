@@ -2446,24 +2446,66 @@ EK TALİMAT: ${aiInst}`;
             }
 
             else if (lowMsg.startsWith('!doğrulama') || lowMsg.startsWith('!dogrulama') || lowMsg.startsWith('!kod')) {
-                const code = args[0];
-                console.log(`[Auth] Attempt: ${user} | Code: ${code} | Chan: ${broadcasterId}`);
+                const inputCode = args[0]?.trim();
+                if (!inputCode) return await reply(`@${user}, Lütfen mağazadaki 6 haneli kodu yazın. Örn: !doğrulama 123456`);
 
-                if (!code) return await reply(`@${user}, Lütfen mağazadaki 6 haneli kodu yazın. Örn: !doğrulama 123456`);
+                console.log(`[Auth-Smart] Başlatıldı: User="${user}" | Kod="${inputCode}"`);
 
                 const cleanUser = user.toLowerCase().trim();
+                let foundMatch = null;
+
+                // 1. ADIM: Doğrudan kullanıcı adı ile sorgula
                 const pendingSnap = await db.ref('pending_auth/' + cleanUser).once('value');
                 const pending = pendingSnap.val();
 
-                if (pending && String(pending.code).trim() === String(code).trim()) {
-                    console.log(`[Auth] Success: ${user}`);
-                    await db.ref('users/' + cleanUser).update({ auth_channel: broadcasterId });
-                    await db.ref('auth_success/' + cleanUser).set(true);
-                    await db.ref('pending_auth/' + cleanUser).remove();
-                    await reply(`✅ @${user}, Kimliğin doğrulandı! Mağaza sayfasına geri dönebilirsin. Bu kanala özel market ürünlerini görebilirsin. 🛍️`);
+                if (pending && String(pending.code).trim() === String(inputCode)) {
+                    foundMatch = { username: cleanUser, data: pending };
+                }
+
+                // 2. ADIM: Smart Match (Kullanıcı adı yanlışsa veya Türkçe karakter hatası varsa kodu tüm listede ara)
+                if (!foundMatch) {
+                    console.log(`[Auth-Smart] @${user} için doğrudan eşleşme yok, havuzda aranıyor...`);
+                    const allPendingSnap = await db.ref('pending_auth').once('value');
+                    const allPending = allPendingSnap.val() || {};
+
+                    const matches = Object.entries(allPending).filter(([u, d]) => String(d.code).trim() === String(inputCode));
+
+                    if (matches.length === 1) {
+                        const [matchedUser, matchedData] = matches[0];
+                        foundMatch = { username: matchedUser, data: matchedData, isSmart: true };
+                        console.log(`[Auth-Smart] ✅ Kod bulundu! Eşleşen Kayıt: ${matchedUser} (Giren: ${cleanUser})`);
+                    } else if (matches.length > 1) {
+                        console.log(`[Auth-Smart] ❌ Birden fazla çakışan kod bulundu!`);
+                        return await reply(`❌ @${user}, Girilen kod sistemdeki başka bir talep ile çakışıyor. Lütfen mağazadan yeni bir kod al.`);
+                    }
+                }
+
+                // SONUÇ DEĞERLENDİRME
+                if (foundMatch) {
+                    const { username: targetUser, data, isSmart } = foundMatch;
+                    const isExpired = Date.now() - (data.timestamp || 0) > 1800000; // 30 Dakika
+
+                    if (isExpired) {
+                        console.log(`[Auth] ⏳ Süre dolmuş: ${targetUser}`);
+                        return await reply(`❌ @${user}, Kodun süresi dolmuş (30 dk). Lütfen mağazadan yeni bir kod al.`);
+                    }
+
+                    console.log(`[Auth] ✅ Doğrulama BAŞARILI: ${targetUser}`);
+
+                    await db.ref('users/' + targetUser).update({
+                        auth_channel: broadcasterId,
+                        last_auth_at: Date.now(),
+                        kick_name: user
+                    });
+
+                    await db.ref('auth_success/' + targetUser).set(true);
+                    await db.ref('pending_auth/' + targetUser).remove();
+
+                    const extra = isSmart ? " (İsim otomatik düzeltildi)" : "";
+                    await reply(`✅ @${user}, Kimliğin başarıyla doğrulandı! Mağaza sayfasına artık dönebilirsin.${extra} 🛍️`);
                 } else {
-                    console.log(`[Auth] Failed: ${user} (Expected: ${pending?.code}, Got: ${code})`);
-                    await reply(`❌ @${user}, Geçersiz veya süresi dolmuş kod! Lütfen mağazadan yeni bir kod al.`);
+                    console.log(`[Auth] ❌ Kod bulunamadı: ${inputCode} (Kullanıcı: ${user})`);
+                    await reply(`❌ @${user}, Kod yanlış veya geçersiz! Lütfen mağaza sayfasındaki kodu doğru yazdığından emin ol.`);
                 }
             }
 
