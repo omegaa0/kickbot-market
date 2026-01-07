@@ -2466,8 +2466,22 @@ EK TALİMAT: ${aiInst}`;
                 const allPending = allPendingSnap.val() || {};
                 
                 console.log(`[Auth-Mega] Veritabanındaki Bekleyenler: ${Object.keys(allPending).join(', ') || 'BOŞ'}`);
-
-                // 1. Direkt Eşleşme
+                
+                // DETAYLI DEBUG (Sorunu çözen satır)
+                if (allPending[cleanUser]) {
+                    const storedData = allPending[cleanUser];
+                    const storedCode = getCode(storedData);
+                    console.log(`[Auth-Mega] KRİTİK DEBUG: User=${cleanUser} | DB'deki Kod="${storedCode}" | Girilen="${inputCode}"`);
+                    console.log(`[Auth-Mega] Tür Kontrolü: DB(${typeof storedCode}) vs Input(${typeof inputCode})`);
+                    
+                    if (String(storedCode).trim() !== String(inputCode)) {
+                        console.log(`[Auth-Mega] ⚠️ EŞLEŞME HATASI: Veritabanındaki kod ile girilen kod farklı!`);
+                        // Otomatik düzeltme deneyelim mi? Hayır, sadece bilgi verelim.
+                    }
+                } else {
+                    console.log(`[Auth-Mega] ⚠️ Kullanıcı veritabanında hiç yok! (Write failure?)`);
+                }
+// 1. Direkt Eşleşme
                 if (allPending[cleanUser] && String(getCode(allPending[cleanUser])).trim() === String(inputCode)) {
                     foundMatch = { username: cleanUser, data: allPending[cleanUser] };
                 }
