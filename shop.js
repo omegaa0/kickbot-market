@@ -828,26 +828,40 @@ async function loadCityProperties(cityId, cityName) {
             return;
         }
 
-        props.forEach(p => {
+        props.forEach((p, index) => {
             const item = document.createElement('div');
-            item.style.padding = "15px";
-            item.style.background = p.owner ? "rgba(255,100,100,0.05)" : "rgba(255,255,255,0.05)";
-            item.style.borderRadius = "12px";
-            item.style.border = p.owner ? "1px solid rgba(255,0,0,0.2)" : "1px solid var(--glass-border)";
-            item.style.transition = "all 0.3s";
-            item.style.opacity = p.owner ? "0.7" : "1";
+            item.className = 'property-card';
+            item.style.padding = "20px";
+            item.style.background = p.owner ? "rgba(255,50,50,0.03)" : "rgba(255,255,255,0.03)";
+            item.style.borderRadius = "18px";
+            item.style.border = p.owner ? "1px solid rgba(255,50,50,0.15)" : "1px solid rgba(255,255,255,0.05)";
+            item.style.transition = "all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)";
+            item.style.opacity = p.owner ? "0.6" : "1";
+            item.style.transform = "translateY(20px)";
+            item.style.animation = `fadeInUp 0.5s forwards ${index * 0.1}s`;
+
+            const typeIcons = { low: 'shop', med: 'building', high: 'landmark' };
+            const icon = typeIcons[p.type] || 'house';
 
             const btnHtml = p.owner
-                ? `<span style="color:var(--danger); font-weight:800; font-size:0.8rem;">🔒 SATILDI (@${p.owner})</span>`
-                : `<button class="buy-btn" onclick="executePropertyBuy('${cityId}', '${p.id}', ${p.price}, '${cityName}')" style="padding: 6px 15px; font-size: 0.8rem; width: auto; margin:0;">SATIN AL</button>`;
+                ? `<div style="color:#ff4d4d; font-weight:900; font-size:0.75rem; background:rgba(255,77,77,0.1); padding:5px 12px; border-radius:10px; border:1px solid rgba(255,77,77,0.2);">💸 SAHİBİ: @${p.owner}</div>`
+                : `<button class="buy-btn" onclick="executePropertyBuy('${cityId}', '${p.id}', ${p.price}, '${cityName}')" style="background:var(--primary); color:#000; padding: 10px 20px; font-size: 0.85rem; font-weight:900; width: auto; margin:0; border-radius:12px; box-shadow: 0 10px 20px rgba(0,255,136,0.2);">SATIN AL</button>`;
 
             item.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <span style="font-weight:800; color:white;">${p.name}</span>
-                    <span style="color:var(--primary); font-size:0.8rem; font-weight:800;">+${p.income.toLocaleString()} 💰 / Sa</span>
+                <div style="display:flex; align-items:flex-start; gap:15px; margin-bottom:15px;">
+                    <div style="width:50px; height:50px; background:rgba(255,255,255,0.05); border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:1.5rem; color:var(--primary);">
+                        <i class="fas fa-${icon}"></i>
+                    </div>
+                    <div style="flex:1;">
+                        <div style="font-weight:900; color:white; font-size:1.1rem; margin-bottom:2px;">${p.name}</div>
+                        <div style="color:var(--primary); font-size:1rem; font-weight:900;">+${(p.income / 24).toLocaleString()} 💰 <span style="font-weight:400; font-size:0.7rem; color:#888;">/ Saat</span></div>
+                    </div>
                 </div>
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span style="color:#aaa; font-size:0.9rem;">Fiyat: ${p.price.toLocaleString()} 💰</span>
+                <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:10px; border-radius:14px;">
+                    <div style="display:flex; flex-direction:column;">
+                        <span style="color:#666; font-size:0.65rem; text-transform:uppercase; letter-spacing:1px; font-weight:700;">MALİYET</span>
+                        <span style="color:#fff; font-size:0.95rem; font-weight:800;">${p.price.toLocaleString()} 💰</span>
+                    </div>
                     ${btnHtml}
                 </div>
             `;
