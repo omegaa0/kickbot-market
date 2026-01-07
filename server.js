@@ -2464,16 +2464,16 @@ EK TALİMAT: ${aiInst}`;
                 // --- TÜM VERİLERİ ÇEK (DEBUG İÇİN) ---
                 const allPendingSnap = await db.ref('pending_auth').once('value');
                 const allPending = allPendingSnap.val() || {};
-                
+
                 console.log(`[Auth-Mega] Veritabanındaki Bekleyenler: ${Object.keys(allPending).join(', ') || 'BOŞ'}`);
-                
+
                 // DETAYLI DEBUG (Sorunu çözen satır)
                 if (allPending[cleanUser]) {
                     const storedData = allPending[cleanUser];
                     const storedCode = getCode(storedData);
                     console.log(`[Auth-Mega] KRİTİK DEBUG: User=${cleanUser} | DB'deki Kod="${storedCode}" | Girilen="${inputCode}"`);
                     console.log(`[Auth-Mega] Tür Kontrolü: DB(${typeof storedCode}) vs Input(${typeof inputCode})`);
-                    
+
                     if (String(storedCode).trim() !== String(inputCode)) {
                         console.log(`[Auth-Mega] ⚠️ EŞLEŞME HATASI: Veritabanındaki kod ile girilen kod farklı!`);
                         // Otomatik düzeltme deneyelim mi? Hayır, sadece bilgi verelim.
@@ -2481,7 +2481,7 @@ EK TALİMAT: ${aiInst}`;
                 } else {
                     console.log(`[Auth-Mega] ⚠️ Kullanıcı veritabanında hiç yok! (Write failure?)`);
                 }
-// 1. Direkt Eşleşme
+                // 1. Direkt Eşleşme
                 if (allPending[cleanUser] && String(getCode(allPending[cleanUser])).trim() === String(inputCode)) {
                     foundMatch = { username: cleanUser, data: allPending[cleanUser] };
                 }
@@ -2496,9 +2496,9 @@ EK TALİMAT: ${aiInst}`;
 
                 if (foundMatch) {
                     const { username: targetUser, data, isSmart } = foundMatch;
-                    
+
                     await db.ref('auth_success/' + targetUser).set(true);
-                    await db.ref('users/' + targetUser).update({ 
+                    await db.ref('users/' + targetUser).update({
                         auth_channel: broadcasterId,
                         last_auth_at: Date.now(),
                         kick_name: user,
@@ -2741,6 +2741,15 @@ const authAdmin = async (req, res, next) => {
             return next();
         }
     } else if (key === ADMIN_KEY && ADMIN_KEY !== "") {
+        // Eski usul şifre ile girilirse MASTER kabul et (omegacyr)
+        req.adminUser = {
+            username: 'omegacyr',
+            role: 'master',
+            permissions: {
+                channels: true, users: true, troll: true, logs: true,
+                quests: true, stocks: true, memory: true, global: true, admins: true
+            }
+        };
         return next();
     }
 
