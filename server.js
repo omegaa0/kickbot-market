@@ -409,15 +409,17 @@ const INITIAL_STOCKS = {
 
 // --- EMLAK SİSTEMİ (GLOBAL PAZAR) ---
 const REAL_ESTATE_TYPES = [
-    { name: "Küçük Esnaf Dükkanı", minPrice: 250000, maxPrice: 450000, minInc: 5000, maxInc: 10000, type: "low" },
-    { name: "Pide Salonu", minPrice: 400000, maxPrice: 750000, minInc: 8000, maxInc: 15000, type: "low" },
-    { name: "Bakkal Amca", minPrice: 150000, minInc: 3000, maxInc: 7000, type: "low" },
-    { name: "Lüks Rezidans Katı", minPrice: 2500000, maxPrice: 5000000, minInc: 45000, maxInc: 85000, type: "med" },
-    { name: "İş Merkezi", minPrice: 8000000, maxPrice: 15000000, minInc: 120000, maxInc: 250000, type: "med" },
-    { name: "Butik Otel", minPrice: 12000000, maxPrice: 25000000, minInc: 180000, maxInc: 350000, type: "med" },
-    { name: "Alışveriş Merkezi", minPrice: 75000000, maxPrice: 150000000, minInc: 1200000, maxInc: 2500000, type: "high" },
-    { name: "Havalimanı Terminali", minPrice: 250000000, maxPrice: 500000000, minInc: 4500000, maxInc: 9000000, type: "high" },
-    { name: "Şehir Limanı", minPrice: 150000000, maxPrice: 350000000, minInc: 2500000, maxInc: 6500000, type: "high" }
+    { name: "Küçük Esnaf Dükkanı", minPrice: 250000, maxPrice: 450000, minInc: 3000, maxInc: 5000, type: "low" },
+    { name: "Pide Salonu", minPrice: 400000, maxPrice: 750000, minInc: 4500, maxInc: 7000, type: "low" },
+    { name: "Bakkal Amca", minPrice: 150000, minInc: 2000, maxInc: 4000, type: "low" },
+    { name: "Eczane", minPrice: 600000, maxPrice: 1200000, minInc: 6000, maxInc: 9000, type: "low" },
+    { name: "Lüks Rezidans Katı", minPrice: 2500000, maxPrice: 5000000, minInc: 12000, maxInc: 15000, type: "med" },
+    { name: "İş Merkezi", minPrice: 8000000, maxPrice: 15000000, minInc: 15000, maxInc: 18000, type: "med" },
+    { name: "Butik Otel", minPrice: 12000000, maxPrice: 25000000, minInc: 18000, maxInc: 25000, type: "med" },
+    { name: "Gece Kulübü", minPrice: 5000000, maxPrice: 10000000, minInc: 12000, maxInc: 22000, type: "med" },
+    { name: "Alışveriş Merkezi", minPrice: 75000000, maxPrice: 150000000, minInc: 45000, maxInc: 75000, type: "high" },
+    { name: "Havalimanı Terminali", minPrice: 250000000, maxPrice: 500000000, minInc: 150000, maxInc: 350000, type: "high" },
+    { name: "Şehir Limanı", minPrice: 150000000, maxPrice: 350000000, minInc: 100000, maxInc: 250000, type: "high" }
 ];
 
 async function getCityMarket(cityId) {
@@ -427,27 +429,27 @@ async function getCityMarket(cityId) {
         let data = snap.val();
 
         if (!data) {
-            // Rastgele 3 yapı oluştur (Düşük, Orta, Yüksek)
-            const low = REAL_ESTATE_TYPES.filter(t => t.type === 'low')[Math.floor(Math.random() * 3)];
-            const med = REAL_ESTATE_TYPES.filter(t => t.type === 'med')[Math.floor(Math.random() * 3)];
-            const high = REAL_ESTATE_TYPES.filter(t => t.type === 'high')[Math.floor(Math.random() * 3)];
+            data = [];
+            // 5 ile 30 arası rastgele mülk sayısı
+            const count = Math.floor(Math.random() * 26) + 5;
 
-            const generate = (tpl, suffix) => ({
-                id: `${cityId.toLowerCase()}_${suffix}`,
-                name: `${cityId} ${tpl.name}`,
-                price: Math.floor(tpl.minPrice + Math.random() * (tpl.maxPrice ? (tpl.maxPrice - tpl.minPrice) : tpl.minPrice * 0.5)),
-                income: Math.floor(tpl.minInc + Math.random() * (tpl.maxInc - tpl.minInc)),
-                owner: null,
-                type: tpl.type
-            });
-
-            data = [generate(low, 1), generate(med, 2), generate(high, 3)];
+            for (let i = 1; i <= count; i++) {
+                const tpl = REAL_ESTATE_TYPES[Math.floor(Math.random() * REAL_ESTATE_TYPES.length)];
+                data.push({
+                    id: `${cityId.toLowerCase()}_${i}`,
+                    name: `${cityId} ${tpl.name} #${i}`,
+                    price: Math.floor(tpl.minPrice + Math.random() * (tpl.maxPrice ? (tpl.maxPrice - tpl.minPrice) : tpl.minPrice * 0.5)),
+                    income: Math.floor(tpl.minInc + Math.random() * (tpl.maxInc - tpl.minInc)),
+                    owner: null,
+                    type: tpl.type
+                });
+            }
             await marketRef.set(data);
         }
         return data;
     } catch (e) {
         console.error(`City Market Error (${cityId}):`, e.message);
-        return []; // Hata durumunda boş döndür ki çökmesin
+        return [];
     }
 }
 
