@@ -408,7 +408,6 @@ const INITIAL_STOCKS = {
 };
 
 // --- EMLAK SİSTEMİ (GLOBAL PAZAR) ---
-const MARKET_VERSION = "v3";
 const REAL_ESTATE_TYPES = [
     { name: "Küçük Esnaf Dükkanı", minPrice: 250000, maxPrice: 450000, minInc: 3000, maxInc: 4500, type: "low" },
     { name: "Pide Salonu", minPrice: 400000, maxPrice: 750000, minInc: 4000, maxInc: 6000, type: "low" },
@@ -425,7 +424,7 @@ const REAL_ESTATE_TYPES = [
 
 async function getCityMarket(cityId) {
     try {
-        const marketRef = db.ref(`real_estate_market_${MARKET_VERSION}/${cityId}`);
+        const marketRef = db.ref(`real_estate_market/${cityId}`);
         const snap = await marketRef.once('value');
         let data = snap.val();
 
@@ -656,7 +655,7 @@ app.post('/api/real-estate/buy', async (req, res) => {
         const user = (await db.ref(`users/${username.toLowerCase()}`).once('value')).val();
         if (!user) return res.json({ success: false, error: "Kullanıcı bulunamadı!" });
 
-        const marketRef = db.ref(`real_estate_market_${MARKET_VERSION}/${cityId.toUpperCase()}`);
+        const marketRef = db.ref(`real_estate_market/${cityId.toUpperCase()}`);
         const marketSnap = await marketRef.once('value');
         let cityMarket = marketSnap.val();
         if (!cityMarket) cityMarket = await getCityMarket(cityId.toUpperCase());
