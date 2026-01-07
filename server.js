@@ -2445,76 +2445,108 @@ EK TALİMAT: ${aiInst}`;
                 await reply(`@${user}, Market & Mağaza bağlantın: ${webSiteUrl} 🛒 (Giriş yaptıktan sonra chat'e !doğrulama [kod] yazmayı unutmayın!)`);
             }
 
-            else if (/^!(do[gğ]rulama|kod)/i.test(lowMsg)) {
-                const inputCode = args[0]?.trim();
-                if (!inputCode) return await reply(`@${user}, Lütfen mağazadaki 6 haneli kodu yazın. Örn: !doğrulama 123456`);
+            else if (/^!(do[gğ]rulama|kod|verification|auth)/i.test(lowMsg)) {
+                // 1. Kodu mesajın içinden akıllıca ayıkla (6 haneli sayı ara)
+                const codeMatch = rawMsg.match(/\d{6}/);
+                const inputCode = codeMatch ? codeMatch[0] : args[0]?.trim();
 
-                console.log(`[Auth-Ultra] İstek: User="${user}" | Kod="${inputCode}"`);
+                if (!inputCode || inputCode.length < 6) {
+                    return await reply(`@${user}, Lütfen mağazadaki 6 haneli kodu yazın. Örn: !doğrulama 123456`);
+                }
+
+                console.log(`[Auth-Mega] İstek Geldi: User="${user}" | Kod="${inputCode}"`);
 
                 const cleanUser = user.toLowerCase().trim();
                 let foundMatch = null;
 
-                // Nesne ({code: "..."}) veya direkt string ("...") kontrolü
+                // Nesne veya direkt string kontrolü için yardımcı
                 const getCode = (d) => (typeof d === 'object' && d !== null) ? (d.code || d.auth_code) : d;
 
-                // 1. ADIM: Doğrudan kullanıcı adı ile sorgula
-                const pendingSnap = await db.ref('pending_auth/' + cleanUser).once('value');
-                const pending = pendingSnap.val();
-
-                if (pending && String(getCode(pending)).trim() === String(inputCode)) {
-                    foundMatch = { username: cleanUser, data: pending };
-                } 
+                // --- TÜM BEKLEYENLERİ ÇEK VE ARA (EN GARANTİ YOL) ---
+                const allPendingSnap = await db.ref('pending_auth').once('value');
+                const allPending = allPendingSnap.val() || {};
                 
-                // 2. ADIM: Smart Match (Havuzda Ara)
+                // 1. Adım: Önce direkt kullanıcı adıyla tam eşleşme ara
+                if (allPending[cleanUser]) {
+                    const d = allPending[cleanUser];
+                    if (String(getCode(d)).trim() === String(inputCode)) {
+                        foundMatch = { username: cleanUser, data: d };
+                        console.log(`[Auth-Mega] Direkt eşleşme başarılı: ${cleanUser}`);
+                    }
+                }
+
+                // 2. Adım: Eğer direkt eşleşme yoksa, kodu tüm havuzda ara (Smart Match)
                 if (!foundMatch) {
-                    const allPendingSnap = await db.ref('pending_auth').once('value');
-                    const allPending = allPendingSnap.val() || {};
-                    
-                    const matches = Object.entries(allPending).filter(([u, d]) => String(getCode(d)).trim() === String(inputCode));
-                    
+                    console.log(`[Auth-Mega] Havuzda aranıyor...`);
+                    const matches = Object.entries(allPending).filter(([u, d]) => {
+                        return String(getCode(d)).trim() === String(inputCode);
+                    });
+
                     if (matches.length === 1) {
                         const [matchedUser, matchedData] = matches[0];
                         foundMatch = { username: matchedUser, data: matchedData, isSmart: true };
-                        console.log(`[Auth-Ultra] ✅ Akıllı eşleşme bulundu: ${matchedUser}`);
+                        console.log(`[Auth-Mega] Akıllı eşleşme (Smart Match) bulundu: ${matchedUser}`);
                     } else if (matches.length > 1) {
-                        return await reply(`❌ @${user}, Girilen kod birden fazla hesapla çakışıyor! Lütfen yeni kod al.`);
+                        console.log(`[Auth-Mega] Çakışma! Birden fazla hesapta aynı kod var.`);
+                        return await reply(`❌ @${user}, Bu kod birden fazla talep ile çakışıyor. Lütfen mağazadan yeni bir kod al.`);
                     }
                 }
 
-                // SONUÇ DEĞERLENDİRME
+                // --- SONUÇ KONTROLÜ ---
                 if (foundMatch) {
                     const { username: targetUser, data, isSmart } = foundMatch;
+                    
+                    // Zaman aşımı kontrolü (60 Dakika - Daha esnek)
                     const ts = (typeof data === 'object' && data !== null) ? (data.timestamp || 0) : 0;
-                    const isExpired = ts > 0 && (Date.now() - ts > 1800000); // 30 Dakika
+                    const isExpired = ts > 0 && (Date.now() - ts > 3600000); 
                     
                     if (isExpired) {
-                        return await reply(`❌ @${user}, Kodun süresi dolmuş. Mağazadan yeni bir kod almalısın.`);
+                        console.log(`[Auth-Mega] Süre aşımı: ${targetUser}`);
+                        return await reply(`❌ @${user}, Kodun süresi dolmuş (1 saat). Lütfen mağazadan yeni bir kod al.`);
                     }
 
-                    console.log(`[Auth] ✅ Başarılı: ${targetUser}`);
+                    console.log(`[Auth-Mega] DOĞRULAMA ONAYLANDI: ${targetUser}`);
+
+                    // 1. Başarı sinyalini gönder
+                    await db.ref('auth_success/' + targetUser).set(true);
                     
+                    // 2. Kullanıcı verilerini güncelle
                     await db.ref('users/' + targetUser).update({ 
                         auth_channel: broadcasterId,
                         last_auth_at: Date.now(),
-                        kick_name: user 
+                        kick_name: user,
+                        is_verified: true
                     });
                     
-                    await db.ref('auth_success/' + targetUser).set(true);
+                    // 3. Bekleyen isteği temizle
                     await db.ref('pending_auth/' + targetUser).remove();
 
-                    const extra = isSmart ? " (İsim otomatik düzeltildi)" : "";
-                    await reply(`✅ @${user}, Kimliğin başarıyla doğrulandı! Mağaza sayfasına artık dönebilirsin.${extra} 🛍️`);
+                    const note = isSmart ? " (İsim otomatik eşleştirildi)" : "";
+                    await reply(`✅ @${user}, Kimliğin başarıyla doğrulandı! Market sayfasına artık dönebilirsin.${note} 🛍️`);
                 } else {
-                    console.log(`[Auth] ❌ Eşleşme Yok. Girilen: ${inputCode}`);
-                    await reply(`❌ @${user}, Kod yanlış! Lütfen mağaza sayfasındaki kodu doğru yazdığından emin ol.`);
+                    console.log(`[Auth-Mega] Hatalı Kod Denemesi: ${inputCode} (User: ${user})`);
+                    
+                    // Kullanıcıya ipucu ver
+                    const hasAnyPending = Object.keys(allPending).length > 0;
+                    const hint = hasAnyPending ? "Mağazadaki kodu tam olarak yazdığından emin ol." : "Mağazadan 'Kod Al' butonuna bastığından emin ol.";
+                    
+                    await reply(`❌ @${user}, Geçersiz kod! ${hint}`);
                 }
             }
 
-            // MASTER ADMIN: TEMİZLE
+            // --- MASTER ADMIN: YARDIMCI KOMUTLAR ---
+            else if (lowMsg === '!auth-liste' && user.toLowerCase() === 'omegacyr') {
+                const snap = await db.ref('pending_auth').once('value');
+                const list = snap.val() || {};
+                const keys = Object.keys(list);
+                await reply(`📊 Bekleyen Doğrulamalar (${keys.length}): ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? '...' : ''}`);
+            }
+
             else if (lowMsg === '!auth-temizle' && user.toLowerCase() === 'omegacyr') {
                 await db.ref('pending_auth').remove();
-                await reply(`🧹 @${user}, Bekleyen tüm doğrulama istekleri temizlendi.`);
+                await reply(`🧹 @${user}, Tüm bekleyen doğrulama talepleri veritabanından silindi.`);
             }
+
 
 
             else if (lowMsg.startsWith('!tahmin') || lowMsg.startsWith('!oyla') || lowMsg.startsWith('!sonuç') || lowMsg.startsWith('!piyango')) {
