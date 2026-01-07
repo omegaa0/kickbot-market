@@ -248,7 +248,8 @@ async function loadChannelMarket(channelId) {
     if (rightGifEl) rightGifEl.src = rightGif;
 
     document.getElementById('market-status').innerText = `${chanName} market ürünleri yönetiliyor.`;
-    marketGrid.innerHTML = "";
+    const marketGrid = document.getElementById('market-items');
+    if (marketGrid) marketGrid.innerHTML = "";
 
     // 1. MUTE
     const muteCost = settings.mute_cost || 10000;
