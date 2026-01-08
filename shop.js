@@ -513,7 +513,7 @@ async function loadBorsa() {
     if (borsaActive) return;
     borsaActive = true;
 
-    if (currentUser === 'omegacyra') {
+    if (currentUser === 'omegacyr') {
         const resetBtn = document.createElement('button');
         resetBtn.innerHTML = "🚨 TÜM HİSSELERİ SIFIRLA (ADMİN)";
         resetBtn.className = "primary-btn";
@@ -525,7 +525,7 @@ async function loadBorsa() {
             const res = await fetch('/api/borsa/reset', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ requester: 'omegacyra' })
+                body: JSON.stringify({ requester: 'omegacyr' })
             });
             const d = await res.json();
             if (d.success) showToast(d.message, "success");

@@ -3923,6 +3923,35 @@ app.get('/api/borsa', async (req, res) => {
     }
 });
 
+app.post('/api/borsa/reset', async (req, res) => {
+    const { requester } = req.body;
+    if (requester !== 'omegacyr') {
+        return res.status(403).json({ success: false, error: 'Yetkisiz erişim' });
+    }
+
+    try {
+        const usersSnap = await db.ref('users').once('value');
+        const allUsers = usersSnap.val() || {};
+        const updates = {};
+
+        for (const [username, data] of Object.entries(allUsers)) {
+            if (data.stocks) {
+                updates[`users/${username}/stocks`] = null;
+            }
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await db.ref().update(updates);
+        }
+
+        addLog("Borsa Sıfırlama", "Tüm kullanıcı portföyleri temizlendi.", "GLOBAL");
+        res.json({ success: true, message: 'Borsa başarıyla sıfırlandı!' });
+    } catch (e) {
+        console.error("Borsa Reset Error:", e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 // Arka plan görevleri (Mute, TTS, Ses bildirimleri)
 
 // ---------------------------------------------------------
