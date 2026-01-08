@@ -857,13 +857,13 @@ async function sendChatMessage(message, broadcasterId) {
             'X-Kick-Client-Id': "01KDQNP2M930Y7YYNM62TVWJCP",
             'Content-Type': 'application/json',
             'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0'
+            'User-Agent': 'KickBot/1.0'
         };
 
         try {
-            const whoami = await axios.get('https://api.kick.com/public/v1/users', { headers });
-            const userObj = whoami.data?.data?.[0] || whoami.data;
-            console.log(`[Chat Auth] ✅ Token OK! Sahibi: ${userObj?.username} (ID: ${userObj?.id})`);
+            const who = await axios.get('https://api.kick.com/public/v1/users', { headers });
+            const u = who.data?.data?.[0] || who.data;
+            console.log(`[Chat Auth] ✅ Token OK! Sahibi: ${u?.username || u?.slug} (ID: ${u?.id})`);
         } catch (e) {
             console.error(`[Chat Auth] ❌ Token Hatalı: ${e.response?.status}`);
             return;
@@ -872,8 +872,8 @@ async function sendChatMessage(message, broadcasterId) {
         const bid = parseInt(broadcasterId);
         const variations = [
             { url: 'https://api.kick.com/public/v1/chat-messages', body: { broadcaster_user_id: bid, content: message } },
-            { url: 'https://api.kick.com/public/v1/chat-messages', body: { broadcaster_user_id: String(bid), content: message } },
-            { url: 'https://api.kick.com/public/v1/chat-messages', body: { chatroom_id: bid, message: message } }
+            { url: 'https://api.kick.com/public/v1/chat-messages', body: { chatroom_id: bid, message: message } },
+            { url: `https://kick.com/api/v2/messages/send/${bid}`, body: { content: message, type: "text" } }
         ];
 
         let success = false;
@@ -883,17 +883,20 @@ async function sendChatMessage(message, broadcasterId) {
                 const res = await axios.post(v.url, v.body, { headers, timeout: 8000 });
                 if (res.status >= 200 && res.status < 300) {
                     success = true;
-                    console.log(`[Chat] ✅ MESAJ GİTTİ! URL: ${v.url}`);
+                    console.log(`[Chat] ✅ MESAJ GÜNDERİLDİ! URL: ${v.url}`);
                     break;
                 }
             } catch (err) {
-                lastErr = `${err.response?.status}: ${JSON.stringify(err.response?.data || err.message)}`;
+                lastErr = `${v.url} -> ${err.response?.status}: ${JSON.stringify(err.response?.data || err.message)}`;
             }
         }
 
-        if (!success) console.error(`[Chat Fatal] Hata: ${lastErr}`);
+        if (!success) {
+            console.error(`[Chat Fatal] Hata: ${lastErr}`);
+            console.log(`İpucu: Eğer 403/404 devam ediyorsa, botun kanalda MOD olduğundan ve /login işleminin yeni Client ID (01KD...) ile yapıldığından emin olun.`);
+        }
     } catch (e) {
-        console.error(`[Chat Error]:`, e.message);
+        console.error(`[Chat Global Error]:`, e.message);
     }
 }
 
