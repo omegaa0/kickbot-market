@@ -848,54 +848,51 @@ async function sendChatMessage(message, broadcasterId) {
         const chan = snap.val();
         if (!chan || !chan.access_token) return;
 
-        // KICK OFFICIAL API - ULTRA VARYASYONLAR
-        const bid_int = parseInt(broadcasterId);
-        const bid_str = String(broadcasterId);
+        const bid = parseInt(broadcasterId);
 
-        const endpoints = [
-            // 1. Resmi Yeni Format (Hyphenated)
-            { url: `https://api.kick.com/public/v1/chat-messages`, body: { broadcaster_user_id: bid_int, content: message, type: "text" } },
-            // 2. Resmi Alternatif (Slashed)
-            { url: `https://api.kick.com/public/v1/chat/messages`, body: { broadcaster_user_id: bid_int, content: message, type: "text" } },
-            // 3. ChatroomID alternatifi (INT)
-            { url: `https://api.kick.com/public/v1/chat-messages`, body: { chatroom_id: bid_int, content: message, type: "text" } },
-            // 4. İÇ SYSTEM FALLBACK (V2) - Bu adres genellikle 404 vermez
-            { url: `https://kick.com/api/v2/messages/send/${bid_int}`, body: { content: message, type: "text" } }
+        // KICK OFFICIAL API - DOCUMENTED VARYASYONLAR (2026)
+        const variations = [
+            // 1. Resmi Public V1 (Hyphenated)
+            { url: `https://api.kick.com/public/v1/chat-messages`, body: { broadcaster_user_id: bid, content: message } },
+            // 2. Chatroom ID + Message (Bazı docs'larda bu geçiyor)
+            { url: `https://api.kick.com/public/v1/chat-messages`, body: { chatroom_id: bid, message: message } },
+            // 3. Slashed API
+            { url: `https://api.kick.com/public/v1/chat/messages`, body: { broadcaster_user_id: bid, content: message } }
         ];
 
         let success = false;
-        for (const ep of endpoints) {
+        let lastError = "";
+
+        for (const v of variations) {
             try {
-                const response = await axios.post(ep.url, ep.body, {
+                const response = await axios.post(v.url, v.body, {
                     headers: {
                         'Authorization': `Bearer ${chan.access_token}`,
+                        'X-Kick-Client-Id': KICK_CLIENT_ID,
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        'User-Agent': 'KickBot/1.0'
                     },
                     timeout: 7000
                 });
 
                 if (response.status >= 200 && response.status < 300) {
                     success = true;
-                    console.log(`[Chat] ✅ BAŞARILI: ${ep.url}`);
+                    console.log(`[Chat] ✅ BAŞARILI: ${v.url}`);
                     break;
                 }
             } catch (err) {
-                // Hata 401 ise token yenile ama döngüye devam et
-                if (err.response?.status === 401) {
-                    console.log(`[Chat] Token süresi dolmuş, yenileniyor...`);
-                    await refreshChannelToken(broadcasterId);
-                }
-                // 404 veya diğer hatalarda bir sonraki endpoint'e geç
+                lastError = `${v.url} -> ${err.response?.status}: ${JSON.stringify(err.response?.data || err.message)}`;
+                if (err.response?.status === 401) await refreshChannelToken(broadcasterId);
             }
         }
 
         if (!success) {
-            console.error(`[Chat Fatal] ${broadcasterId} (${chan.username}) için hiçbir varyasyon çalışmadı. Lütfen botun bu kanalda yetkili (moderator) olduğundan ve /login yapıldığından emin olun.`);
+            console.error(`[Chat Fatal] ${broadcasterId} için başarısız: ${lastError}`);
+            console.log(`[İpucu] 404/403 alıyorsanız lütfen '/login' yaparak izinleri tazeleyin.`)
         }
     } catch (e) {
-        console.error(`[Chat Error Fatal]:`, e.message);
+        console.error(`[Chat Fatal Error]:`, e.message);
     }
 }
 
