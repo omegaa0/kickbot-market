@@ -848,12 +848,16 @@ async function sendChatMessage(message, broadcasterId) {
         const chan = snap.val();
         if (!chan || !chan.access_token) return;
 
-        // KICK OFFICIAL API ENDPOINTS (2025)
+        // KICK OFFICIAL API ENDPOINTS (2025/2026 - Tüm varyasyonlar)
         const endpoints = [
-            // Official V1 Public API (Standard Payload)
-            { url: `https://api.kick.com/public/v1/chat-messages`, body: { broadcaster_user_id: parseInt(broadcasterId), content: message } },
-            // Alternative payload
-            { url: `https://api.kick.com/public/v1/chat-messages`, body: { content: message } }
+            // 1. En güncel standart
+            { url: `https://api.kick.com/public/v1/chat-messages`, body: { broadcaster_user_id: parseInt(broadcasterId), content: message, type: "text" } },
+            // 2. Mesaj bazlı alternatif
+            { url: `https://api.kick.com/public/v1/chat-messages`, body: { content: message, type: "text" } },
+            // 3. Klasik API yolu
+            { url: `https://api.kick.com/public/v1/chat/messages`, body: { broadcaster_user_id: parseInt(broadcasterId), content: message, type: "text" } },
+            // 4. Bazı kanallarda çalışan v2/v1 hibrit yolu
+            { url: `https://api.kick.com/public/v1/chat-messages/${broadcasterId}`, body: { content: message, type: "text" } }
         ];
 
         let success = false;
