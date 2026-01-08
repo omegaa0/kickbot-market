@@ -760,9 +760,11 @@ async function sendChatMessage(message, broadcasterId) {
         const chan = snap.val();
         if (!chan || !chan.access_token) return;
 
-        const url = `https://api.kick.com/public/v1/chat/messages`;
+        // Bazı Kick API sürümlerinde chat-messages veya chat/messages kullanılabilir.
+        // Public V1 için en yaygın format budur:
+        const url = `https://api.kick.com/public/v1/chat-messages`;
         await axios.post(url, {
-            broadcaster_user_id: parseInt(broadcasterId),
+            chatroom_id: parseInt(broadcasterId),
             content: message,
             type: "text"
         }, {
