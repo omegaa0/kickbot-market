@@ -4493,97 +4493,9 @@ function logWebhookReceived(data) {
 
 
 
-// YENİ CHAT GÖNDERME FONKSİYONU (V4 - Endpoint Brute Force)
-async function sendChatMessage(message, broadcasterId) {
-    if (!message || !broadcasterId) return;
-    try {
-        const { KICK_CLIENT_ID } = process.env;
-        const CLIENT_ID_TO_USE = KICK_CLIENT_ID || "01KDQNP2M930Y7YYNM62TVWJCP";
 
-        const snap = await db.ref('channels/' + broadcasterId).once('value');
-        const chan = snap.val();
+// Not: Duplicate 'sendChatMessage' kaldırıldı. Dosyanın üst kısmındaki V9 versiyonu kullanılmaktadır.
 
-        if (!chan || !chan.access_token) {
-            console.error(`[Chat] ${broadcasterId} için token yok.`);
-            return;
-        }
-
-        const HEADERS = {
-            'Authorization': `Bearer ${chan.access_token}`,
-            'X-Kick-Client-Id': CLIENT_ID_TO_USE,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'User-Agent': 'KickBot/1.0'
-        };
-
-        const MOBILE_HEADERS = {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'User-Agent': "Kick/28.0.0 (iPhone; iOS 16.0; Scale/3.00)",
-            'Authorization': `Bearer ${chan.access_token}`,
-            'X-Kick-Client-Id': CLIENT_ID_TO_USE
-        };
-
-        let realChatroomId = null;
-        let channelSlug = chan.slug || chan.username || broadcasterId;
-
-        // 🔍 ADIM 1: ID AVI (V2 API)
-        if (channelSlug) {
-            try {
-                const v2Res = await axios.get(`https://kick.com/api/v2/channels/${channelSlug}`, { headers: MOBILE_HEADERS });
-                if (v2Res.data && v2Res.data.chatroom) {
-                    realChatroomId = v2Res.data.chatroom.id;
-                    console.log(`[Chat ID] V2'den bulundu: ${realChatroomId}`);
-                }
-            } catch (e) {
-                console.error(`[Chat ID Error] V2 Fail: ${e.message}`);
-            }
-        }
-
-        if (!realChatroomId) console.error(`[Chat Fatal] Chatroom ID yok.`);
-        const targetId = realChatroomId || parseInt(broadcasterId);
-
-        // 🛠️ ADIM 2: ADRES TARAMASI (Brute Force Endpoints)
-        const trials = [
-            // 1. Standart Public V1 (404 alıyorduk ama dursun)
-            { name: "Public V1 Std", url: 'https://api.kick.com/public/v1/chat-messages', body: { chatroom_id: targetId, content: message }, headers: HEADERS },
-
-            // 2. Olası Alternatif Public V1
-            { name: "Public V1 Alt", url: `https://api.kick.com/public/v1/chatrooms/${targetId}/messages`, body: { content: message }, headers: HEADERS },
-
-            // 3. Kick.com Internal V2 (Mobile Taklidi - Type: Message)
-            {
-                name: "Mobile V2 Msg",
-                url: `https://kick.com/api/v2/messages/send/${targetId}`,
-                body: { content: message, type: "message" }, // 'bot' yerine 'message' dene
-                headers: MOBILE_HEADERS
-            },
-
-            // 4. Kick.com Internal V1 (Bazen çalışır)
-            { name: "Kick V1 Int", url: 'https://kick.com/api/v1/chat-messages', body: { chatroom_id: targetId, content: message }, headers: MOBILE_HEADERS }
-        ];
-
-        let success = false;
-        for (const t of trials) {
-            try {
-                const res = await axios.post(t.url, t.body, { headers: t.headers, timeout: 5000 });
-                if (res.status >= 200 && res.status < 300) {
-                    success = true;
-                    console.log(`[Chat] ✅ MESAJ GÖNDERİLDİ! (${t.name})`);
-                    break;
-                }
-            } catch (err) {
-                const status = err.response?.status;
-                const msg = err.response?.data?.message || "Body okunamadı";
-                console.warn(`[Chat Debug] ${t.name} -> ${status} | ${msg}`);
-            }
-        }
-        if (!success) console.error(`[Chat Fatal] Tüm endpointler başarısız.`);
-
-    } catch (e) {
-        console.error(`[Chat Global Error]:`, e.message);
-    }
-}
 
 
 const PORT = process.env.PORT || 3000;
