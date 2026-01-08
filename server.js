@@ -846,17 +846,25 @@ async function sendChatMessage(message, broadcasterId) {
     try {
         const snap = await db.ref('channels/' + broadcasterId).once('value');
         const chan = snap.val();
-        if (!chan || !chan.access_token) return;
 
-        // KICK OFFICIAL API ENDPOINTS (2025/2026 - Tüm varyasyonlar)
+        if (!chan) {
+            console.error(`[Chat Error] Kanal verisi bulunamadı: ${broadcasterId}`);
+            return;
+        }
+        if (!chan.access_token) {
+            console.error(`[Chat Error] Access token eksik: ${broadcasterId}`);
+            return;
+        }
+
+        // KICK OFFICIAL API ENDPOINTS (2025/2026 - FULL VARIATIONS)
         const endpoints = [
-            // 1. En güncel standart
+            // 1. Resmi Yeni Format (Hyphenated)
             { url: `https://api.kick.com/public/v1/chat-messages`, body: { broadcaster_user_id: parseInt(broadcasterId), content: message, type: "text" } },
-            // 2. Mesaj bazlı alternatif
-            { url: `https://api.kick.com/public/v1/chat-messages`, body: { content: message, type: "text" } },
-            // 3. Klasik API yolu
+            // 2. Resmi Alternatif (Slashed)
             { url: `https://api.kick.com/public/v1/chat/messages`, body: { broadcaster_user_id: parseInt(broadcasterId), content: message, type: "text" } },
-            // 4. Bazı kanallarda çalışan v2/v1 hibrit yolu
+            // 3. Basitleştirilmiş Body
+            { url: `https://api.kick.com/public/v1/chat-messages`, body: { content: message, type: "text" } },
+            // 4. Doğrudan Kanal ID'li
             { url: `https://api.kick.com/public/v1/chat-messages/${broadcasterId}`, body: { content: message, type: "text" } }
         ];
 
@@ -865,28 +873,35 @@ async function sendChatMessage(message, broadcasterId) {
 
         for (const ep of endpoints) {
             try {
-                await axios.post(ep.url, ep.body, {
+                const response = await axios.post(ep.url, ep.body, {
                     headers: {
                         'Authorization': `Bearer ${chan.access_token}`,
                         'Content-Type': 'application/json',
-                        'Accept': 'application/json'
+                        'Accept': 'application/json',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                     },
-                    timeout: 5000
+                    timeout: 8000
                 });
-                success = true;
-                break;
+
+                if (response.status === 200 || response.status === 201 || response.status === 204) {
+                    success = true;
+                    console.log(`[Chat] ✅ Mesaj başarıyla gönderildi (${ep.url})`);
+                    break;
+                }
             } catch (err) {
                 lastError = err;
-                // Unauthorized error -> refresh token once
+                const errData = err.response?.data ? JSON.stringify(err.response.data) : err.message;
+                console.log(`[Chat Attempt] ❌ ${ep.url} başarısız: ${err.response?.status} - ${errData}`);
+
                 if (err.response?.status === 401) {
                     await refreshChannelToken(broadcasterId);
-                    // No retry here to avoid loops, let the next attempt handle it
+                    // Token yenilendiğinde bir sonraki ep denenecek
                 }
             }
         }
 
         if (!success && lastError) {
-            console.error(`[Chat Error] ${broadcasterId}:`, lastError.response?.status, lastError.response?.data || lastError.message);
+            console.error(`[Chat Fatal] ${broadcasterId} için mesaj gönderilemedi.`);
         }
     } catch (e) {
         console.error(`[Chat Error Fatal] ${broadcasterId}:`, e.message);
