@@ -1135,11 +1135,11 @@ async function refreshChannelToken(broadcasterId) {
 }
 
 
-// YENİ CHAT GÖNDERME FONKSİYONU (V3.2 - Cookie Injection & Ultimate Fallback)
-async function sendChatMessage_OLD_V32(message, broadcasterId) {
+
+// YENİ CHAT GÖNDERME FONKSİYONU (V5 - Omni-Payload & URL Hunter)
+async function sendChatMessage(message, broadcasterId) {
     if (!message || !broadcasterId) return;
     try {
-        // ID'yi güvenli al
         const { KICK_CLIENT_ID } = process.env;
         const CLIENT_ID_TO_USE = KICK_CLIENT_ID || "01KDQNP2M930Y7YYNM62TVWJCP";
 
@@ -1159,83 +1159,71 @@ async function sendChatMessage_OLD_V32(message, broadcasterId) {
             'User-Agent': 'KickBot/1.0'
         };
 
-        const MOBILE_HEADERS = {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'User-Agent': "Kick/28.0.0 (iPhone; iOS 16.0; Scale/3.00)",
-            'Authorization': `Bearer ${chan.access_token}`
-        };
-
         let realChatroomId = null;
-        let v2Cookies = []; // Cookie Hazinesi
         let channelSlug = chan.slug || chan.username || broadcasterId;
 
-        // 🔍 ADIM 1: ID & COOKIE AVI (V2 API)
+        // 🔍 ADIM 1: ID AVI (V2 API)
+        // Eğer ID yoksa V1 API'leri hiçbir işe yaramaz.
         if (channelSlug) {
             try {
-                const v2Res = await axios.get(`https://kick.com/api/v2/channels/${channelSlug}`, { headers: MOBILE_HEADERS });
+                const mobileHeaders = { ...HEADERS, 'User-Agent': "Kick/28.0.0 (iPhone; iOS 16.0; Scale/3.00)" };
+                const v2Res = await axios.get(`https://kick.com/api/v2/channels/${channelSlug}`, { headers: mobileHeaders });
                 if (v2Res.data && v2Res.data.chatroom) {
                     realChatroomId = v2Res.data.chatroom.id;
                     console.log(`[Chat ID] V2'den bulundu: ${realChatroomId}`);
                 }
-                // 🍪 COOKIE ÇALMA
-                if (v2Res.headers['set-cookie']) {
-                    v2Cookies = v2Res.headers['set-cookie'];
-                    console.log(`[Chat Cookie] Cookie alındı (${v2Cookies.length} adet)`);
-                }
             } catch (e) {
                 console.error(`[Chat ID Error] V2 Fail: ${e.message}`);
-                // V2 başarısızsa Public V1 deneyelim...
-                try {
-                    const chanRes = await axios.get(`https://api.kick.com/public/v1/channels/${channelSlug}`, { headers: HEADERS });
-                    if (chanRes.data?.data?.chatroom) realChatroomId = chanRes.data.data.chatroom.id;
-                } catch (e2) { }
             }
         }
 
         if (!realChatroomId) {
-            console.error(`[Chat Fatal] Chatroom ID bulunamadı.`);
+            console.error(`[Chat Fatal] Chatroom ID yok. İşlem iptal.`);
+            return;
         }
 
-        const targetId = realChatroomId || parseInt(broadcasterId);
+        const targetId = realChatroomId; // Integer
 
-        // 🛠️ ADIM 2: HİBRİT GÖNDERİM SAVAŞI
+        // 🛠️ ADIM 2: URL & PAYLOAD SAVAŞI
+        // 404 hatası alıyorsak ya URL yanlıştır ya da Payload eksiktir.
         const trials = [
-            // 1. Resmi Public V1 (api.kick.com)
-            { url: 'https://api.kick.com/public/v1/chat-messages', body: { chatroom_id: targetId, content: message, type: "bot" }, headers: HEADERS },
-            // 2. Alternatif V1 (kick.com)
-            { url: 'https://kick.com/api/v1/chat-messages', body: { chatroom_id: targetId, content: message, type: "bot" }, headers: HEADERS },
-            // 3. V2 Fallback (Cookie ile!) - Son Çare
-            {
-                url: `https://kick.com/api/v2/messages/send/${targetId}`,
-                body: { content: message, type: "message" },
-                headers: {
-                    ...MOBILE_HEADERS,
-                    'Cookie': v2Cookies ? v2Cookies.join('; ') : "",
-                    'X-Xsrf-Token': v2Cookies ? decodeURIComponent(v2Cookies.find(c => c.includes('XSRF-TOKEN'))?.split('XSRF-TOKEN=')[1]?.split(';')[0] || "") : ""
-                }
-            }
+            // 1. Standart Public V1 (Bot Tipi)
+            { name: "Public V1 (Bot)", url: 'https://api.kick.com/public/v1/chat-messages', body: { chatroom_id: targetId, content: message, type: "bot" } },
+
+            // 2. Standart Public V1 (User Tipi - Belki bot değilizdir?)
+            { name: "Public V1 (User)", url: 'https://api.kick.com/public/v1/chat-messages', body: { chatroom_id: targetId, content: message, type: "user" } },
+
+            // 3. 'Public' kelimesi olmayan URL
+            { name: "API V1 (No Public)", url: 'https://api.kick.com/api/v1/chat-messages', body: { chatroom_id: targetId, content: message, type: "bot" } },
+
+            // 4. Sadece V1 (No Public/API)
+            { name: "Root V1", url: 'https://api.kick.com/v1/chat-messages', body: { chatroom_id: targetId, content: message, type: "bot" } },
+
+            // 5. Chatroom Path Parametresi
+            { name: "Chatroom Path", url: `https://api.kick.com/public/v1/chatrooms/${targetId}/messages`, body: { content: message, type: "bot" } },
+
+            // 6. Sender Content Wrapper
+            { name: "Content Wrapper", url: 'https://api.kick.com/public/v1/chat-messages', body: { chatroom_id: targetId, message: { content: message, type: "bot" } } }
         ];
 
         let success = false;
-        let lastError = "";
-
         for (const t of trials) {
             try {
-                if (!t.headers['X-Xsrf-Token']) delete t.headers['X-Xsrf-Token']; // Boşsa sil
-
-                const res = await axios.post(t.url, t.body, { headers: t.headers, timeout: 5000 });
+                const res = await axios.post(t.url, t.body, { headers: HEADERS, timeout: 5000 });
                 if (res.status >= 200 && res.status < 300) {
                     success = true;
-                    console.log(`[Chat] ✅ MESAJ GÖNDERİLDİ! URL: ${t.url}`);
+                    console.log(`[Chat] ✅ MESAJ GÖNDERİLDİ! (${t.name})`);
                     break;
                 }
             } catch (err) {
-                lastError = `${t.url} -> ${err.response?.status}`;
+                const status = err.response?.status;
+                const msg = err.response?.data?.message || JSON.stringify(err.response?.data);
+                if (status !== 404) { // 404 rutin bir hata, diğerlerini önemse
+                    console.warn(`[Chat Debug] ${t.name} -> ${status} | ${msg}`);
+                }
             }
         }
-
-        if (!success) console.error(`[Chat Fatal] Tüm denemeler başarısız: ${lastError}`);
+        if (!success) console.error(`[Chat Fatal] Tüm varyasyonlar (V5) başarısız.`);
 
     } catch (e) {
         console.error(`[Chat Global Error]:`, e.message);
