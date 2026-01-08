@@ -706,35 +706,25 @@ async function generateAiImage(prompt, imageId) {
 }
 
 async function sendChatMessage(message, broadcasterId) {
+    if (!message || !broadcasterId) return;
     try {
         const snap = await db.ref('channels/' + broadcasterId).once('value');
         const chan = snap.val();
         if (!chan || !chan.access_token) return;
 
-        const url = `https://api.kick.com/public/v1/chat/messages`;
+        const endpoints = [
+            { url: `https://api.kick.com/public/v1/chat/messages`, body: { broadcaster_user_id: parseInt(broadcasterId), content: message, type: "text" } },
+            { url: `https://api.kick.com/public/v1/chat/messages`, body: { content: message, type: "text" } },
+            { url: `https://api.kick.com/public/v1/chat-messages`, body: { chatroom_id: parseInt(broadcasterId), content: message, type: "text" } },
+            { url: `https://api.kick.com/public/v1/chat-messages/${broadcasterId}`, body: { content: message, type: "text" } }
+        ];
 
-        try {
-            // VARYASYON 1: Minimal Body (Modern API)
-            await axios.post(url, {
-                content: message,
-                type: "text"
-            }, {
-                headers: {
-                    'Authorization': `Bearer ${chan.access_token}`,
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'User-Agent': 'Mozilla/5.0'
-                },
-                timeout: 5000
-            });
-        } catch (e1) {
+        let success = false;
+        let lastError = null;
+
+        for (const ep of endpoints) {
             try {
-                // VARYASYON 2: broadcaster_user_id ile
-                await axios.post(url, {
-                    broadcaster_user_id: parseInt(broadcasterId),
-                    content: message,
-                    type: "text"
-                }, {
+                await axios.post(ep.url, ep.body, {
                     headers: {
                         'Authorization': `Bearer ${chan.access_token}`,
                         'Content-Type': 'application/json',
@@ -743,29 +733,19 @@ async function sendChatMessage(message, broadcasterId) {
                     },
                     timeout: 5000
                 });
-            } catch (e2) {
-                // VARYASYON 3: chat-messages endpoint ve chatroom_id
-                const altUrl = `https://api.kick.com/public/v1/chat-messages`;
-                await axios.post(altUrl, {
-                    chatroom_id: parseInt(broadcasterId),
-                    content: message,
-                    type: "text"
-                }, {
-                    headers: {
-                        'Authorization': `Bearer ${chan.access_token}`,
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'User-Agent': 'Mozilla/5.0'
-                    },
-                    timeout: 5000
-                });
+                success = true;
+                break;
+            } catch (err) {
+                lastError = err;
+                if (err.response?.status === 401) await refreshChannelToken(broadcasterId);
             }
         }
-    } catch (e) {
-        if (e.response?.status === 401) {
-            await refreshChannelToken(broadcasterId);
+
+        if (!success && lastError) {
+            console.error(`[Chat Error] ${broadcasterId} - Tüm varyasyonlar başarısız:`, lastError.response?.status, lastError.response?.data || lastError.message);
         }
-        console.error(`[Chat Error] ${broadcasterId}:`, e.response?.data || e.message);
+    } catch (e) {
+        console.error(`[Chat Error Fatal] ${broadcasterId}:`, e.message);
     }
 }
 
@@ -1131,14 +1111,20 @@ app.post('/webhook/kick', async (req, res) => {
             console.log(`🔄 Kanal slug güncellendi: ${currentSlug}`);
         }
 
-        const user = event.sender?.username;
-        const rawMsg = event.content;
+        const user = event.sender?.username || event.user?.username || event.username;
+        const rawMsg = event.content || event.message;
 
-        if (!user || !rawMsg) return;
+        console.log(`[Webhook DEBUG] User: ${user}, Msg: ${rawMsg}`);
+
+        if (!user || !rawMsg) {
+            console.log(`[Webhook DEBUG] Mesaj veya kullanıcı eksik, işlem durduruldu.`);
+            return;
+        }
         if (user.toLowerCase() === "aloskegangbot" || user.toLowerCase() === "botrix") return;
 
         const lowMsg = rawMsg.trim().toLowerCase();
         const args = rawMsg.trim().split(/\s+/).slice(1);
+        console.log(`[Webhook DEBUG] İşlenen Komut: ${lowMsg}`);
         const userRef = db.ref('users/' + user.toLowerCase());
 
         // --- OTOMATİK KAYIT & AKTİFLİK TAKİBİ (ATOMIC TRANSACTION) ---
