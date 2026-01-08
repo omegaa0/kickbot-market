@@ -850,22 +850,26 @@ async function sendChatMessage(message, broadcasterId) {
 
         const bid = parseInt(broadcasterId);
 
-        // KICK OFFICIAL API - DOCUMENTED VARYASYONLAR (2026)
-        const variations = [
-            // 1. Resmi Public V1 (Hyphenated)
+        // KICK API - HER İHTİMALİ DENE (2026 FULL LIST)
+        const routes = [
+            // 1. Resmi Public V1 - Standart
             { url: `https://api.kick.com/public/v1/chat-messages`, body: { broadcaster_user_id: bid, content: message } },
-            // 2. Chatroom ID + Message (Bazı docs'larda bu geçiyor)
+            // 2. Resmi Public V1 - Chatroom ID varyasyonu
             { url: `https://api.kick.com/public/v1/chat-messages`, body: { chatroom_id: bid, message: message } },
-            // 3. Slashed API
+            // 3. İç V2 Sistemi (Genelde en sağlamıdır)
+            { url: `https://kick.com/api/v2/messages/send/${bid}`, body: { content: message, type: "text" } },
+            // 4. Komut Bazlı Yol
+            { url: `https://api.kick.com/public/v1/channels/${bid}/chat-messages`, body: { content: message } },
+            // 5. V2 Chat-Commands Yolu (Bot yetkisiyle mesaj gönderme)
             { url: `https://api.kick.com/public/v1/chat/messages`, body: { broadcaster_user_id: bid, content: message } }
         ];
 
         let success = false;
-        let lastError = "";
+        let diagnosticLogs = [];
 
-        for (const v of variations) {
+        for (const r of routes) {
             try {
-                const response = await axios.post(v.url, v.body, {
+                const response = await axios.post(r.url, r.body, {
                     headers: {
                         'Authorization': `Bearer ${chan.access_token}`,
                         'X-Kick-Client-Id': KICK_CLIENT_ID,
@@ -873,23 +877,27 @@ async function sendChatMessage(message, broadcasterId) {
                         'Accept': 'application/json',
                         'User-Agent': 'KickBot/1.0'
                     },
-                    timeout: 7000
+                    timeout: 8000
                 });
 
                 if (response.status >= 200 && response.status < 300) {
                     success = true;
-                    console.log(`[Chat] ✅ BAŞARILI: ${v.url}`);
+                    console.log(`[Chat] ✅ MESAJ GÖNDERİLDİ! Çalışan Yol: ${r.url}`);
                     break;
                 }
             } catch (err) {
-                lastError = `${v.url} -> ${err.response?.status}: ${JSON.stringify(err.response?.data || err.message)}`;
-                if (err.response?.status === 401) await refreshChannelToken(broadcasterId);
+                const errStatus = err.response?.status || "ERR";
+                const errData = err.response?.data ? JSON.stringify(err.response.data) : err.message;
+                diagnosticLogs.push(`${r.url} -> ${errStatus}: ${errData}`);
+
+                if (errStatus === 401) await refreshChannelToken(broadcasterId);
             }
         }
 
         if (!success) {
-            console.error(`[Chat Fatal] ${broadcasterId} için başarısız: ${lastError}`);
-            console.log(`[İpucu] 404/403 alıyorsanız lütfen '/login' yaparak izinleri tazeleyin.`)
+            console.error(`[Chat FATAL] ${broadcasterId} için hiçbir yol çalışmadı!`);
+            diagnosticLogs.forEach(log => console.log(`   Detailed Trace: ${log}`));
+            console.log(`[İpucu] Eğer hepsi 404 ise Adres Yanlış, 403 ise Yetki (Scope) Eksiği, 401 ise Token Hatalıdır.`);
         }
     } catch (e) {
         console.error(`[Chat Fatal Error]:`, e.message);
