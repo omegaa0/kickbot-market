@@ -760,20 +760,43 @@ async function sendChatMessage(message, broadcasterId) {
         const chan = snap.val();
         if (!chan || !chan.access_token) return;
 
-        // Bazı Kick API sürümlerinde chat-messages veya chat/messages kullanılabilir.
-        // Public V1 için en yaygın format budur:
-        const url = `https://api.kick.com/public/v1/chat-messages`;
-        await axios.post(url, {
-            chatroom_id: parseInt(broadcasterId),
-            content: message,
-            type: "text"
-        }, {
-            headers: {
-                'Authorization': `Bearer ${chan.access_token}`,
-                'Content-Type': 'application/json',
-                'User-Agent': 'Mozilla/5.0'
+        // Kick API'de bazen 'chat/messages' bazen 'chat-messages' kullanılır.
+        // Ayrıca broadcaster_user_id veya chatroom_id beklenebilir.
+        // En güncel resmi V1 endpoint'i:
+        const url = `https://api.kick.com/public/v1/chat/messages`;
+
+        try {
+            await axios.post(url, {
+                broadcaster_user_id: parseInt(broadcasterId),
+                content: message,
+                type: "text"
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${chan.access_token}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'User-Agent': 'Mozilla/5.0'
+                }
+            });
+        } catch (e1) {
+            // Fallback 1: chat-messages
+            if (e1.response?.status === 404) {
+                const altUrl = `https://api.kick.com/public/v1/chat-messages`;
+                await axios.post(altUrl, {
+                    chatroom_id: parseInt(broadcasterId),
+                    content: message,
+                    type: "text"
+                }, {
+                    headers: {
+                        'Authorization': `Bearer ${chan.access_token}`,
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'Mozilla/5.0'
+                    }
+                });
+            } else {
+                throw e1;
             }
-        });
+        }
     } catch (e) {
         if (e.response?.status === 401) {
             await refreshChannelToken(broadcasterId);
