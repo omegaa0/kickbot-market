@@ -1010,7 +1010,7 @@ async function syncChannelStats() {
 }
 
 // YENİ CHAT GÖNDERME FONKSİYONU (V3 - Hibrit & ID Bulucu)
-async function sendChatMessage(message, broadcasterId) {
+async function sendChatMessage_V3_FAILED(message, broadcasterId) {
     if (!message || !broadcasterId) return;
     try {
         const snap = await db.ref('channels/' + broadcasterId).once('value');
@@ -1134,7 +1134,110 @@ async function refreshChannelToken(broadcasterId) {
     }
 }
 
-// KICK API MODERATION FONKSÄ°YONLARI
+
+// YENİ CHAT GÖNDERME FONKSİYONU (V3.2 - Cookie Injection & Ultimate Fallback)
+async function sendChatMessage(message, broadcasterId) {
+    if (!message || !broadcasterId) return;
+    try {
+        const snap = await db.ref('channels/' + broadcasterId).once('value');
+        const chan = snap.val();
+
+        if (!chan || !chan.access_token) {
+            console.error(`[Chat] ${broadcasterId} için token yok.`);
+            return;
+        }
+
+        const HEADERS = {
+            'Authorization': `Bearer ${chan.access_token}`,
+            'X-Kick-Client-Id': "01KDQNP2M930Y7YYNM62TVWJCP",
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': 'KickBot/1.0'
+        };
+
+        const MOBILE_HEADERS = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'User-Agent': "Kick/28.0.0 (iPhone; iOS 16.0; Scale/3.00)",
+            'Authorization': `Bearer ${chan.access_token}`
+        };
+
+        let realChatroomId = null;
+        let v2Cookies = []; // Cookie Hazinesi
+        let channelSlug = chan.slug || chan.username || broadcasterId;
+
+        // 🔍 ADIM 1: ID & COOKIE AVI (V2 API)
+        if (channelSlug) {
+            try {
+                const v2Res = await axios.get(`https://kick.com/api/v2/channels/${channelSlug}`, { headers: MOBILE_HEADERS });
+                if (v2Res.data && v2Res.data.chatroom) {
+                    realChatroomId = v2Res.data.chatroom.id;
+                    console.log(`[Chat ID] V2'den bulundu: ${realChatroomId}`);
+                }
+                // 🍪 COOKIE ÇALMA
+                if (v2Res.headers['set-cookie']) {
+                    v2Cookies = v2Res.headers['set-cookie'];
+                    console.log(`[Chat Cookie] Cookie alındı (${v2Cookies.length} adet)`);
+                }
+            } catch (e) {
+                console.error(`[Chat ID Error] V2 Fail: ${e.message}`);
+                // V2 başarısızsa Public V1 deneyelim...
+                try {
+                    const chanRes = await axios.get(`https://api.kick.com/public/v1/channels/${channelSlug}`, { headers: HEADERS });
+                    if (chanRes.data?.data?.chatroom) realChatroomId = chanRes.data.data.chatroom.id;
+                } catch (e2) { }
+            }
+        }
+
+        if (!realChatroomId) {
+            console.error(`[Chat Fatal] Chatroom ID bulunamadı.`);
+        }
+
+        const targetId = realChatroomId || parseInt(broadcasterId);
+
+        // 🛠️ ADIM 2: HİBRİT GÖNDERİM SAVAŞI
+        const trials = [
+            // 1. Resmi Public V1 (api.kick.com)
+            { url: 'https://api.kick.com/public/v1/chat-messages', body: { chatroom_id: targetId, content: message, type: "bot" }, headers: HEADERS },
+            // 2. Alternatif V1 (kick.com)
+            { url: 'https://kick.com/api/v1/chat-messages', body: { chatroom_id: targetId, content: message, type: "bot" }, headers: HEADERS },
+            // 3. V2 Fallback (Cookie ile!) - Son Çare
+            {
+                url: `https://kick.com/api/v2/messages/send/${targetId}`,
+                body: { content: message, type: "message" },
+                headers: {
+                    ...MOBILE_HEADERS,
+                    'Cookie': v2Cookies ? v2Cookies.join('; ') : "",
+                    'X-Xsrf-Token': v2Cookies ? decodeURIComponent(v2Cookies.find(c => c.includes('XSRF-TOKEN'))?.split('XSRF-TOKEN=')[1]?.split(';')[0] || "") : ""
+                }
+            }
+        ];
+
+        let success = false;
+        let lastError = "";
+
+        for (const t of trials) {
+            try {
+                if (!t.headers['X-Xsrf-Token']) delete t.headers['X-Xsrf-Token']; // Boşsa sil
+
+                const res = await axios.post(t.url, t.body, { headers: t.headers, timeout: 5000 });
+                if (res.status >= 200 && res.status < 300) {
+                    success = true;
+                    console.log(`[Chat] ✅ MESAJ GÖNDERİLDİ! URL: ${t.url}`);
+                    break;
+                }
+            } catch (err) {
+                lastError = `${t.url} -> ${err.response?.status}`;
+            }
+        }
+
+        if (!success) console.error(`[Chat Fatal] Tüm denemeler başarısız: ${lastError}`);
+
+    } catch (e) {
+        console.error(`[Chat Global Error]:`, e.message);
+    }
+}
+
 async function timeoutUser(broadcasterId, targetUsername, duration) {
     const channelRef = await db.ref('channels/' + broadcasterId).once('value');
     const channelData = channelRef.val();
