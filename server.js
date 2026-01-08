@@ -841,7 +841,7 @@ async function generateAiImage(prompt, imageId) {
     }
 }
 
-async function sendChatMessage(message, broadcasterId) {
+async function sendChatMessage_FAILED(message, broadcasterId) {
     if (!message || !broadcasterId) return;
     try {
         const snap = await db.ref('channels/' + broadcasterId).once('value');
@@ -1006,6 +1006,110 @@ async function syncChannelStats() {
         }
     } catch (e) {
         console.error("Sync Stats Error:", e.message);
+    }
+}
+
+// YENİ CHAT GÖNDERME FONKSİYONU (V3 - Hibrit & ID Bulucu)
+async function sendChatMessage(message, broadcasterId) {
+    if (!message || !broadcasterId) return;
+    try {
+        const snap = await db.ref('channels/' + broadcasterId).once('value');
+        const chan = snap.val();
+
+        if (!chan || !chan.access_token) {
+            console.error(`[Chat] ${broadcasterId} için token yok.`);
+            return;
+        }
+
+        const HEADERS = {
+            'Authorization': `Bearer ${chan.access_token}`,
+            'X-Kick-Client-Id': "01KDQNP2M930Y7YYNM62TVWJCP",
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': 'KickBot/1.0'
+        };
+
+        const MOBILE_HEADERS = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'User-Agent': "Kick/28.0.0 (iPhone; iOS 16.0; Scale/3.00)",
+            'Authorization': `Bearer ${chan.access_token}`
+        };
+
+        let realChatroomId = null;
+        let channelSlug = chan.slug || chan.username;
+
+        // 🔍 ADIM 1: ID AVI (V2 API Mobile Spoof ile)
+        // Public V1 Users endpoint'i artık chatroom vermiyor. V2 Channels endpoint'i ise veriyor.
+        if (channelSlug) {
+            try {
+                const v2Res = await axios.get(`https://kick.com/api/v2/channels/${channelSlug}`, { headers: MOBILE_HEADERS });
+                if (v2Res.data && v2Res.data.chatroom) {
+                    realChatroomId = v2Res.data.chatroom.id;
+                    console.log(`[Chat ID] V2'den bulundu! Slug: ${channelSlug} -> ChatroomID: ${realChatroomId}`);
+                }
+            } catch (e) {
+                console.error(`[Chat ID Error] V2 Sorgusu başarısız (${channelSlug}): ${e.response?.status}`);
+            }
+        }
+
+        // 🔍 ADIM 2: YEDEK PLAN (Public V1 Users)
+        if (!realChatroomId) {
+            try {
+                const who = await axios.get('https://api.kick.com/public/v1/users', { headers: HEADERS });
+                const u = who.data?.data?.[0];
+                if (u) {
+                    if (u.chatroom) realChatroomId = u.chatroom.id;
+                    else if (u.streamer_channel && u.streamer_channel.chatroom) realChatroomId = u.streamer_channel.chatroom.id;
+
+                    // Eğer kullanıcı objesinde yoksa, user ID belki chatroom ID'dir diye umut ediyoruz (yanlış ama denemeye değer)
+                    if (!channelSlug) channelSlug = u.slug || u.name;
+                }
+            } catch (e) { }
+        }
+
+        if (!realChatroomId) {
+            console.error(`[Chat Fatal] ❌ Chatroom ID '${channelSlug}' için bulunamadı! 404/403 kaçınılmaz.`);
+            // Son bir umut user_id deneyelim
+            // return; // Devam etsin belki tutar
+        }
+
+        const targetId = realChatroomId || parseInt(broadcasterId);
+
+        // 🛠️ ADIM 3: MESAJ GÖNDER (Önce V1, Sonra V2)
+        try {
+            // -- YÖNTEM A: RESMİ API (V1) --
+            // Eğer gerçek Chatroom ID bulduysak bu %100 çalışır.
+            if (realChatroomId) {
+                await axios.post('https://api.kick.com/public/v1/chat-messages', {
+                    chatroom_id: realChatroomId,
+                    content: message,
+                    type: "bot"
+                }, { headers: HEADERS });
+                console.log(`[Chat] ✅ MESAJ GÖNDERİLDİ! (V1) -> ${message}`);
+                return;
+            }
+
+            // -- YÖNTEM B: DOĞRUDAN V2 (Fallback) --
+            // ID bulamadıysak veya V1 hata verdiyse buraya düşeriz (ama V1'i try dışına aldık, neyse)
+            throw new Error("ID yok, V2'ye geç");
+
+        } catch (err) {
+            console.warn(`[Chat Warn] V1 başarısız, V2 deneniyor... (${err.message})`);
+
+            // -- YÖNTEM B: V2 MOBILE --
+            try {
+                await axios.post(`https://kick.com/api/v2/messages/send/${targetId}`,
+                    { content: message, type: "bot" },
+                    { headers: MOBILE_HEADERS }
+                );
+                console.log(`[Chat] ✅ MESAJ GÖNDERİLDİ! (V2 Fallback)`);
+            } catch (err2) {
+                console.error(`[Chat Error] V2 Fallback de başarısız: ${err2.response?.status} - ${JSON.stringify(err2.response?.data)}`);
+            }
+        }
+    } catch (e) {
+        console.error(`[Chat Global Error]:`, e.message);
     }
 }
 
