@@ -4489,7 +4489,8 @@ function logWebhookReceived(data) {
 }
 
 
-// YENİ CHAT GÖNDERME FONKSİYONU (V3.3 - Deep Debug & Payload Fix)
+
+// YENİ CHAT GÖNDERME FONKSİYONU (V4 - Endpoint Brute Force)
 async function sendChatMessage(message, broadcasterId) {
     if (!message || !broadcasterId) return;
     try {
@@ -4516,14 +4517,14 @@ async function sendChatMessage(message, broadcasterId) {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
             'User-Agent': "Kick/28.0.0 (iPhone; iOS 16.0; Scale/3.00)",
-            'Authorization': `Bearer ${chan.access_token}`
+            'Authorization': `Bearer ${chan.access_token}`,
+            'X-Kick-Client-Id': CLIENT_ID_TO_USE
         };
 
         let realChatroomId = null;
-        let v2Cookies = [];
         let channelSlug = chan.slug || chan.username || broadcasterId;
 
-        // 🔍 ADIM 1: ID & COOKIE AVI
+        // 🔍 ADIM 1: ID AVI (V2 API)
         if (channelSlug) {
             try {
                 const v2Res = await axios.get(`https://kick.com/api/v2/channels/${channelSlug}`, { headers: MOBILE_HEADERS });
@@ -4531,44 +4532,37 @@ async function sendChatMessage(message, broadcasterId) {
                     realChatroomId = v2Res.data.chatroom.id;
                     console.log(`[Chat ID] V2'den bulundu: ${realChatroomId}`);
                 }
-                if (v2Res.headers['set-cookie']) {
-                    v2Cookies = v2Res.headers['set-cookie'];
-                    const xsrf = v2Cookies.find(c => c.includes('XSRF-TOKEN'))?.split('XSRF-TOKEN=')[1]?.split(';')[0];
-                    console.log(`[Chat Cookie] ${v2Cookies.length} cookie. XSRF: ${!!xsrf}`);
-                }
             } catch (e) {
                 console.error(`[Chat ID Error] V2 Fail: ${e.message}`);
-                try {
-                    const chanRes = await axios.get(`https://api.kick.com/public/v1/channels/${channelSlug}`, { headers: HEADERS });
-                    if (chanRes.data?.data?.chatroom) realChatroomId = chanRes.data.data.chatroom.id;
-                } catch (e2) { }
             }
         }
 
         if (!realChatroomId) console.error(`[Chat Fatal] Chatroom ID yok.`);
         const targetId = realChatroomId || parseInt(broadcasterId);
 
-        // 🛠️ ADIM 2: HİBRİT GÖNDERİM SAVAŞI
-        const v1Payload = { chatroom_id: targetId, content: message };
+        // 🛠️ ADIM 2: ADRES TARAMASI (Brute Force Endpoints)
         const trials = [
-            { name: "Public V1", url: 'https://api.kick.com/public/v1/chat-messages', body: v1Payload, headers: HEADERS },
-            { name: "Kick V1", url: 'https://kick.com/api/v1/chat-messages', body: v1Payload, headers: HEADERS },
+            // 1. Standart Public V1 (404 alıyorduk ama dursun)
+            { name: "Public V1 Std", url: 'https://api.kick.com/public/v1/chat-messages', body: { chatroom_id: targetId, content: message }, headers: HEADERS },
+
+            // 2. Olası Alternatif Public V1
+            { name: "Public V1 Alt", url: `https://api.kick.com/public/v1/chatrooms/${targetId}/messages`, body: { content: message }, headers: HEADERS },
+
+            // 3. Kick.com Internal V2 (Mobile Taklidi - Type: Message)
             {
-                name: "V2 Cookie",
+                name: "Mobile V2 Msg",
                 url: `https://kick.com/api/v2/messages/send/${targetId}`,
-                body: { content: message, type: "message" },
-                headers: {
-                    ...MOBILE_HEADERS,
-                    'Cookie': v2Cookies ? v2Cookies.join('; ') : "",
-                    'X-Xsrf-Token': v2Cookies ? decodeURIComponent(v2Cookies.find(c => c.includes('XSRF-TOKEN'))?.split('XSRF-TOKEN=')[1]?.split(';')[0] || "") : ""
-                }
-            }
+                body: { content: message, type: "message" }, // 'bot' yerine 'message' dene
+                headers: MOBILE_HEADERS
+            },
+
+            // 4. Kick.com Internal V1 (Bazen çalışır)
+            { name: "Kick V1 Int", url: 'https://kick.com/api/v1/chat-messages', body: { chatroom_id: targetId, content: message }, headers: MOBILE_HEADERS }
         ];
 
         let success = false;
         for (const t of trials) {
             try {
-                if (t.name === "V2 Cookie" && !t.headers['X-Xsrf-Token']) delete t.headers['X-Xsrf-Token'];
                 const res = await axios.post(t.url, t.body, { headers: t.headers, timeout: 5000 });
                 if (res.status >= 200 && res.status < 300) {
                     success = true;
@@ -4577,16 +4571,17 @@ async function sendChatMessage(message, broadcasterId) {
                 }
             } catch (err) {
                 const status = err.response?.status;
-                const data = JSON.stringify(err.response?.data || {});
-                console.warn(`[Chat Debug] ${t.name} Hata: ${status} | Body: ${data.substring(0, 150)}`);
+                const msg = err.response?.data?.message || "Body okunamadı";
+                console.warn(`[Chat Debug] ${t.name} -> ${status} | ${msg}`);
             }
         }
-        if (!success) console.error(`[Chat Fatal] Hepsi başarısız.`);
+        if (!success) console.error(`[Chat Fatal] Tüm endpointler başarısız.`);
 
     } catch (e) {
         console.error(`[Chat Global Error]:`, e.message);
     }
 }
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
