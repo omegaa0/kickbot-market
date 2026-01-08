@@ -860,40 +860,44 @@ async function sendChatMessage(message, broadcasterId) {
             'User-Agent': 'KickBot/1.0'
         };
 
+        // 🔍 TEŞHİS: TOKEN KİME AİT?
         try {
             const who = await axios.get('https://api.kick.com/public/v1/users', { headers });
-            const u = who.data?.data?.[0] || who.data;
-            console.log(`[Chat Auth] ✅ Token OK! Sahibi: ${u?.username || u?.slug} (ID: ${u?.id})`);
+            console.log(`[Chat Auth Raw]: ${JSON.stringify(who.data)}`);
+            const u = who.data?.data?.[0] || who.data?.data || who.data;
+            const nick = u?.username || u?.slug || "Bilinmiyor";
+            console.log(`[Chat Auth] ✅ Token Geçerli. Sahibi: ${nick} (ID: ${u?.id || '?'})`);
         } catch (e) {
-            console.error(`[Chat Auth] ❌ Token Hatalı: ${e.response?.status}`);
-            return;
+            console.error(`[Chat Auth] ❌ Kimlik Belirlenemedi: ${e.response?.status}`);
         }
 
         const bid = parseInt(broadcasterId);
-        const variations = [
+
+        // 🛠️ TÜM RESMİ VARYASYONLARI DENE
+        const testWays = [
             { url: 'https://api.kick.com/public/v1/chat-messages', body: { broadcaster_user_id: bid, content: message } },
-            { url: 'https://api.kick.com/public/v1/chat-messages', body: { chatroom_id: bid, message: message } },
-            { url: `https://kick.com/api/v2/messages/send/${bid}`, body: { content: message, type: "text" } }
+            { url: 'https://api.kick.com/public/v1/chat-messages', body: { chatroom_id: bid, message: message } }
         ];
 
         let success = false;
-        let lastErr = "";
-        for (const v of variations) {
+        let lastError = "";
+
+        for (const way of testWays) {
             try {
-                const res = await axios.post(v.url, v.body, { headers, timeout: 8000 });
+                const res = await axios.post(way.url, way.body, { headers, timeout: 8000 });
                 if (res.status >= 200 && res.status < 300) {
                     success = true;
-                    console.log(`[Chat] ✅ MESAJ GÜNDERİLDİ! URL: ${v.url}`);
+                    console.log(`[Chat] ✅ MESAJ GÜNDERİLDİ! (${way.url})`);
                     break;
                 }
             } catch (err) {
-                lastErr = `${v.url} -> ${err.response?.status}: ${JSON.stringify(err.response?.data || err.message)}`;
+                lastError = `${way.url} -> ${err.response?.status}: ${JSON.stringify(err.response?.data || err.message)}`;
             }
         }
 
         if (!success) {
-            console.error(`[Chat Fatal] Hata: ${lastErr}`);
-            console.log(`İpucu: Eğer 403/404 devam ediyorsa, botun kanalda MOD olduğundan ve /login işleminin yeni Client ID (01KD...) ile yapıldığından emin olun.`);
+            console.error(`[Chat Fatal] Başarısız: ${lastError}`);
+            console.log(`[Analiz] Eğer 404 ise Adres/Uygulama hatası, 403 ise Moderatörlük/Scope eksiğidir.`);
         }
     } catch (e) {
         console.error(`[Chat Global Error]:`, e.message);
