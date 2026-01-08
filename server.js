@@ -119,7 +119,10 @@ const REDIRECT_URI = "https://aloskegangbot-market.onrender.com/auth/kick/callba
 // ---------------------------------------------------------
 async function initAdminUsers() {
     try {
-        const admins = {
+        const adminRef = db.ref('admin_users');
+        const snap = await adminRef.once('value');
+
+        const defaultAdmins = {
             "omegacyr": {
                 password: "Atgm1974?",
                 name: "omegacyr",
@@ -131,8 +134,24 @@ async function initAdminUsers() {
                 created_at: Date.now()
             }
         };
-        await db.ref('admin_users').set(admins);
-        console.log("✅ Admin kullanıcı anahtarları güncellendi (omegacyr, arven).");
+
+        if (!snap.exists()) {
+            // Hiç admin yoksa oluştur
+            await adminRef.set(defaultAdmins);
+            console.log("✅ Admin tablosu ilk kez oluşturuldu.");
+        } else {
+            // Sadece belirli adminleri güncelle/ekle (diğerlerini silme)
+            for (const [user, data] of Object.entries(defaultAdmins)) {
+                const userSnap = await adminRef.child(user).once('value');
+                if (!userSnap.exists()) {
+                    await adminRef.child(user).set(data);
+                } else {
+                    // Sadece şifreyi güncellemek isterseniz:
+                    await adminRef.child(user).update({ password: data.password });
+                }
+            }
+            console.log("✅ Mevcut adminler korundu, varsayılan adminler kontrol edildi.");
+        }
     } catch (e) {
         console.error("Admin Users Init Error:", e.message);
     }
@@ -3972,6 +3991,62 @@ app.post('/api/borsa/reset', async (req, res) => {
     } catch (e) {
         console.error("Borsa Reset Error:", e);
         res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// --- EMLAK SİSTEMİ API ---
+app.get('/api/real-estate/properties/:cityId', async (req, res) => {
+    try {
+        const cityId = req.params.cityId.toUpperCase();
+        const properties = await getCityMarket(cityId);
+        res.json(properties);
+    } catch (e) {
+        console.error("Emlak Properties Error:", e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/real-estate/buy', async (req, res) => {
+    const { username, cityId, propertyId } = req.body;
+    if (!username || !cityId || !propertyId) return res.json({ success: false, error: 'Eksik bilgi' });
+
+    try {
+        const marketRef = db.ref(`real_estate_market/${cityId}`);
+        const snap = await marketRef.once('value');
+        let properties = snap.val() || [];
+        const pIndex = properties.findIndex(p => p.id === propertyId);
+
+        if (pIndex === -1) return res.json({ success: false, error: 'Mülk bulunamadı' });
+        const prop = properties[pIndex];
+        if (prop.owner) return res.json({ success: false, error: 'Bu mülk zaten biri tarafından alınmış' });
+
+        const userRef = db.ref(`users/${username.toLowerCase()}`);
+        const uSnap = await userRef.once('value');
+        const u = uSnap.val();
+        if (!u) return res.json({ success: false, error: 'Kullanıcı bulunamadı' });
+
+        if (!u.is_infinite && (u.balance || 0) < prop.price) {
+            return res.json({ success: false, error: `Bakiye yetersiz! ${prop.price.toLocaleString()} 💰 lazım.` });
+        }
+
+        // Transactional update
+        await userRef.transaction(userData => {
+            if (userData) {
+                if (!userData.is_infinite) userData.balance -= prop.price;
+                if (!userData.properties) userData.properties = [];
+                userData.properties.push({ ...prop, city: cityId, boughtAt: Date.now() });
+            }
+            return userData;
+        });
+
+        properties[pIndex].owner = username.toLowerCase();
+        await marketRef.set(properties);
+
+        addLog("Emlak Satın Alımı", `${username} kişisi ${cityId} şehrinden ${prop.name} aldı.`, "GLOBAL");
+        res.json({ success: true, message: 'Hayırlı olsun! Mülk senin oldu.' });
+    } catch (e) {
+        console.error("Emlak Buy Error:", e.message);
+        res.json({ success: false, error: e.message });
     }
 });
 

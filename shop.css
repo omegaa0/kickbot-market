@@ -412,23 +412,22 @@ header {
     border-radius: 8px !important;
 }
 
-/* TURKEY MAP WHITE STYLE */
+/* TURKEY MAP STYLING */
 #turkey-map img {
-    opacity: 1 !important;
-    filter: brightness(0) invert(1) !important;
-    /* Forces it to be stark white */
+    opacity: 0.8 !important;
+    filter: invert(1) contrast(1.2) !important;
+    /* Inverts black borders to white for dark theme */
     transition: all 0.5s;
 }
 
 .map-wrapper {
-    background: #f0f0f0 !important;
-    /* Light background for the white map */
+    background: rgba(0, 0, 0, 0.4) !important;
+    border: 1px solid var(--glass-border);
 }
 
 #map-overlay div {
-    background: rgba(0, 0, 0, 0.5) !important;
-    /* Dark dots on white map */
-    border: 1px solid white !important;
+    background: var(--primary) !important;
+    border: 1px solid rgba(0, 0, 0, 0.3) !important;
 }
 
 /* STAT MINI (PROFILE & PORTFOLIO) */
