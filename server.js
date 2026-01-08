@@ -861,28 +861,26 @@ async function sendChatMessage(message, broadcasterId) {
         };
 
         // 🔍 TEŞHİS: TOKEN KİME AİT?
+        let senderId = null;
         try {
             const who = await axios.get('https://api.kick.com/public/v1/users', { headers });
-            console.log(`[Chat Auth Raw]: ${JSON.stringify(who.data)}`);
-            const u = who.data?.data?.[0] || who.data?.data || who.data;
-            const nick = u?.username || u?.slug || "Bilinmiyor";
-            console.log(`[Chat Auth] ✅ Token Geçerli. Sahibi: ${nick} (ID: ${u?.id || '?'})`);
+            // Loglardan öğrendik: { data: [ { user_id: ..., name: ... } ] }
+            const u = who.data?.data?.[0];
+            if (u) {
+                console.log(`[Chat Auth] ✅ Token OK! Sahibi: ${u.name} (ID: ${u.user_id})`);
+                senderId = u.user_id;
+            }
         } catch (e) {
             console.error(`[Chat Auth] ❌ Kimlik Belirlenemedi: ${e.response?.status}`);
         }
 
         const bid = parseInt(broadcasterId);
 
-        // 🛠️ TÜM KOMBİNASYONLARI SIRAYLA DENE (BİRİ ELBET TUTACAK)
+        // 🛠️ SADECE PUBLIC V1 (V2 Cookie ister, Public Token ile çalışmaz)
         const trials = [
-            // 1. Resmi Public V1 (En yaygın)
-            { url: 'https://api.kick.com/public/v1/chat-messages', body: { broadcaster_user_id: bid, content: message } },
-            // 2. Chatroom ID varyasyonu
-            { url: 'https://api.kick.com/public/v1/chat-messages', body: { chatroom_id: bid, message: message } },
-            // 3. Slashed Public V1 (Bazı botlar bunu kullanıyor)
-            { url: 'https://api.kick.com/public/v1/chat/messages', body: { broadcaster_user_id: bid, content: message } },
-            // 4. İç V2 Yolu (Kurtarıcı)
-            { url: `https://kick.com/api/v2/messages/send/${bid}`, body: { content: message, type: "text" } }
+            { url: 'https://api.kick.com/public/v1/chat-messages', body: { broadcaster_user_id: bid, content: message, type: "bot" } },
+            { url: 'https://api.kick.com/public/v1/chat-messages', body: { chatroom_id: bid, content: message } },
+            { url: 'https://api.kick.com/public/v1/chat-messages', body: { broadcaster_user_id: bid, content: message, sender_id: senderId } }
         ];
 
         let success = false;
