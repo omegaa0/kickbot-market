@@ -589,7 +589,7 @@ async function loadBorsa() {
                     </div>
 
                     <div class="borsa-controls" style="margin-top:15px;">
-                        <input type="number" id="input-${code}" class="borsa-input" value="1" min="1" placeholder="Adet">
+                        <input type="number" id="input-${code}" class="borsa-input" value="1" min="1" placeholder="Adet" aria-label="${code} Adet Satın Al/Sat">
                         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
                             <button class="buy-btn btn-buy-main" onclick="executeBorsaBuy('${code}', ${data.price})" style="background:var(--primary); color:black; font-weight:800; padding:8px;">AL</button>
                             <button class="buy-btn btn-sell-main" onclick="executeBorsaSell('${code}', ${data.price})" style="background:rgba(255,255,255,0.05); color:white; border:1px solid var(--glass-border); padding:8px;">SAT</button>
