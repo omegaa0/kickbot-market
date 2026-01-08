@@ -846,53 +846,57 @@ async function sendChatMessage(message, broadcasterId) {
     try {
         const snap = await db.ref('channels/' + broadcasterId).once('value');
         const chan = snap.val();
-        if (!chan || !chan.access_token) return;
 
-        const bid = parseInt(broadcasterId);
-        const headers = {
-            'Authorization': `Bearer ${chan.access_token}`,
-            'X-Kick-Client-Id': KICK_CLIENT_ID,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        };
-
-        // 1. ADIM: Token Geçerli mi? (Hata Ayıklama)
-        try {
-            const whoami = await axios.get('https://api.kick.com/public/v1/users', { headers });
-            console.log(`[Chat Auth] Token Sahibi: ${whoami.data?.data?.[0]?.username || 'Bilinmiyor'}`);
-        } catch (e) {
-            console.error(`[Chat Auth Error] Token geçersiz veya yetkisiz: ${e.response?.status}`);
+        if (!chan || !chan.access_token) {
+            console.error(`[Chat] ${broadcasterId} için token yok. Giriş (Login) şart!`);
+            return;
         }
 
-        // 2. ADIM: Tüm Kombinasyonları Dene
+        // KESİN CLIENT ID (Dashboard ile birebir aynı olmalı)
+        const MY_CLIENT_ID = "01KDQNP2M930Y7YYNM62TVWJCP";
+
+        const headers = {
+            'Authorization': `Bearer ${chan.access_token}`,
+            'X-Kick-Client-Id': MY_CLIENT_ID,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': 'KickBot/1.0'
+        };
+
+        // 1. ADIM: Token'ı Teşhis Et
+        try {
+            const whoami = await axios.get('https://api.kick.com/public/v1/users', { headers });
+            const username = whoami.data?.data?.[0]?.username || whoami.data?.username || "Bilinmiyor";
+            console.log(`[Chat Auth] ✅ Token Geçerli! Sahibi: ${username}`);
+        } catch (e) {
+            console.error(`[Chat Auth] ❌ TOKEN REDDEDİLDİ: ${e.response?.status} - ${JSON.stringify(e.response?.data || e.message)}`);
+            console.log(`[KRİTİK] Lütfen botun Dashboard sayfasına gidip '/login' butonuna basarak girişi tazeleyin!`);
+            return; // Token geçersizse mesaj atmayı deneme
+        }
+
+        // 2. ADIM: Mesajı Gönder
+        const bid = parseInt(broadcasterId);
         const testRoutes = [
-            // Varyasyon 1: broadcaster_user_id + content (En resmi yol)
             { url: 'https://api.kick.com/public/v1/chat-messages', body: { broadcaster_user_id: bid, content: message } },
-            // Varyasyon 2: chatroom_id + message
-            { url: 'https://api.kick.com/public/v1/chat-messages', body: { chatroom_id: bid, message: message } },
-            // Varyasyon 3: V2 Geri Dönüş
-            { url: `https://kick.com/api/v2/messages/send/${bid}`, body: { content: message, type: "text" } }
+            { url: 'https://api.kick.com/public/v1/chat-messages', body: { chatroom_id: bid, message: message } }
         ];
 
         let success = false;
-        let lastErr = "";
-
         for (const r of testRoutes) {
             try {
                 const res = await axios.post(r.url, r.body, { headers, timeout: 8000 });
                 if (res.status >= 200 && res.status < 300) {
                     success = true;
-                    console.log(`[Chat] ✅ BAŞARILI! (URL: ${r.url})`);
+                    console.log(`[Chat] ✅ MESAJ GİTTİ! (${r.url})`);
                     break;
                 }
             } catch (err) {
-                lastErr = `${err.response?.status}: ${JSON.stringify(err.response?.data || err.message)}`;
+                // Hata detayını görmemiz gerekebilir
             }
         }
 
         if (!success) {
-            console.error(`[Chat Fatal] ${broadcasterId} için mesaj gönderilemedi: ${lastErr}`);
+            console.error(`[Chat Fatal] Adresler 404/403 döndü. Lütfen Botun kanalda MODERATÖR olduğunu kontrol edin.`);
         }
     } catch (e) {
         console.error(`[Chat Fatal Error]:`, e.message);
