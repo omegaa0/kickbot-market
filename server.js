@@ -637,6 +637,118 @@ async function fetchKickV2Channel(slug) {
     return null;
 }
 
+// ---------------------------------------------------------
+// EMLAK VE PROXY ENDPOINTLERI (GERI YUKLENDI)
+// ---------------------------------------------------------
+
+// --- EMLAK API ENDPOİNTLERİ ---
+app.get('/api/real-estate/properties/:cityId', async (req, res) => {
+    const cityId = req.params.cityId.toUpperCase();
+    const props = await getCityMarket(cityId);
+    res.json(props);
+});
+
+app.post('/api/real-estate/buy', async (req, res) => {
+    const { username, cityId, propertyId } = req.body;
+    if (!username || !cityId || !propertyId) return res.json({ success: false, error: "Eksik bilgi!" });
+
+    try {
+        const user = (await db.ref(`users/${username.toLowerCase()}`).once('value')).val();
+        if (!user) return res.json({ success: false, error: "Kullanıcı bulunamadı!" });
+
+        const marketRef = db.ref(`real_estate_market/${cityId.toUpperCase()}`);
+        const marketSnap = await marketRef.once('value');
+        let cityMarket = marketSnap.val();
+        if (!cityMarket) cityMarket = await getCityMarket(cityId.toUpperCase());
+
+        const propIndex = cityMarket.findIndex(p => p.id === propertyId);
+        if (propIndex === -1) return res.json({ success: false, error: "Mülk bulunamadı!" });
+
+        const prop = cityMarket[propIndex];
+
+        // 1. Durum Kontrolü: Mülk satılmış mı?
+        if (prop.owner) return res.json({ success: false, error: `Bu mülk zaten @${prop.owner} tarafından satın alınmış!` });
+
+        // 2. Bakiye Kontrolü
+        if (!user.is_infinite && (user.balance || 0) < prop.price) {
+            return res.json({ success: false, error: "Yetersiz bakiye!" });
+        }
+
+        // 3. Global Pazarda Evi Kilitle (Atomik Yazım)
+        let purchaseSuccess = false;
+        await marketRef.transaction(currentMarket => {
+            if (currentMarket && currentMarket[propIndex] && !currentMarket[propIndex].owner) {
+                currentMarket[propIndex].owner = username.toLowerCase();
+                purchaseSuccess = true;
+                return currentMarket;
+            }
+            return; // Transaction'ı durdur
+        });
+
+        if (!purchaseSuccess) return res.json({ success: false, error: "Mülk az önce başkası tarafından alındı veya bir hata oluştu!" });
+
+        // 4. Kullanıcı Verilerini Güncelle
+        const userRef = db.ref(`users/${username.toLowerCase()}`);
+        await userRef.transaction(u => {
+            if (u) {
+                if (!u.is_infinite) u.balance = (u.balance || 0) - prop.price;
+                if (!u.properties) u.properties = [];
+                u.properties.push({ ...prop, city: cityId, boughtAt: Date.now() });
+            }
+            return u;
+        });
+
+        res.json({ success: true, message: `${prop.name} başarıyla satın alındı!` });
+    } catch (e) {
+        res.json({ success: false, error: e.message });
+    }
+});
+
+// ---------------------------------------------------------
+// PROXY: KICK PROFILE PIC (CORS BYPASS)
+// ---------------------------------------------------------
+app.get('/api/kick/pfp/:username', async (req, res) => {
+    try {
+        const username = req.params.username.toLowerCase();
+        const data = await fetchKickV2Channel(username);
+        if (data && data.user && data.user.profile_pic) {
+            return res.json({ pfp: data.user.profile_pic });
+        }
+        res.status(404).json({ error: "Not found" });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ---------------------------------------------------------
+// BORSA RESET (ONLY FOR OMEGACYRA)
+// ---------------------------------------------------------
+app.post('/api/borsa/reset', async (req, res) => {
+    const { requester } = req.body;
+    if (requester !== 'omegacyra') return res.status(403).json({ success: false, error: "Yetkisiz işlem!" });
+
+    try {
+        console.log("!!! BORSA RESETLENİYOR (Requester: omegacyra) !!!");
+        const usersSnap = await db.ref('users').once('value');
+        const users = usersSnap.val() || {};
+
+        const updates = {};
+        for (const [uname, udata] of Object.entries(users)) {
+            if (udata.stocks) {
+                updates[`users/${uname}/stocks`] = null;
+            }
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await db.ref().update(updates);
+        }
+
+        res.json({ success: true, message: "Tüm borsa hisseleri sıfırlandı!" });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 // AI RESİM ÜRETME (Flux Modeli - Grok/Flux Kalitesinde)
 async function generateAiImage(prompt, imageId) {
     try {
@@ -755,9 +867,19 @@ async function fetchKickGraphQL(slug) {
     try {
         const query = `query Channel($slug: String!) {
             channel(slug: $slug) {
+                id
                 user { username }
-                livestream { is_live viewers viewer_count session_title }
+                slug
+                chatroom { id }
                 followersCount
+                subscriptionPackages { id }
+                livestream {
+                    id
+                    is_live
+                    viewers
+                    viewer_count
+                    session_title
+                }
             }
         }`;
         const response = await axios.post('https://kick.com/api/internal/v1/graphql', {
