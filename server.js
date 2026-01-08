@@ -1139,6 +1139,10 @@ async function refreshChannelToken(broadcasterId) {
 async function sendChatMessage(message, broadcasterId) {
     if (!message || !broadcasterId) return;
     try {
+        // ID'yi güvenli al
+        const { KICK_CLIENT_ID } = process.env;
+        const CLIENT_ID_TO_USE = KICK_CLIENT_ID || "01KDQNP2M930Y7YYNM62TVWJCP";
+
         const snap = await db.ref('channels/' + broadcasterId).once('value');
         const chan = snap.val();
 
@@ -1149,7 +1153,7 @@ async function sendChatMessage(message, broadcasterId) {
 
         const HEADERS = {
             'Authorization': `Bearer ${chan.access_token}`,
-            'X-Kick-Client-Id': "01KDQNP2M930Y7YYNM62TVWJCP",
+            'X-Kick-Client-Id': CLIENT_ID_TO_USE,
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             'User-Agent': 'KickBot/1.0'
