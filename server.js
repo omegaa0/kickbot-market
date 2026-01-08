@@ -1170,8 +1170,11 @@ app.post('/webhook/kick', async (req, res) => {
         }
         broadcasterId = String(broadcasterId);
 
-        // Event Type kontrolü
+        // Event Type kontrolü ve webhook sayacı
         console.log(`[Webhook] Kanal: ${broadcasterId}, Event: ${eventType}`);
+        if (typeof logWebhookReceived === 'function') {
+            logWebhookReceived({ event: eventType, sender: payload.sender });
+        }
 
         const channelRef = await db.ref('channels/' + broadcasterId).once('value');
         const channelData = channelRef.val();
@@ -4162,108 +4165,55 @@ async function takeDailyStatsSnapshot() {
 setInterval(takeDailyStatsSnapshot, 21600000);
 
 // =============================================================================
-// PUSHER WEBSOCKET LISTENER (FALLBACK) + KICK RESMİ WEBHOOK KULLANIMI
+// KICK RESMİ WEBHOOK SİSTEMİ (PUSHER YOK)
 // =============================================================================
-// ÖNEMLİ: Kick resmi webhook API'si için:
+// Webhook'ların çalışması için:
 // 1. https://kick.com/settings/developer adresine git
 // 2. Uygulamanı düzenle
 // 3. "Enable Webhooks" seçeneğini AÇ
 // 4. Webhook URL: https://aloskegangbot-market.onrender.com/webhook/kick
 // 5. Kaydet!
 // =============================================================================
-const CHATROOM_ID = 7444310; // Aloskegang chatroom ID
-const CHANNEL_ID_PUSHER = "8280555"; // Aloskegang broadcaster ID
 
-async function startPusherListener() {
-    try {
-        const WebSocket = require('ws');
-        console.log("✅ Pusher WebSocket Başlatılıyor...");
+// Webhook test değişkeni - son alınan mesajları tutar
+let lastWebhookReceived = null;
+let webhookCount = 0;
 
-        const ws = new WebSocket('wss://ws-us2.pusher.com/app/32535a80282344585f6c?protocol=7&client=js&version=8.4.0-rc2&flash=false');
+// Diagnostik endpoint - webhook'ların gelip gelmediğini kontrol et
+app.get('/webhook/status', (req, res) => {
+    res.json({
+        status: 'ok',
+        webhookCount: webhookCount,
+        lastWebhook: lastWebhookReceived,
+        message: webhookCount > 0
+            ? `✅ ${webhookCount} webhook alındı. Son: ${new Date(lastWebhookReceived?.time).toISOString()}`
+            : '❌ Henüz webhook alınmadı. Kick Developer Settings\'den webhook URL\'yi ayarladığınızdan emin olun!'
+    });
+});
 
-        ws.on('open', () => {
-            console.log(`[Pusher] ✅ Bağlandı! Chatroom ${CHATROOM_ID} dinleniyor...`);
-            ws.send(JSON.stringify({
-                event: "pusher:subscribe",
-                data: { auth: "", channel: `chatrooms.${CHATROOM_ID}.v2` }
-            }));
-        });
-
-        ws.on('message', async (data) => {
-            try {
-                const msg = JSON.parse(data.toString());
-
-                if (msg.event === 'App\\Events\\ChatMessageEvent') {
-                    const chatData = JSON.parse(msg.data);
-                    const sender = chatData.sender;
-                    const content = chatData.content;
-                    const user = sender?.username?.toLowerCase() || "";
-
-                    if (!user || user === "botrix" || user === "aloskegangbot") return;
-
-                    console.log(`[Pusher Chat] @${user}: ${content}`);
-
-                    // Webhook handler'daki aynı mantığı kullan
-                    // Basit komut işleme (Webhook'a yönlendirmeden direkt işle)
-                    const lowMsg = content.trim().toLowerCase();
-
-                    // Kanal verisini çek
-                    const channelSnap = await db.ref('channels/' + CHANNEL_ID_PUSHER).once('value');
-                    const channelData = channelSnap.val();
-                    if (!channelData) return;
-
-                    const settings = channelData.settings || {};
-                    const reply = (text) => sendChatMessage(text, CHANNEL_ID_PUSHER);
-                    const userRef = db.ref('users/' + user);
-
-                    // Basit komut örnekleri (Webhook'taki tam logic için orayı kullan)
-                    if (lowMsg === '!bakiye') {
-                        const snap = await userRef.once('value');
-                        const data = snap.val() || { balance: 1000 };
-                        if (data.is_infinite) {
-                            await reply(`@${user}, Bakiye: Omeganın kartı 💳♾️`);
-                        } else {
-                            await reply(`@${user}, Bakiyeniz: ${(data.balance || 0).toLocaleString()} 💰`);
-                        }
-                    }
-                    else if (lowMsg === '!test') {
-                        await reply(`✅ @${user}, Bot aktif ve çalışıyor! (Pusher Listener)`);
-                    }
-                    // Diğer komutlar için webhook'a güven veya buraya ekle
-                }
-            } catch (e) {
-                // Parse error - normal bağlantı mesajları için
-            }
-        });
-
-        ws.on('close', () => {
-            console.log('[Pusher] ❌ Bağlantı koptu. 5sn sonra tekrar bağlanıyor...');
-            setTimeout(startPusherListener, 5000);
-        });
-
-        ws.on('error', (e) => console.error('[Pusher Error]', e.message));
-
-    } catch (e) {
-        console.log("⚠️ 'ws' modülü yüklenemedi. 'npm install ws' komutunu çalıştırın.");
-        console.log("Hata:", e.message);
-    }
+// Webhook alındığında sayacı güncelle (webhook handler'da çağrılacak)
+function logWebhookReceived(data) {
+    webhookCount++;
+    lastWebhookReceived = {
+        time: Date.now(),
+        event: data.event || 'unknown',
+        user: data.sender?.username || 'unknown'
+    };
 }
-
-// Pusher Listener'ı başlat
-startPusherListener();
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`🚀 MASTER FINAL (MULTI-CHANNEL) AKTIF! Port: ${PORT}`);
+    console.log(`🚀 BOT AKTİF! Port: ${PORT}`);
+    console.log(`📡 Webhook URL: https://aloskegangbot-market.onrender.com/webhook/kick`);
+    console.log(`🔍 Webhook durumu: https://aloskegangbot-market.onrender.com/webhook/status`);
+    console.log(`⚠️  kick.com/settings/developer adresinden webhook URL'yi ayarlayın!`);
 
     // Sunucu başladığında webhook'ları kaydet
     setTimeout(() => {
-        console.log('[Webhook] Tüm kanallar için webhook kaydı başlatılıyor...');
+        console.log('[Webhook] Event subscription başlatılıyor...');
         registerAllWebhooks();
-        // İstatistik senkronizasyonunu da başlat
         syncChannelStats();
     }, 5000);
 
-    // Her 10 dakikada bir istatistikleri zorunlu senkronize et (Webhook fallback)
     setInterval(syncChannelStats, 600000);
 });
