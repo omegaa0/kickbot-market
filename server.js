@@ -1136,8 +1136,9 @@ async function refreshChannelToken(broadcasterId) {
 
 
 
-// YENİ CHAT GÖNDERME FONKSİYONU (V7 - Ajan Modu & Link Keşfi)
+// YENİ CHAT GÖNDERME FONKSİYONU (V7.1 - Ajan Modu & Link Keşfi)
 async function sendChatMessage(message, broadcasterId) {
+    console.log("[Chat Debug] V7.1 Başlatılıyor..."); // Yeni kod kontrolü
     if (!message || !broadcasterId) return;
     try {
         const { KICK_CLIENT_ID } = process.env;
