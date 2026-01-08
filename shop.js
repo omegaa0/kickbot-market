@@ -543,18 +543,10 @@ async function loadBorsa() {
             return;
         }
 
-        container.innerHTML = "";
-        const entries = Object.entries(stocks);
-
-        if (entries.length === 0) {
-            container.innerHTML = `<p style="grid-column: 1/-1; text-align:center; padding:40px;">Borsa şu an kapalı.</p>`;
-            return;
-        }
-
         entries.forEach(([code, data]) => {
             if (!data || typeof data !== 'object') return;
 
-            // Update history
+            // Update history for chart (last 20 points from real-time)
             if (!stockHistory[code]) stockHistory[code] = [];
             stockHistory[code].push(data.price);
             if (stockHistory[code].length > 20) stockHistory[code].shift();
@@ -563,32 +555,50 @@ async function loadBorsa() {
             const color = data.trend === 1 ? '#05ea6a' : '#ff4d4d';
             const diff = data.oldPrice ? (((data.price - data.oldPrice) / data.oldPrice) * 100).toFixed(2) : "0.00";
 
-            const card = document.createElement('div');
-            card.className = 'item-card borsa-card';
-            card.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <span style="font-weight:800; font-size:1.1rem; color:var(--primary);">${code}</span>
-                    <span style="color:${color}; font-weight:800; font-size:0.75rem;">
-                        ${data.trend === 1 ? '+' : ''}${diff}% ${trend}
-                    </span>
-                </div>
-                
-                <canvas id="chart-${code}" width="200" height="60" style="width:100%; height:60px; margin:10px 0;"></canvas>
+            let card = document.querySelector(`.borsa-card[data-code="${code}"]`);
+            if (card) {
+                // Sadece değişen kısımları güncelle (Input değerini koru)
+                const trendEl = card.querySelector('.trend-val');
+                const priceEl = card.querySelector('.price-val');
+                const buyBtn = card.querySelector('.btn-buy-main');
+                const sellBtn = card.querySelector('.btn-sell-main');
 
-                <div class="price-val" data-code="${code}" style="font-size:1.5rem; font-weight:800; color:white; margin:10px 0;">
-                    ${(data.price || 0).toLocaleString()} <span style="font-size:0.8rem; color:var(--primary);">💰</span>
-                </div>
+                trendEl.innerHTML = `${data.trend === 1 ? '+' : ''}${diff}% ${trend}`;
+                trendEl.style.color = color;
+                priceEl.innerHTML = `${(data.price || 0).toLocaleString()} <span style="font-size:0.8rem; color:var(--primary);">💰</span>`;
 
-                <div class="borsa-controls" style="margin-top:15px;">
-                    <input type="number" id="input-${code}" class="borsa-input" value="1" min="1" placeholder="Adet">
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
-                        <button class="buy-btn" onclick="executeBorsaBuy('${code}', ${data.price})" style="background:var(--primary); color:black; font-weight:800; padding:8px;">AL</button>
-                        <button class="buy-btn" onclick="executeBorsaSell('${code}', ${data.price})" style="background:rgba(255,255,255,0.05); color:white; border:1px solid var(--glass-border); padding:8px;">SAT</button>
+                // Butonlardaki fiyatları güncelle
+                buyBtn.onclick = () => executeBorsaBuy(code, data.price);
+                sellBtn.onclick = () => executeBorsaSell(code, data.price);
+            } else {
+                card = document.createElement('div');
+                card.className = 'item-card borsa-card';
+                card.setAttribute('data-code', code);
+                card.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <span style="font-weight:800; font-size:1.1rem; color:var(--primary);">${code}</span>
+                        <span class="trend-val" style="color:${color}; font-weight:800; font-size:0.75rem;">
+                            ${data.trend === 1 ? '+' : ''}${diff}% ${trend}
+                        </span>
                     </div>
-                </div>
-            `;
-            container.appendChild(card);
-            drawStockChart(document.getElementById(`chart-${code}`), stockHistory[code], data.trend);
+                    
+                    <canvas id="chart-${code}" width="200" height="60" style="width:100%; height:60px; margin:10px 0;"></canvas>
+
+                    <div class="price-val" style="font-size:1.5rem; font-weight:800; color:white; margin:10px 0;">
+                        ${(data.price || 0).toLocaleString()} <span style="font-size:0.8rem; color:var(--primary);">💰</span>
+                    </div>
+
+                    <div class="borsa-controls" style="margin-top:15px;">
+                        <input type="number" id="input-${code}" class="borsa-input" value="1" min="1" placeholder="Adet">
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+                            <button class="buy-btn btn-buy-main" onclick="executeBorsaBuy('${code}', ${data.price})" style="background:var(--primary); color:black; font-weight:800; padding:8px;">AL</button>
+                            <button class="buy-btn btn-sell-main" onclick="executeBorsaSell('${code}', ${data.price})" style="background:rgba(255,255,255,0.05); color:white; border:1px solid var(--glass-border); padding:8px;">SAT</button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            }
+            drawStockChart(document.getElementById(`chart-${code}`), data.history || stockHistory[code], data.trend);
         });
     };
 

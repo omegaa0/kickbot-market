@@ -394,17 +394,17 @@ let botMasterSwitch = true; // Omegacyr için master switch
 
 // --- GLOBAL BORSA SİSTEMİ ---
 const INITIAL_STOCKS = {
-    "APPLE": { price: 5000, trend: 1 },
-    "BITCOIN": { price: 45000, trend: 1 },
-    "GOLD": { price: 2500, trend: -1 },
-    "SILVER": { price: 850, trend: 1 },
-    "PLATINUM": { price: 3200, trend: 1 },
-    "KICK": { price: 100, trend: 1 },
-    "ETHER": { price: 15000, trend: -1 },
-    "TESLA": { price: 7500, trend: 1 },
-    "NVIDIA": { price: 12000, trend: 1 },
-    "GOOGLE": { price: 6200, trend: -1 },
-    "AMAZON": { price: 5800, trend: 1 }
+    "APPLE": { price: 5000, trend: 1, history: [] },
+    "BITCOIN": { price: 45000, trend: 1, history: [] },
+    "GOLD": { price: 2500, trend: -1, history: [] },
+    "SILVER": { price: 850, trend: 1, history: [] },
+    "PLATINUM": { price: 3200, trend: 1, history: [] },
+    "KICK": { price: 100, trend: 1, history: [] },
+    "ETHER": { price: 15000, trend: -1, history: [] },
+    "TESLA": { price: 7500, trend: 1, history: [] },
+    "NVIDIA": { price: 12000, trend: 1, history: [] },
+    "GOOGLE": { price: 6200, trend: -1, history: [] },
+    "AMAZON": { price: 5800, trend: 1, history: [] }
 };
 
 // --- EMLAK SİSTEMİ (GLOBAL PAZAR) ---
@@ -483,6 +483,7 @@ async function updateGlobalStocks() {
                 price: newPrice,
                 oldPrice: oldPrice,
                 trend: newPrice > oldPrice ? 1 : (newPrice < oldPrice ? -1 : (data.trend || 1)),
+                history: data.history || [],
                 lastUpdate: Date.now()
             };
         }
@@ -492,6 +493,29 @@ async function updateGlobalStocks() {
         console.error("Borsa Update Error:", e.message);
     }
 }
+
+// Borsa Saatlik Geçmiş Kaydı (Grafiklerin daha gerçekçi olması için)
+async function saveHourlyStockHistory() {
+    try {
+        const stockRef = db.ref('global_stocks');
+        const snap = await stockRef.once('value');
+        const stocks = snap.val();
+        if (!stocks) return;
+
+        const updates = {};
+        for (const [code, data] of Object.entries(stocks)) {
+            let history = data.history || [];
+            history.push(data.price);
+            if (history.length > 24) history.shift(); // Son 24 saatin verisi
+            updates[`${code}/history`] = history;
+        }
+        await stockRef.update(updates);
+        console.log("📈 Borsa saatlik geçmiş verileri güncellendi.");
+    } catch (e) {
+        console.error("Hourly History Error:", e.message);
+    }
+}
+setInterval(saveHourlyStockHistory, 3600000); // 1 Saat
 
 // Borsa güncelleme (Her 1 saniyede bir)
 setInterval(updateGlobalStocks, 1000);
@@ -3935,17 +3959,16 @@ app.post('/api/borsa/reset', async (req, res) => {
         const updates = {};
 
         for (const [username, data] of Object.entries(allUsers)) {
-            if (data.stocks) {
-                updates[`users/${username}/stocks`] = null;
-            }
+            // Sadece 'stocks' anahtarını değil, her ihtimale karşı tüm hisseleri temizleyelim
+            updates[`users/${username}/stocks`] = null;
         }
 
         if (Object.keys(updates).length > 0) {
             await db.ref().update(updates);
         }
 
-        addLog("Borsa Sıfırlama", "Tüm kullanıcı portföyleri temizlendi.", "GLOBAL");
-        res.json({ success: true, message: 'Borsa başarıyla sıfırlandı!' });
+        addLog("Borsa Sıfırlama", "Tüm kullanıcı portföyleri MASTER tarafından temizlendi.", "GLOBAL");
+        res.json({ success: true, message: 'BORSA TÜM KULLANICILAR İÇİN SIFIRLANDI!' });
     } catch (e) {
         console.error("Borsa Reset Error:", e);
         res.status(500).json({ success: false, error: e.message });
