@@ -254,12 +254,13 @@
                             style="position:sticky; top:20px; padding: 20px; overflow: hidden; min-height: 500px; display: flex; align-items: center; justify-content: center; border-radius: 20px;">
 
                             <div id="turkey-map"
-                                style="width: 100%; max-width: 850px; aspect-ratio: 1000 / 450; position: relative; margin: 0 auto; z-index: 1; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
-                                <!-- En Güvenilir Wikimedia Kaynağı (Filtresiz/Sade) -->
-                                <img src="https://upload.wikimedia.org/wikipedia/commons/b/b1/Turkey_provinces_blank_map.svg"
+                                style="width: 100%; max-width: 850px; aspect-ratio: 1000 / 450; position: relative; margin: 0 auto; z-index: 1; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.02);">
+                                <!-- En Stabil PNG Kaynağı (SVG sorunlarını aşmak için) -->
+                                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Turkey_provinces_blank_map.svg/1024px-Turkey_provinces_blank_map.svg.png"
                                     alt="Turkey Map"
-                                    style="width: 100%; height: 100%; object-fit: contain; display: block; filter: invert(0.9) brightness(1.2); opacity: 0.7;"
-                                    onerror="this.parentElement.innerHTML='<p style=color:#444>Harita yüklenemedi. Lütfen internet bağlantınızı kontrol edin.</p>'">
+                                    style="width: 100%; height: 100%; object-fit: contain; display: block; filter: invert(1) brightness(1.5) contrast(0.8); opacity: 0.6;"
+                                    referrerpolicy="no-referrer"
+                                    onerror="this.src='https://cdn.pixabay.com/photo/2013/07/12/12/48/turkey-146313_1280.png'; this.style.filter='invert(1) brightness(2)';">
                                 <div id="map-overlay"
                                     style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events: auto;">
                                     <!-- İnteraktif Şehir Noktaları -->
