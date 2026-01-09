@@ -466,13 +466,27 @@ async function updateGlobalStocks() {
             }
         }
 
+        // Piyasa Meta Verilerini Çek (Döngünün sıfırlanmaması için)
+        const metaRef = db.ref('market_meta');
+        const metaSnap = await metaRef.once('value');
+        let meta = metaSnap.val();
+
+        if (meta) {
+            currentMarketCycle = meta.cycle || "NORMAL";
+            cycleDuration = meta.duration || 0;
+        }
+
         // Piyasa döngüsü yönetimi
         if (cycleDuration <= 0) {
             const cycles = ["NORMAL", "BULLISH", "BEARISH", "VOLATILE", "STAGNANT"];
             currentMarketCycle = cycles[Math.floor(Math.random() * cycles.length)];
-            cycleDuration = Math.floor(Math.random() * 300) + 300; // 5-10 dk
+            cycleDuration = Math.floor(Math.random() * 300) + 300; // 5-10 dk (2s per tick)
+            console.log(`🔄 Yeni Piyasa Döngüsü: ${currentMarketCycle} (${cycleDuration} tik)`);
         }
         cycleDuration--;
+
+        // Meta verilerini kaydet
+        await metaRef.set({ cycle: currentMarketCycle, duration: cycleDuration });
 
         for (const [code, data] of Object.entries(stocks)) {
             const baseData = INITIAL_STOCKS[code] || { volatility: 0.02, drift: 0.0001 };
@@ -481,23 +495,25 @@ async function updateGlobalStocks() {
             let vol = baseData.volatility;
             let drift = baseData.drift;
 
-            // Döngüye göre ayarla
-            if (currentMarketCycle === "BULLISH") drift += 0.005;
-            if (currentMarketCycle === "BEARISH") drift -= 0.005;
-            if (currentMarketCycle === "VOLATILE") vol *= 2;
-            if (currentMarketCycle === "STAGNANT") { vol *= 0.2; drift = 0; }
+            // Döngüye göre ayarla (Daha stabil oranlar)
+            // 2 saniyede bir tetiklendiği için çok küçük oranlar verilmeli
+            if (currentMarketCycle === "BULLISH") drift += 0.0005; // Önceden 0.005 idi (çok hızlıydı) -> Şimdi %0.05
+            if (currentMarketCycle === "BEARISH") drift -= 0.0005;
+            if (currentMarketCycle === "VOLATILE") vol *= 1.5; // 2x yerine 1.5x
+            if (currentMarketCycle === "STAGNANT") { vol *= 0.1; drift = 0; }
 
-            // Brownian Motion: dP = P * (drift * dt + vol * epsilon * sqrt(dt))
+            // Brownian Motion
             const epsilon = Math.random() * 2 - 1;
             const changePercent = drift + (vol * epsilon * 0.1);
 
             let newPrice = Math.round(oldPrice * (1 + changePercent));
 
-            // Ani Çöküş/Fırlama Şansı (%0.1)
-            if (Math.random() < 0.001) {
-                const modifier = Math.random() > 0.5 ? 1.2 : 0.8;
+            // Ani Çöküş/Fırlama Şansı (Artık çok daha nadir)
+            // Olasılık %0.1 -> %0.02 (5 kat azaldı)
+            if (Math.random() < 0.0002) {
+                const modifier = Math.random() > 0.5 ? 1.15 : 0.85; // %20 yerine %15 değişim
                 newPrice = Math.round(newPrice * modifier);
-                console.log(`[Piyasa Olayı] ${code} %${modifier > 1 ? '20 Yükseldi' : '20 Düştü'}!`);
+                console.log(`[Piyasa Olayı] ${code} Ani hareket: %${Math.round((modifier - 1) * 100)}`);
             }
 
             if (newPrice < 1) newPrice = 1;
@@ -506,7 +522,7 @@ async function updateGlobalStocks() {
             stocks[code] = {
                 ...data,
                 price: newPrice,
-                oldPrice: oldPrice,
+                oldPrice: oldPrice, // Frontend'de değişim yüzdesi için
                 trend: newPrice > oldPrice ? 1 : (newPrice < oldPrice ? -1 : (data.trend || 1)),
                 lastUpdate: Date.now(),
                 marketStatus: currentMarketCycle
@@ -577,12 +593,12 @@ app.post('/api/borsa/reset', async (req, res) => {
 app.get('/api/map/turkey', async (req, res) => {
     try {
         const response = await axios({
-            url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Turkey_provinces_blank_map.svg/1024px-Turkey_provinces_blank_map.svg.png',
+            url: 'https://upload.wikimedia.org/wikipedia/commons/1/1b/Turkey_provinces_blank_map.svg', // Direkt SVG
             method: 'GET',
             responseType: 'stream',
             headers: { 'User-Agent': 'Mozilla/5.0' }
         });
-        res.setHeader('Content-Type', 'image/png');
+        res.setHeader('Content-Type', 'image/svg+xml'); // Content-Type SVG olarak güncellendi
         response.data.pipe(res);
     } catch (e) {
         console.error("Map Proxy Error:", e.message);
@@ -620,6 +636,18 @@ app.post('/api/emlak/reset', async (req, res) => {
     } catch (e) {
         console.error("Emlak Reset Error:", e.message);
         res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// EMLAK API ENDPOINT (Eksik olduğu için frontend hata veriyordu)
+app.get('/api/real-estate/properties/:cityId', async (req, res) => {
+    try {
+        const cityId = req.params.cityId.toUpperCase();
+        const market = await getCityMarket(cityId); // getCityMarket zaten tanımlı ve çalışıyor
+        res.json(market);
+    } catch (e) {
+        console.error(`Emlak API Hatası (${req.params.cityId}):`, e.message);
+        res.status(500).json([]);
     }
 });
 
@@ -1641,7 +1669,7 @@ app.post('/webhook/kick', async (req, res) => {
         res.status(200).send('OK');
 
         // --- LOGGING ---
-        console.log(`[Webhook] ${eventType} received.`);
+        // console.log(`[Webhook] ${eventType} received.`);
 
         if (typeof logWebhookReceived === 'function') {
             logWebhookReceived({ event: eventType, sender: payload.sender });
@@ -1752,7 +1780,7 @@ app.post('/webhook/kick', async (req, res) => {
 
         if (!user || user === "botrix" || user === "aloskegangbot") return;
 
-        console.log(`[Webhook] 💬 @${user}: ${rawMsg}`);
+        // console.log(`[Webhook] 💬 @${user}: ${rawMsg}`);
 
         const lowMsg = rawMsg.trim().toLowerCase();
         const args = rawMsg.trim().split(/\s+/).slice(1);
