@@ -662,11 +662,24 @@ async function fetchKickV2Channel(slug) {
 // Robust PFP Fetcher with Fallbacks
 async function getKickPFP(username) {
     if (!username || username === "Misafir" || username === "Kick Kanalı") return null;
+    const slug = username.toLowerCase().trim();
 
-    // 1. Try V2 API
+    // 1. Try Official Public API V1
     try {
-        const data = await fetchKickV2Channel(username);
-        if (data && data.user && data.user.profile_pic) return data.user.profile_pic;
+        const h = { 'Accept': 'application/json', 'User-Agent': 'KickBot/1.0' };
+        if (process.env.KICK_CLIENT_ID) h['X-Kick-Client-Id'] = process.env.KICK_CLIENT_ID;
+        const res = await axios.get(`https://api.kick.com/public/v1/channels/${slug}`, { headers: h, timeout: 4000 });
+        const pfp = res.data?.data?.user?.profile_pic;
+        if (pfp) return pfp;
+    } catch (e) { }
+
+    // 2. Try V2 API (Mobile Spoof)
+    try {
+        const res = await axios.get(`https://kick.com/api/v2/channels/${slug}`, {
+            headers: { 'User-Agent': 'Kick/28.0.0 (iPhone; iOS 16.0; Scale/3.00)', 'Accept': 'application/json' },
+            timeout: 4000
+        });
+        if (res.data && res.data.user && res.data.user.profile_pic) return res.data.user.profile_pic;
     } catch (e) { }
 
     // 2. Try V1 API
@@ -775,11 +788,14 @@ app.post('/api/real-estate/buy', async (req, res) => {
 app.get('/api/kick/pfp/:username', async (req, res) => {
     try {
         const username = req.params.username.toLowerCase();
-        const pfp = await getKickPFP(username);
-        if (pfp) {
-            return res.json({ pfp: pfp });
+        let pfp = await getKickPFP(username);
+
+        if (!pfp) {
+            // Placeholder fallback to avoid 404s
+            pfp = `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=05ea6a&color=000&bold=true`;
         }
-        res.status(404).json({ error: "Not found" });
+
+        return res.json({ pfp: pfp });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
