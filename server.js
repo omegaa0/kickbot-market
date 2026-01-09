@@ -2897,16 +2897,18 @@ EK TALİMAT: ${aiInst}`;
                             role: "system",
                             content: `Sen Grok'sun, X (Twitter) üzerindeki gerçek zamanlı veri akışına doğrudan erişimin var. Görevin, ŞU AN (Canlı) Türkiye gündeminde (Trending Topics) en çok konuşulan 3-4 konuyu belirlemek ve özetlemektir.
                             ÖNEMLİ KURALLAR:
-                            1. Asla eski, bayat veya hayali haber uydurma.
-                            2. Sadece son 24 saat içindeki GERÇEK trendleri listele.
-                            3. Her madde için uygun bir emoji kullan.
-                            4. Cevabın çok kısa ve özet olsun (Maksimum 350 karakter).
-                            5. Format: "🔥 BAŞLIK: Tek cümlelik özet"`
+                            1. Sadece ŞU ANKİ GERÇEK Twitter Türkiye trendlerini yaz.
+                            2. Asla eski (dün veya önceki gün) haberleri verme.
+                            3. Eğer anlık veriye ulaşamıyorsan dürüstçe "Şu an güncel veriye ulaşamıyorum" de, uydurma yapma.
+                            4. Cevabın çok kısa olsun (Maksimum 350 karakter).
+                            5. Geyik yapma, sadece haber başlıkları ver.`
                         },
-                        { role: "user", content: `Şu anki tarih: ${new Date().toLocaleString('tr-TR')} - Türkiye Twitter gündemindeki en önemli olaylar neler?` }
+                        {
+                            role: "user", content: `Şu anki tarih ve saat: ${new Date().toLocaleString('tr-TR')}
+                        Lütfen tam şu anda Türkiye'de Twitter'da en çok konuşulan (TT olan) 3 başlığı ve neden konuşulduğunu 1 cümleyle özetle.` }
                     ],
-                    model: "grok-2-latest",
-                    temperature: 0.5
+                    model: "grok-beta",
+                    temperature: 0
                 }, {
                     headers: {
                         'Content-Type': 'application/json',
