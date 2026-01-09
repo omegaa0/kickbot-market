@@ -85,22 +85,42 @@ function renderFreeCommands() {
     });
 }
 
-async function fetchKickPFP(username) {
-    try {
-        const pfpImg = document.getElementById('user-pfp');
-        const fallback = document.getElementById('user-pfp-fallback');
+/**
+ * Robust PFP Fetcher with Fallback Support
+ * Handles both user and broadcaster avatars with automatic fallback to text initials
+ */
+async function fetchKickPFP(username, imgId, fallbackId) {
+    const imgEl = document.getElementById(imgId);
+    const fallbackEl = document.getElementById(fallbackId);
+    if (!imgEl) return;
 
-        // Use our server proxy to bypass CORS
-        const res = await fetch(`/api/kick/pfp/${username}`);
+    try {
+        // Initial state
+        imgEl.style.display = 'none';
+        if (fallbackEl) {
+            fallbackEl.style.display = 'flex';
+            fallbackEl.innerText = username ? username[0].toUpperCase() : '?';
+        }
+
+        if (!username) return;
+
+        const res = await fetch(`/api/kick/pfp/${username.toLowerCase()}`);
         const data = await res.json();
+
         if (data.pfp) {
-            pfpImg.src = data.pfp;
-            pfpImg.style.display = 'block';
-            fallback.style.display = 'none';
+            const preloader = new Image();
+            preloader.onload = () => {
+                imgEl.src = data.pfp;
+                imgEl.style.display = 'block';
+                if (fallbackEl) fallbackEl.style.display = 'none';
+            };
+            preloader.onerror = () => {
+                console.warn(`[PFP] Image load failed for ${username}: ${data.pfp}`);
+            };
+            preloader.src = data.pfp;
         }
     } catch (e) {
-        console.log("PFP fetch error (CORS or server)", e);
-        // Fallback remains visible
+        console.warn(`[PFP] Fetch error for ${username}:`, e);
     }
 }
 
@@ -190,9 +210,7 @@ function login(user) {
     if (heroName) heroName.innerText = user.toUpperCase();
 
     // Setup PFP
-    const fallback = document.getElementById('user-pfp-fallback');
-    if (fallback) fallback.innerText = user[0].toUpperCase();
-    fetchKickPFP(user);
+    fetchKickPFP(user, 'user-pfp', 'user-pfp-fallback');
 
     db.ref('users/' + user).on('value', (snap) => {
         const data = snap.val() || { balance: 0, auth_channel: null };
@@ -229,13 +247,7 @@ async function loadChannelMarket(channelId) {
     document.getElementById('chan-name').innerText = chanName;
 
     // Broadcaster PFP Fetch via Proxy
-    try {
-        const res = await fetch(`/api/kick/pfp/${chanName}`);
-        const data = await res.json();
-        if (data.pfp) {
-            document.getElementById('chan-pfp').src = data.pfp;
-        }
-    } catch (e) { console.log("Broadcaster PFP error", e); }
+    fetchKickPFP(chanName, 'chan-pfp', null); // Fallback span can be added to HTML later if needed
 
     // Side GIFs Update
     const leftGif = settings.left_gif || "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHlxYnV4YzB6MzB6bmR4bmR4bmR4bmR4bmR4bmR4bmR4bmR4bmR4JmVwPXYxX2ludGVybmFsX2dpZl9ieV9pZCZjdD1n/3o7TKMGpxPucV0G3S0/giphy.gif";
@@ -538,10 +550,21 @@ async function loadBorsa() {
     const renderStocks = (stocks) => {
         if (!stocks) return;
 
+        // Ensure entries is always defined locally for this call
+        const entries = Object.entries(stocks);
+
+        if (entries.length === 0) {
+            container.innerHTML = "<p style='text-align:center; padding:20px;'>Hizmet dışı.</p>";
+            return;
+        }
+
         if (stocks.error) {
             container.innerHTML = `<div class="error-box">${stocks.error}</div>`;
             return;
         }
+
+        const loader = container.querySelector('.loader');
+        if (loader) container.innerHTML = ""; // First time clear
 
         entries.forEach(([code, data]) => {
             if (!data || typeof data !== 'object') return;
@@ -557,19 +580,21 @@ async function loadBorsa() {
 
             let card = document.querySelector(`.borsa-card[data-code="${code}"]`);
             if (card) {
-                // Sadece değişen kısımları güncelle (Input değerini koru)
                 const trendEl = card.querySelector('.trend-val');
                 const priceEl = card.querySelector('.price-val');
                 const buyBtn = card.querySelector('.btn-buy-main');
                 const sellBtn = card.querySelector('.btn-sell-main');
 
-                trendEl.innerHTML = `${data.trend === 1 ? '+' : ''}${diff}% ${trend}`;
-                trendEl.style.color = color;
-                priceEl.innerHTML = `${(data.price || 0).toLocaleString()} <span style="font-size:0.8rem; color:var(--primary);">💰</span>`;
+                if (trendEl) {
+                    trendEl.innerHTML = `${data.trend === 1 ? '+' : ''}${diff}% ${trend}`;
+                    trendEl.style.color = color;
+                }
+                if (priceEl) {
+                    priceEl.innerHTML = `${(data.price || 0).toLocaleString()} <span style="font-size:0.8rem; color:var(--primary);">💰</span>`;
+                }
 
-                // Butonlardaki fiyatları güncelle
-                buyBtn.onclick = () => executeBorsaBuy(code, data.price);
-                sellBtn.onclick = () => executeBorsaSell(code, data.price);
+                if (buyBtn) buyBtn.onclick = () => executeBorsaBuy(code, data.price);
+                if (sellBtn) sellBtn.onclick = () => executeBorsaSell(code, data.price);
             } else {
                 card = document.createElement('div');
                 card.className = 'item-card borsa-card';
@@ -603,7 +628,13 @@ async function loadBorsa() {
     };
 
     db.ref('global_stocks').on('value', snap => {
-        if (snap.exists()) renderStocks(snap.val());
+        if (snap.exists()) {
+            renderStocks(snap.val());
+        } else {
+            fetch('/api/borsa').then(res => res.json()).then(data => {
+                if (data) renderStocks(data);
+            }).catch(e => console.log("Borsa API fallback error", e));
+        }
     });
 }
 
