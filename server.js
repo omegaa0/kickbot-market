@@ -419,13 +419,19 @@ async function getCityMarket(cityId) {
         let data = snap.val();
         if (!data) {
             data = [];
-            const count = Math.floor(Math.random() * 16) + 10;
+            const count = Math.floor(Math.random() * 8) + 5; // Şehir başına 5-13 mülk
             for (let i = 1; i <= count; i++) {
                 const tpl = REAL_ESTATE_TYPES[Math.floor(Math.random() * REAL_ESTATE_TYPES.length)];
+
+                // Kesin fiyat aralığı kontrolü (1.9M - 55M)
+                let price = Math.floor(tpl.minPrice + Math.random() * (tpl.maxPrice - tpl.minPrice));
+                if (price < 1999999) price = 1999999;
+                if (price > 55000000) price = 55000000;
+
                 data.push({
                     id: `${cityId.toLowerCase()}_${i}`,
-                    name: `${cityId} ${tpl.name} #${i}`,
-                    price: Math.floor(tpl.minPrice + Math.random() * (tpl.maxPrice ? (tpl.maxPrice - tpl.minPrice) : tpl.minPrice * 0.5)),
+                    name: `${cityName || cityId} ${tpl.name} #${i}`,
+                    price: price,
                     income: Math.floor(tpl.minInc + Math.random() * (tpl.maxInc - tpl.minInc)),
                     owner: null,
                     type: tpl.type
@@ -564,6 +570,24 @@ app.post('/api/borsa/reset', async (req, res) => {
     } catch (e) {
         console.error("Borsa Reset Error:", e.message);
         res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// HARİTA PROXY (Bağlantı Sorunlarını Aşmak İçin)
+app.get('/api/map/turkey', async (req, res) => {
+    try {
+        const response = await axios({
+            url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Turkey_provinces_blank_map.svg/1024px-Turkey_provinces_blank_map.svg.png',
+            method: 'GET',
+            responseType: 'stream',
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        res.setHeader('Content-Type', 'image/png');
+        response.data.pipe(res);
+    } catch (e) {
+        console.error("Map Proxy Error:", e.message);
+        // Fallback to another source if main proxy fails
+        res.redirect('https://cdn.pixabay.com/photo/2013/07/12/12/48/turkey-146313_1280.png');
     }
 });
 
@@ -1657,7 +1681,7 @@ app.post('/webhook/kick', async (req, res) => {
         const subReward = parseInt(settings.sub_reward) || 5000;
 
         if (eventName === "channel.subscription.new" || eventName === "channel.subscription.renewal" || eventName === "subscription.new") {
-            const subUser = event.username;
+            const subUser = payload.user?.username || payload.username || (payload.data && payload.data.username);
             if (subUser && subUser.toLowerCase() !== "botrix") {
                 // Goal Bar Update
                 await db.ref(`channels/${broadcasterId}/stats/subscribers`).transaction(val => (val || 0) + 1);
@@ -2726,7 +2750,7 @@ app.post('/webhook/kick', async (req, res) => {
         }
 
         else if (isEnabled('ai') && (lowMsg.startsWith('!ai ') || lowMsg === '!ai')) {
-            const isSub = event.sender?.identity?.badges?.some(b => b.type === 'subscriber' || b.type === 'broadcaster' || b.type === 'moderator' || b.type === 'founder');
+            const isSub = payload.sender?.identity?.badges?.some(b => b.type === 'subscriber' || b.type === 'broadcaster' || b.type === 'moderator' || b.type === 'founder') || user.toLowerCase() === "omegacyr";
             if (!isSub) return await reply(`🤫 @${user}, Bu komut sadece ABONELERE özeldir! ✨`);
 
             const prompt = args.join(' ');
@@ -2751,7 +2775,7 @@ EK TALİMAT: ${aiInst}`;
                         { role: "system", content: systemMsg },
                         { role: "user", content: prompt }
                     ],
-                    model: "grok-3",
+                    model: "grok-4.1",
                     temperature: 0.8
                 }, {
                     headers: {
@@ -2785,7 +2809,7 @@ EK TALİMAT: ${aiInst}`;
                         },
                         { role: "user", content: "Şu anki Türkiye Twitter gündeminde ne var?" }
                     ],
-                    model: "grok-3",
+                    model: "grok-4.1",
                     temperature: 0.7
                 }, {
                     headers: {
