@@ -430,7 +430,7 @@ async function getCityMarket(cityId) {
 
                 data.push({
                     id: `${cityId.toLowerCase()}_${i}`,
-                    name: `${cityName || cityId} ${tpl.name} #${i}`,
+                    name: `${cityId} ${tpl.name} #${i}`,
                     price: price,
                     income: Math.floor(tpl.minInc + Math.random() * (tpl.maxInc - tpl.minInc)),
                     owner: null,
