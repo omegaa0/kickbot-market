@@ -594,13 +594,18 @@ app.post('/api/borsa/reset', async (req, res) => {
 });
 
 // HARİTA PROXY (Bağlantı Sorunlarını Aşmak İçin)
-app.get('/api/map/turkey', (req, res) => {
-    const mapPath = path.join(__dirname, 'turkey_map_final.png');
-    if (fs.existsSync(mapPath)) {
-        res.setHeader('Content-Type', 'image/png');
-        res.sendFile(mapPath);
-    } else {
-        // Fallback (dosya yoksa)
+app.get('/api/map/turkey', async (req, res) => {
+    try {
+        const response = await axios({
+            url: 'https://upload.wikimedia.org/wikipedia/commons/1/1b/Turkey_provinces_blank_map.svg',
+            method: 'GET',
+            responseType: 'stream',
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        res.setHeader('Content-Type', 'image/svg+xml');
+        response.data.pipe(res);
+    } catch (e) {
+        console.error("Map Proxy Error:", e.message);
         res.redirect('https://cdn.pixabay.com/photo/2013/07/12/12/48/turkey-146313_1280.png');
     }
 });
