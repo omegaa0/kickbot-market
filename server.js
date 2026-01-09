@@ -2775,7 +2775,7 @@ EK TALİMAT: ${aiInst}`;
                         { role: "system", content: systemMsg },
                         { role: "user", content: prompt }
                     ],
-                    model: "grok-4.1",
+                    model: "grok-3",
                     temperature: 0.8
                 }, {
                     headers: {
@@ -2809,7 +2809,7 @@ EK TALİMAT: ${aiInst}`;
                         },
                         { role: "user", content: "Şu anki Türkiye Twitter gündeminde ne var?" }
                     ],
-                    model: "grok-4.1",
+                    model: "grok-3",
                     temperature: 0.7
                 }, {
                     headers: {
