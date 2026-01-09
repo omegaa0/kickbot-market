@@ -25,11 +25,22 @@ app.use((req, res, next) => {
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// GÜVENLİK: Tüm dosyaların dışarı sızmasını engelle (manifest, .env vb.)
 // Sadece gerekli dosyaları public yapıyoruz
 const publicFiles = ['shop.js', 'shop.css', 'admin.html', 'dashboard.html', 'shop.html', 'overlay.html', 'goals.html', 'horse-race.html'];
 publicFiles.forEach(file => {
     app.get(`/${file}`, (req, res) => res.sendFile(path.join(__dirname, file)));
+});
+
+// GÖRSELLERİ VE GIFLERİ KÖK DİZİNDEN SERV ET
+app.get('/:filename', (req, res, next) => {
+    const ext = path.extname(req.params.filename).toLowerCase();
+    if (['.gif', '.png', '.jpg', '.jpeg', '.webp', '.ico'].includes(ext)) {
+        const filePath = path.join(__dirname, req.params.filename);
+        if (fs.existsSync(filePath)) {
+            return res.sendFile(filePath);
+        }
+    }
+    next();
 });
 
 // PERSISTENT STORAGE (Render Disk)
@@ -373,18 +384,21 @@ let botMasterSwitch = true; // Omegacyr için master switch
 
 // --- GLOBAL BORSA SİSTEMİ ---
 const INITIAL_STOCKS = {
-    "APPLE": { price: 5000, trend: 1, history: [] },
-    "BITCOIN": { price: 45000, trend: 1, history: [] },
-    "GOLD": { price: 2500, trend: -1, history: [] },
-    "SILVER": { price: 850, trend: 1, history: [] },
-    "PLATINUM": { price: 3200, trend: 1, history: [] },
-    "KICK": { price: 100, trend: 1, history: [] },
-    "ETHER": { price: 15000, trend: -1, history: [] },
-    "TESLA": { price: 7500, trend: 1, history: [] },
-    "NVIDIA": { price: 12000, trend: 1, history: [] },
-    "GOOGLE": { price: 6200, trend: -1, history: [] },
-    "AMAZON": { price: 5800, trend: 1, history: [] }
+    "APPLE": { price: 5000, trend: 1, history: [], volatility: 0.02, drift: 0.0001 },
+    "BITCOIN": { price: 45000, trend: 1, history: [], volatility: 0.08, drift: 0.0005 },
+    "GOLD": { price: 2500, trend: -1, history: [], volatility: 0.01, drift: 0.00005 },
+    "SILVER": { price: 850, trend: 1, history: [], volatility: 0.03, drift: 0.00008 },
+    "PLATINUM": { price: 3200, trend: 1, history: [], volatility: 0.02, drift: 0.00003 },
+    "KICK": { price: 100, trend: 1, history: [], volatility: 0.15, drift: 0.001 },
+    "ETHER": { price: 15000, trend: -1, history: [], volatility: 0.06, drift: 0.0004 },
+    "TESLA": { price: 7500, trend: 1, history: [], volatility: 0.05, drift: 0.0003 },
+    "NVIDIA": { price: 12000, trend: 1, history: [], volatility: 0.04, drift: 0.0006 },
+    "GOOGLE": { price: 6200, trend: -1, history: [], volatility: 0.02, drift: 0.0002 },
+    "AMAZON": { price: 5800, trend: 1, history: [], volatility: 0.02, drift: 0.0002 }
 };
+
+let currentMarketCycle = "NORMAL";
+let cycleDuration = 0;
 
 // --- EMLAK SİSTEMİ (GLOBAL PAZAR) ---
 const REAL_ESTATE_TYPES = [
@@ -402,12 +416,9 @@ async function getCityMarket(cityId) {
         const marketRef = db.ref(`real_estate_market/${cityId}`);
         const snap = await marketRef.once('value');
         let data = snap.val();
-
         if (!data) {
             data = [];
-            // Bir şehirde en az 10 mülk olsun (10 ile 25 arası)
             const count = Math.floor(Math.random() * 16) + 10;
-
             for (let i = 1; i <= count; i++) {
                 const tpl = REAL_ESTATE_TYPES[Math.floor(Math.random() * REAL_ESTATE_TYPES.length)];
                 data.push({
@@ -428,9 +439,6 @@ async function getCityMarket(cityId) {
     }
 }
 
-// --- AI MEMORY HELPER ---
-// Not: Fonksiyon dosyanın sonunda daha kapsamlı şekilde tanımlanmıştır.
-
 async function updateGlobalStocks() {
     try {
         const stockRef = db.ref('global_stocks');
@@ -439,31 +447,62 @@ async function updateGlobalStocks() {
 
         if (!stocks) {
             stocks = INITIAL_STOCKS;
+            // İlk açılışta geçmiş verisi simüle et
+            for (let code in stocks) {
+                let h = [];
+                let p = stocks[code].price;
+                for (let i = 0; i < 24; i++) {
+                    p = Math.round(p * (1 + (Math.random() * 0.04 - 0.02)));
+                    h.push(p);
+                }
+                stocks[code].history = h;
+            }
         }
 
+        // Piyasa döngüsü yönetimi
+        if (cycleDuration <= 0) {
+            const cycles = ["NORMAL", "BULLISH", "BEARISH", "VOLATILE", "STAGNANT"];
+            currentMarketCycle = cycles[Math.floor(Math.random() * cycles.length)];
+            cycleDuration = Math.floor(Math.random() * 300) + 300; // 5-10 dk
+        }
+        cycleDuration--;
+
         for (const [code, data] of Object.entries(stocks)) {
-            const oldPrice = data.price || INITIAL_STOCKS[code]?.price || 100;
+            const baseData = INITIAL_STOCKS[code] || { volatility: 0.02, drift: 0.0001 };
+            const oldPrice = data.price || 100;
 
-            // Daha agresif saniyelik hareket: -%1.5 ile +%1.5 arası
-            const changePercent = (Math.random() * 3 - 1.5) / 100;
-            let change = oldPrice * changePercent;
+            let vol = baseData.volatility;
+            let drift = baseData.drift;
 
-            // Minimum 1 birim hareket sağla (eğer değişim 0 değilse)
-            if (Math.abs(change) < 0.5 && changePercent !== 0) {
-                change = changePercent > 0 ? 1 : -1;
+            // Döngüye göre ayarla
+            if (currentMarketCycle === "BULLISH") drift += 0.005;
+            if (currentMarketCycle === "BEARISH") drift -= 0.005;
+            if (currentMarketCycle === "VOLATILE") vol *= 2;
+            if (currentMarketCycle === "STAGNANT") { vol *= 0.2; drift = 0; }
+
+            // Brownian Motion: dP = P * (drift * dt + vol * epsilon * sqrt(dt))
+            const epsilon = Math.random() * 2 - 1;
+            const changePercent = drift + (vol * epsilon * 0.1);
+
+            let newPrice = Math.round(oldPrice * (1 + changePercent));
+
+            // Ani Çöküş/Fırlama Şansı (%0.1)
+            if (Math.random() < 0.001) {
+                const modifier = Math.random() > 0.5 ? 1.2 : 0.8;
+                newPrice = Math.round(newPrice * modifier);
+                console.log(`[Piyasa Olayı] ${code} %${modifier > 1 ? '20 Yükseldi' : '20 Düştü'}!`);
             }
 
-            let newPrice = Math.round(oldPrice + change);
-
-            if (newPrice < 10) newPrice = 10;
-            if (newPrice > 1000000) newPrice = 1000000;
+            if (newPrice < 1) newPrice = 1;
+            if (newPrice > 5000000) newPrice = 5000000;
 
             stocks[code] = {
+                ...data,
                 price: newPrice,
                 oldPrice: oldPrice,
                 trend: newPrice > oldPrice ? 1 : (newPrice < oldPrice ? -1 : (data.trend || 1)),
-                history: data.history || [],
-                lastUpdate: Date.now()
+                lastUpdate: Date.now(),
+                marketStatus: currentMarketCycle
             };
         }
 
@@ -473,7 +512,7 @@ async function updateGlobalStocks() {
     }
 }
 
-// Borsa Saatlik Geçmiş Kaydı (Grafiklerin daha gerçekçi olması için)
+// Borsa Saatlik Geçmiş Kaydı
 async function saveHourlyStockHistory() {
     try {
         const stockRef = db.ref('global_stocks');
@@ -485,19 +524,17 @@ async function saveHourlyStockHistory() {
         for (const [code, data] of Object.entries(stocks)) {
             let history = data.history || [];
             history.push(data.price);
-            if (history.length > 24) history.shift(); // Son 24 saatin verisi
+            if (history.length > 48) history.shift(); // Son 48 saat
             updates[`${code}/history`] = history;
         }
         await stockRef.update(updates);
-        console.log("📈 Borsa saatlik geçmiş verileri güncellendi.");
-    } catch (e) {
-        console.error("Hourly History Error:", e.message);
-    }
+        console.log(`📈 Borsa saatlik geçmiş güncellendi. Mod: ${currentMarketCycle}`);
+    } catch (e) { console.error("Hourly History Error:", e.message); }
 }
 setInterval(saveHourlyStockHistory, 3600000); // 1 Saat
 
-// Borsa güncelleme (Her 1 saniyede bir)
-setInterval(updateGlobalStocks, 1000);
+// Borsa güncelleme (Her 2 saniyede bir - Daha ağır ekonomi için)
+setInterval(updateGlobalStocks, 2000);
 updateGlobalStocks(); // Server açıldığında hemen ilk verileri oluştur
 
 // --- EMLAK GELİR DAĞITIMI (Her 1 Saat) ---

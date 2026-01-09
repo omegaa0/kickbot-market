@@ -271,8 +271,16 @@ async function loadChannelMarket(channelId) {
     }
 
     // Side GIFs Update
-    const leftGif = settings.left_gif || "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHlxYnV4YzB6MzB6bmR4bmR4bmR4bmR4bmR4bmR4bmR4bmR4bmR4JmVwPXYxX2ludGVybmFsX2dpZl9ieV9pZCZjdD1n/3o7TKMGpxPucV0G3S0/giphy.gif";
-    const rightGif = settings.right_gif || "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHlxYnV4YzB6MzB6bmR4bmR4bmR4bmR4bmR4bmR4bmR4bmR4bmR4JmVwPXYxX2ludGVybmFsX2dpZl9ieV9pZCZjdD1n/3o7TKMGpxPucV0G3S0/giphy.gif";
+    const defaultGif = "https://media.giphy.com/media/3o7TKMGpxPucV0G3S0/giphy.gif";
+
+    const getGifUrl = (val) => {
+        if (!val) return defaultGif;
+        if (val.startsWith('http')) return val;
+        return `/${val}`; // Support for local files in root
+    };
+
+    const leftGif = getGifUrl(settings.left_gif);
+    const rightGif = getGifUrl(settings.right_gif);
 
     const leftGifEl = document.querySelector('.side-gif.left img');
     const rightGifEl = document.querySelector('.side-gif.right img');
@@ -576,13 +584,29 @@ async function loadBorsa() {
             return;
         }
 
+        const entries = Object.entries(stocks);
+
+        // Piyasa Durumu Bilgisi
+        let statusBox = document.getElementById('market-cycle-status');
+        if (!statusBox) {
+            statusBox = document.createElement('div');
+            statusBox.id = 'market-cycle-status';
+            statusBox.style = "grid-column: 1 / -1; background: rgba(255,255,255,0.03); padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px solid var(--glass-border); text-align: center;";
+            container.prepend(statusBox);
+        }
+        const cycle = entries[0][1].marketStatus || "NORMAL";
+        const cycleMap = {
+            "BULLISH": { t: "BOĞA PİYASASI (YÜKSELİŞ)", c: "#05ea6a" },
+            "BEARISH": { t: "AYI PİYASASI (DÜŞÜŞ)", c: "#ff4d4d" },
+            "VOLATILE": { t: "YÜKSEK VOLATİLİTE (RİSKLİ)", c: "#ffaa00" },
+            "STAGNANT": { t: "DURGUN PİYASA (YATAY)", c: "#888" },
+            "NORMAL": { t: "NORMAL PİYASA", c: "#aaa" }
+        };
+        statusBox.innerHTML = `<small style="color:#666; display:block; margin-bottom:4px;">GÜNCEL EKONOMİK DURUM</small><strong style="color:${cycleMap[cycle].c}; font-size:1.1rem; letter-spacing:1px;">${cycleMap[cycle].t}</strong>`;
+
         entries.forEach(([code, data]) => {
             if (!data || typeof data !== 'object') return;
-
-            // Update history for chart (last 20 points from real-time)
-            if (!stockHistory[code]) stockHistory[code] = [];
-            stockHistory[code].push(data.price);
-            if (stockHistory[code].length > 20) stockHistory[code].shift();
+            if (code === 'status') return;
 
             const trend = data.trend === 1 ? '📈' : '📉';
             const color = data.trend === 1 ? '#05ea6a' : '#ff4d4d';
@@ -590,7 +614,6 @@ async function loadBorsa() {
 
             let card = document.querySelector(`.borsa-card[data-code="${code}"]`);
             if (card) {
-                // Sadece değişen kısımları güncelle (Input değerini koru)
                 const trendEl = card.querySelector('.trend-val');
                 const priceEl = card.querySelector('.price-val');
                 const buyBtn = card.querySelector('.btn-buy-main');
@@ -615,13 +638,16 @@ async function loadBorsa() {
                         </span>
                     </div>
                     
-                    <canvas id="chart-${code}" width="200" height="60" style="width:100%; height:60px; margin:10px 0;"></canvas>
+                    <div style="font-size:0.6rem; color:#666; margin-bottom:4px; text-transform:uppercase; letter-spacing:1px;">Son 24-48 Saatlik Grafik</div>
+                    <canvas id="chart-${code}" width="200" height="60" style="width:100%; height:60px; margin:5px 0;"></canvas>
 
                     <div class="price-val" style="font-size:1.5rem; font-weight:800; color:white; margin:10px 0;">
                         ${(data.price || 0).toLocaleString()} <span style="font-size:0.8rem; color:var(--primary);">💰</span>
                     </div>
 
-                    <div class="borsa-controls" style="margin-top:15px;">
+                    <div style="font-size: 0.65rem; color: #ff4d4d; margin-bottom: 10px; font-weight: 600;">⚠️ %5 Satış Komisyonu Uygulanır</div>
+
+                    <div class="borsa-controls" style="margin-top:10px;">
                         <input type="number" id="input-${code}" class="borsa-input" value="1" min="1" placeholder="Adet" aria-label="${code} Adet Satın Al/Sat">
                         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
                             <button class="buy-btn btn-buy-main" onclick="executeBorsaBuy('${code}', ${data.price})" style="background:var(--primary); color:black; font-weight:800; padding:8px;">AL</button>
@@ -631,7 +657,8 @@ async function loadBorsa() {
                 `;
                 container.appendChild(card);
             }
-            drawStockChart(document.getElementById(`chart-${code}`), data.history || stockHistory[code], data.trend);
+            // Use server-side hourly history for the chart
+            drawStockChart(document.getElementById(`chart-${code}`), data.history || [], data.trend);
         });
     };
 
@@ -679,16 +706,21 @@ async function executeBorsaSell(code, price) {
         if (!amount || isNaN(amount) || amount <= 0) return showToast("Geçersiz miktar!", "error");
         if (amount > owned) return showToast("Elindekinden fazlasını satamazsın!", "error");
 
-        const total = price * amount;
+        const grossTotal = price * amount;
+        const commission = Math.floor(grossTotal * 0.05);
+        const netTotal = grossTotal - commission;
+
+        if (!confirm(`${amount} adet ${code} satılacak.\nBrüt: ${grossTotal.toLocaleString()} 💰\nKomisyon (%5): -${commission.toLocaleString()} 💰\nNet: ${netTotal.toLocaleString()} 💰\n\nSatış işlemini onaylıyor musun?`)) return;
+
         await db.ref('users/' + currentUser).transaction(user => {
             if (user) {
-                user.balance = (user.balance || 0) + total;
+                user.balance = (user.balance || 0) + netTotal;
                 user.stocks[code] -= amount;
                 if (user.stocks[code] <= 0) delete user.stocks[code];
             }
             return user;
         });
-        showToast(`${amount} adet ${code} satıldı! Kazanç: ${total.toLocaleString()} 💰`, "success");
+        showToast(`${amount} adet ${code} satıldı! Komisyon sonrası kazanç: ${netTotal.toLocaleString()} 💰`, "success");
         loadProfile();
     });
 }
