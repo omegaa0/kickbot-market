@@ -113,9 +113,15 @@ async function fetchKickPFP(username, imgId, fallbackId) {
                 imgEl.src = data.pfp;
                 imgEl.style.display = 'block';
                 if (fallbackEl) fallbackEl.style.display = 'none';
+                console.log(`[PFP] Loaded for ${username}`);
             };
             preloader.onerror = () => {
                 console.warn(`[PFP] Image load failed for ${username}: ${data.pfp}`);
+                if (fallbackEl) {
+                    fallbackEl.style.display = 'flex';
+                    fallbackEl.innerText = username ? username[0].toUpperCase() : '?';
+                }
+                imgEl.style.display = 'none';
             };
             preloader.src = data.pfp;
         }
@@ -247,7 +253,7 @@ async function loadChannelMarket(channelId) {
     document.getElementById('chan-name').innerText = chanName;
 
     // Broadcaster PFP Fetch via Proxy
-    fetchKickPFP(chanName, 'chan-pfp', null); // Fallback span can be added to HTML later if needed
+    fetchKickPFP(chanName, 'chan-pfp', 'chan-pfp-fallback');
 
     // Side GIFs Update
     const leftGif = settings.left_gif || "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHlxYnV4YzB6MzB6bmR4bmR4bmR4bmR4bmR4bmR4bmR4bmR4bmR4JmVwPXYxX2ludGVybmFsX2dpZl9ieV9pZCZjdD1n/3o7TKMGpxPucV0G3S0/giphy.gif";
@@ -550,23 +556,21 @@ async function loadBorsa() {
     const renderStocks = (stocks) => {
         if (!stocks) return;
 
-        // Ensure entries is always defined locally for this call
-        const entries = Object.entries(stocks);
-
-        if (entries.length === 0) {
-            container.innerHTML = "<p style='text-align:center; padding:20px;'>Hizmet dışı.</p>";
+        if (stocks.error) {
+            container.innerHTML = `<div class="error-box">${stocks.error}</div>`;
             return;
         }
 
-        if (stocks.error) {
-            container.innerHTML = `<div class="error-box">${stocks.error}</div>`;
+        const entriesList = Object.entries(stocks);
+        if (entriesList.length === 0) {
+            container.innerHTML = "<p style='text-align:center; padding:20px;'>Hizmet dışı.</p>";
             return;
         }
 
         const loader = container.querySelector('.loader');
         if (loader) container.innerHTML = ""; // First time clear
 
-        entries.forEach(([code, data]) => {
+        entriesList.forEach(([code, data]) => {
             if (!data || typeof data !== 'object') return;
 
             // Update history for chart (last 20 points from real-time)
@@ -574,27 +578,27 @@ async function loadBorsa() {
             stockHistory[code].push(data.price);
             if (stockHistory[code].length > 20) stockHistory[code].shift();
 
-            const trend = data.trend === 1 ? '📈' : '📉';
-            const color = data.trend === 1 ? '#05ea6a' : '#ff4d4d';
-            const diff = data.oldPrice ? (((data.price - data.oldPrice) / data.oldPrice) * 100).toFixed(2) : "0.00";
+            const trendIcon = data.trend === 1 ? '📈' : '📉';
+            const statusColor = data.trend === 1 ? '#05ea6a' : '#ff4d4d';
+            const priceDiff = data.oldPrice ? (((data.price - data.oldPrice) / data.oldPrice) * 100).toFixed(2) : "0.00";
 
             let card = document.querySelector(`.borsa-card[data-code="${code}"]`);
             if (card) {
-                const trendEl = card.querySelector('.trend-val');
-                const priceEl = card.querySelector('.price-val');
-                const buyBtn = card.querySelector('.btn-buy-main');
-                const sellBtn = card.querySelector('.btn-sell-main');
+                const trendDisplay = card.querySelector('.trend-val');
+                const priceDisplay = card.querySelector('.price-val');
+                const buyButton = card.querySelector('.btn-buy-main');
+                const sellButton = card.querySelector('.btn-sell-main');
 
-                if (trendEl) {
-                    trendEl.innerHTML = `${data.trend === 1 ? '+' : ''}${diff}% ${trend}`;
-                    trendEl.style.color = color;
+                if (trendDisplay) {
+                    trendDisplay.innerHTML = `${data.trend === 1 ? '+' : ''}${priceDiff}% ${trendIcon}`;
+                    trendDisplay.style.color = statusColor;
                 }
-                if (priceEl) {
-                    priceEl.innerHTML = `${(data.price || 0).toLocaleString()} <span style="font-size:0.8rem; color:var(--primary);">💰</span>`;
+                if (priceDisplay) {
+                    priceDisplay.innerHTML = `${(data.price || 0).toLocaleString()} <span style="font-size:0.8rem; color:var(--primary);">💰</span>`;
                 }
 
-                if (buyBtn) buyBtn.onclick = () => executeBorsaBuy(code, data.price);
-                if (sellBtn) sellBtn.onclick = () => executeBorsaSell(code, data.price);
+                if (buyButton) buyButton.onclick = () => executeBorsaBuy(code, data.price);
+                if (sellButton) sellButton.onclick = () => executeBorsaSell(code, data.price);
             } else {
                 card = document.createElement('div');
                 card.className = 'item-card borsa-card';
@@ -602,8 +606,8 @@ async function loadBorsa() {
                 card.innerHTML = `
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                         <span style="font-weight:800; font-size:1.1rem; color:var(--primary);">${code}</span>
-                        <span class="trend-val" style="color:${color}; font-weight:800; font-size:0.75rem;">
-                            ${data.trend === 1 ? '+' : ''}${diff}% ${trend}
+                        <span class="trend-val" style="color:${statusColor}; font-weight:800; font-size:0.75rem;">
+                            ${data.trend === 1 ? '+' : ''}${priceDiff}% ${trendIcon}
                         </span>
                     </div>
                     
