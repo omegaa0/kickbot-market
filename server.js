@@ -386,9 +386,9 @@ const INITIAL_STOCKS = {
 
 // --- EMLAK SİSTEMİ (GLOBAL PAZAR) ---
 const REAL_ESTATE_TYPES = [
-    { name: "Küçük Esnaf Dükkanı", minPrice: 2000000, maxPrice: 4000000, minInc: 3000, maxInc: 5000, type: "low" },
-    { name: "Pide Salonu", minPrice: 4500000, maxPrice: 8000000, minInc: 5000, maxInc: 7500, type: "low" },
-    { name: "Lüks Rezidans Katı", minPrice: 9000000, maxPrice: 15000000, minInc: 8000, maxInc: 11000, type: "med" },
+    { name: "Küçük Esnaf Dükkanı", minPrice: 1999999, maxPrice: 4000000, minInc: 5000, maxInc: 7000, type: "low" },
+    { name: "Pide Salonu", minPrice: 4500000, maxPrice: 8000000, minInc: 7000, maxInc: 9000, type: "low" },
+    { name: "Lüks Rezidans Katı", minPrice: 9000000, maxPrice: 15000000, minInc: 9000, maxInc: 12000, type: "med" },
     { name: "Gece Kulübü", minPrice: 16000000, maxPrice: 20000000, minInc: 12000, maxInc: 14000, type: "med" },
     { name: "Butik Otel", minPrice: 22000000, maxPrice: 30000000, minInc: 15000, maxInc: 17000, type: "med" },
     { name: "İş Merkezi", minPrice: 32000000, maxPrice: 40000000, minInc: 17000, maxInc: 18500, type: "high" },
@@ -767,7 +767,7 @@ app.get('/api/kick/pfp/:username', async (req, res) => {
 // ---------------------------------------------------------
 app.post('/api/borsa/reset', async (req, res) => {
     const { requester } = req.body;
-    if (requester !== 'omegacyra') return res.status(403).json({ success: false, error: "Yetkisiz işlem!" });
+    if (requester !== 'omegacyr') return res.status(403).json({ success: false, error: "Yetkisiz işlem!" });
 
     try {
         console.log("!!! BORSA RESETLENİYOR (Requester: omegacyra) !!!");
@@ -1576,15 +1576,18 @@ app.post('/webhook/kick', async (req, res) => {
         // =========================================================
         // MESAJ VE KULLANICI AYIKLAMA (KICK RESMİ API FORMATI)
         // =========================================================
-        // chat.message.sent payload: { sender: { username, user_id, identity }, content, ... }
+        // Kick Webhook payloads can be nested under .data or flattened.
+        const dRec = payload.data || payload;
+        const sender = dRec.sender || payload.sender || dRec; // Try various locations for sender
+
         const user = (
-            payload.sender?.username ||
-            payload.user?.username ||
+            sender.username ||
+            (payload.user && payload.user.username) ||
             payload.username ||
             ""
         ).toLowerCase();
 
-        const rawMsg = payload.content || payload.message || "";
+        const rawMsg = dRec.content || dRec.message || payload.content || payload.message || "";
 
         if (!user || user === "botrix" || user === "aloskegangbot") return;
 
@@ -1628,14 +1631,16 @@ app.post('/webhook/kick', async (req, res) => {
         dbRecentUsers[user.toLowerCase()] = { last_seen: Date.now(), last_channel: broadcasterId };
 
         // KICK ID KAYDET (Susturma işlemleri için - Opsiyonel)
-        if (payload.sender?.user_id) {
-            await db.ref('kick_ids/' + user.toLowerCase()).set(payload.sender.user_id);
+        const kickUserId = sender.user_id || (payload.user && payload.user.id) || payload.user_id;
+        if (kickUserId) {
+            await db.ref('kick_ids/' + user.toLowerCase()).set(kickUserId);
         }
 
         // --- ADMIN / MOD YETKİ KONTROLÜ (KICK RESMİ API FORMATI) ---
         // Kick API: sender.identity.badges = [{ type: "broadcaster" }, { type: "moderator" }, ...]
-        const isAuthorized = payload.sender?.identity?.badges?.some(b =>
-            b.type === 'broadcaster' || b.type === 'moderator'
+        const badges = sender.identity?.badges || sender.badges || [];
+        const isAuthorized = badges.some(b =>
+            ['broadcaster', 'moderator'].includes(b.type?.toLowerCase())
         ) || user.toLowerCase() === "omegacyr";
 
         const reply = (msg) => sendChatMessage(msg, broadcasterId);
@@ -2573,10 +2578,11 @@ app.post('/webhook/kick', async (req, res) => {
             await reply(`🧹 @${user}, Tüm AI emirleri sıfırlandı!`);
         }
 
-        // --- AI (GROK-3) COMPANION ---
+        // --- AI (GROK) COMPANION ---
         else if (isEnabled('ai') && (lowMsg.startsWith('!ai ') || lowMsg === '!ai')) {
-            const isSub = payload.sender?.identity?.badges?.some(b =>
-                ['subscriber', 'broadcaster', 'moderator', 'founder', 'staff'].includes(b.type)
+            const badges = sender.identity?.badges || sender.badges || [];
+            const isSub = badges.some(b =>
+                ['subscriber', 'broadcaster', 'moderator', 'founder', 'staff'].includes(b.type?.toLowerCase())
             ) || user.toLowerCase() === "omegacyr" || isAuthorized;
 
             if (!isSub) return await reply(`🤫 @${user}, Bu komut sadece ABONELERE ve yetkililere özeldir! ✨`);
@@ -2585,7 +2591,7 @@ app.post('/webhook/kick', async (req, res) => {
             if (!prompt) return await reply(`🤖 @${user}, AI'ya bir şey sormak için: !ai [sorun]`);
 
             const GROK_KEY = process.env.GROK_API_KEY;
-            if (!GROK_KEY || GROK_KEY === 'your_xai_api_key_here') {
+            if (!GROK_KEY || GROK_KEY.includes('your_xai_api_key')) {
                 return await reply(`⚠️ @${user}, AI sistemi şu an yapılandırılmamış (API Anahtarı eksik).`);
             }
 
@@ -2603,7 +2609,7 @@ app.post('/webhook/kick', async (req, res) => {
                         { role: "system", content: systemMsg },
                         { role: "user", content: prompt }
                     ],
-                    model: "grok-beta",
+                    model: "grok-beta", // "grok-beta" veya "grok-2" en güvenli seçimdir
                     temperature: 0.7
                 }, {
                     headers: {
@@ -2614,11 +2620,12 @@ app.post('/webhook/kick', async (req, res) => {
                 });
 
                 const replyText = response.data.choices[0].message.content;
-                const finalReply = replyText.length > 390 ? replyText.substring(0, 387) + "..." : replyText;
+                const finalReply = replyText.length > 380 ? replyText.substring(0, 377) + "..." : replyText;
                 await reply(`🤖 @${user}: ${finalReply}`);
             } catch (error) {
-                console.error("[AI Error]:", error.response?.data || error.message);
-                await reply(`❌ @${user}, AI şu an dinleniyor (Servis hatası), daha sonra tekrar dene!`);
+                const errorMsg = error.response?.data?.error?.message || error.message;
+                console.error("[AI Error]:", errorMsg);
+                await reply(`❌ @${user}, AI şu an dinleniyor (Hata: ${errorMsg.substring(0, 50)}), daha sonra tekrar dene!`);
             }
         }
 

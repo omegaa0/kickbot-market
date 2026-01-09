@@ -628,14 +628,33 @@ async function loadBorsa() {
     };
 
     db.ref('global_stocks').on('value', snap => {
-        if (snap.exists()) {
-            renderStocks(snap.val());
+        const val = snap.val();
+        if (val && typeof val === 'object') {
+            console.log("[Borsa] Data received from Firebase");
+            renderStocks(val);
         } else {
-            fetch('/api/borsa').then(res => res.json()).then(data => {
-                if (data) renderStocks(data);
-            }).catch(e => console.log("Borsa API fallback error", e));
+            console.log("[Borsa] Firebase empty, trying API fallback...");
+            fetch('/api/borsa')
+                .then(res => res.json())
+                .then(data => {
+                    if (data && !data.error) renderStocks(data);
+                    else container.innerHTML = "<p style='text-align:center;'>Borsa verisi şu an pasif.</p>";
+                })
+                .catch(e => {
+                    console.error("Borsa API Error:", e);
+                    container.innerHTML = "<p style='text-align:center;'>Bağlantı hatası.</p>";
+                });
         }
     });
+
+    // Auto-refresh chart displays if data is already there
+    setInterval(() => {
+        const borsaTab = document.getElementById('tab-borsa');
+        if (borsaTab && borsaTab.classList.contains('hidden')) return;
+        db.ref('global_stocks').once('value').then(snap => {
+            if (snap.exists()) renderStocks(snap.val());
+        });
+    }, 5000);
 }
 
 async function executeBorsaBuy(code, price) {

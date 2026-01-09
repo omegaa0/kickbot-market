@@ -252,9 +252,11 @@
                             <div id="turkey-map"
                                 style="width: 100%; max-width: 850px; aspect-ratio: 1000 / 450; position: relative; margin: 0 auto; z-index: 1;">
                                 <!-- SVG Harita (Sade Minimal Stil) -->
+                                <!-- SVG Harita (Neon Stil) -->
                                 <img src="https://upload.wikimedia.org/wikipedia/commons/b/b1/Turkey_provinces_blank_map.svg"
-                                    alt="Turkey Map"
-                                    style="width: 100%; height: 100%; object-fit: contain; display: block; opacity: 0.9; filter: invert(1) contrast(1.3);">
+                                    alt="Turkey Map" id="map-img"
+                                    style="width: 100%; height: 100%; object-fit: contain; display: block; opacity: 0.8; filter: invert(0.8) sepia(1) hue-rotate(100deg) saturate(3) brightness(1.1); transition: opacity 0.3s; border-radius:15px;"
+                                    onerror="this.src='https://raw.githubusercontent.com/bariserece/turkiye-haritasi/master/turkiye.svg'">
                                 <div id="map-overlay"
                                     style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events: auto;">
                                     <!-- İnteraktif Şehir Noktaları -->
