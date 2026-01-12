@@ -43,7 +43,7 @@ body {
     background: var(--panel);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--glass-border);
+    /* border: 1px solid var(--glass-border); */
     border-radius: 24px;
     padding: 30px;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
@@ -163,7 +163,7 @@ header {
     background: var(--glass);
     padding: 15px 30px;
     border-radius: 20px;
-    border: 1px solid var(--glass-border);
+    /* border: 1px solid var(--glass-border); */
 }
 
 .user-profile {
@@ -225,7 +225,7 @@ header {
 /* CARDS */
 .item-card {
     background: var(--glass);
-    border: 1px solid var(--glass-border);
+    /* border: 1px solid var(--glass-border); */
     border-radius: 24px;
     padding: 30px;
     transition: all 0.4s;

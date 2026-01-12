@@ -3380,30 +3380,59 @@ EK TALİMAT: ${aiInst}`;
             await timeoutUser(broadcasterId, user, choice.time);
         }
 
-        else if (lowMsg.startsWith('!gönder') || lowMsg.startsWith('!transfer')) {
+        // --- MODERASYON: TRANSFER YASAKLA ---
+        else if (lowMsg.startsWith('!transfer-yasakla ')) {
+            if (!isAuthorized) return;
+            const target = args[0]?.replace('@', '').toLowerCase().trim();
+            if (!target) return await reply(`@${user}, Kullanım: !transfer-yasakla @kullanıcı`);
+
+            const targetRef = db.ref('users/' + target);
+            const snap = await targetRef.once('value');
+            if (!snap.exists()) return await reply(`@${user}, @${target} adında bir kullanıcı bulunamadı.`);
+
+            const currentData = snap.val() || {};
+            const isBanned = currentData.transfer_banned || false;
+            const newStatus = !isBanned;
+
+            await targetRef.update({ transfer_banned: newStatus });
+            await reply(`🚫 @${target} için transfer özelliği ${newStatus ? 'YASAKLANDI' : 'AÇILDI'}! ✅`);
+        }
+
+        else if (lowMsg.startsWith('!gönder') || lowMsg.startsWith('!transfer') || lowMsg.startsWith('!hediye')) {
             const target = args[0]?.replace('@', '').toLowerCase();
             const amount = parseInt(args[1]);
 
             if (!target || isNaN(amount) || amount <= 0) {
-                return await reply(`💸 @${user}, Kullanım: !gönder @kullanıcı [miktar]`);
+                return await reply(`💸 @${user}, Kullanım: !hediye @kullanıcı [miktar]`);
             }
 
             if (target === user.toLowerCase()) {
                 return await reply(`🚫 @${user}, Kendine para gönderemezsin!`);
             }
 
+            // GÖNDEREN KONTROLÜ
             const snap = await userRef.once('value');
             const data = snap.val() || { balance: 0 };
+
+            if (data.transfer_banned) {
+                return await reply(`🚫 @${user}, Transfer yapman yasaklanmış! Para gönderemezsin.`);
+            }
 
             if (!data.is_infinite && data.balance < amount) {
                 return await reply(`❌ @${user}, Bakiyen yetersiz! Mevcut: ${data.balance.toLocaleString()} 💰`);
             }
 
+            // ALICI KONTROLÜ
             const targetRef = db.ref('users/' + target);
             const targetSnap = await targetRef.once('value');
 
             if (!targetSnap.exists()) {
                 return await reply(`⚠️ @${user}, @${target} adında bir kullanıcı veritabanında bulunamadı.`);
+            }
+
+            const targetData = targetSnap.val() || {};
+            if (targetData.transfer_banned) {
+                return await reply(`🚫 @${user}, @${target} kullanıcısının transferi yasaklanmış! Ona para gönderemezsin.`);
             }
 
             // %5 Vergi
