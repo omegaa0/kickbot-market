@@ -143,6 +143,24 @@ const JOBS = {
     "Kripto Kralı": { reward: 250000, icon: "💎", req_edu: 7, req_item: "Soğuk Cüzdan", price: 100000000 }
 };
 
+const PROFILE_CUSTOMIZATIONS = {
+    colors: [
+        { id: "gold", name: "Altın Sarısı", color: "#FFD700", price: 50000, type: "name" },
+        { id: "neon", name: "Neon Yeşil", color: "#39FF14", price: 30000, type: "name" },
+        { id: "ruby", name: "Yakut Kırmızısı", color: "#E0115F", price: 40000, type: "name" },
+        { id: "royal", name: "Kraliyet Mavisi", color: "#4169E1", price: 40000, type: "name" },
+        { id: "violet", name: "Lavanta Moru", color: "#EE82EE", price: 35000, type: "name" }
+    ],
+    backgrounds: [
+        { id: "dark_glass", name: "Karanlık Cam", style: "background: rgba(10,10,10,0.85); backdrop-filter: blur(20px);", price: 25000 },
+        { id: "midnight", name: "Gece Mavisi", style: "background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);", price: 100000 },
+        { id: "toxic", name: "Toksik Radyasyon", style: "background: radial-gradient(circle at center, #1a4a1a 0%, #0a0a0a 100%);", price: 150000 },
+        { id: "sunset", name: "Gün Batımı", style: "background: linear-gradient(45deg, #ee0979, #ff6a00); opacity: 0.9;", price: 200000 },
+        { id: "cyber", name: "Siber Punk", style: "background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%); border-color: #00d2ff;", price: 300000 },
+        { id: "rainbow", name: "Gökkuşağı (Hareketli)", style: "background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab); background-size: 400% 400%; animation: gradient 15s ease infinite;", price: 500000 }
+    ]
+};
+
 // Global Variables
 let currentUser = null;
 let currentChannelId = null;
@@ -674,6 +692,7 @@ function switchTab(id) {
     if (id === 'quests') loadQuests();
     if (id === 'profile') loadProfile();
     if (id === 'career') loadCareer();
+    if (id === 'stats') loadLiveStats();
 }
 
 let borsaActive = false;
@@ -1048,22 +1067,42 @@ async function loadProfile() {
     const container = document.getElementById('profile-card');
     db.ref('users/' + currentUser).once('value', snap => {
         const u = snap.val() || { balance: 0 };
+
+        // Find custom styles
+        const customColor = PROFILE_CUSTOMIZATIONS.colors.find(c => c.id === u.name_color);
+        const customBg = PROFILE_CUSTOMIZATIONS.backgrounds.find(b => b.id === u.profile_bg);
+
+        const nameStyle = customColor ? `color: ${customColor.color}; text-shadow: 0 0 15px ${customColor.color}88;` : "";
+        const profileStyle = customBg ? customBg.style : "background: rgba(255,255,255,0.03);";
+
+        container.style.cssText = `position:static; transform:none; width:100%; text-align:left; transition: all 0.5s ease; ${profileStyle}`;
+
         container.innerHTML = `
-            <div style="display:flex; flex-direction:column; gap:25px;">
+            <div style="display:flex; flex-direction:column; gap:25px; padding: 30px;">
+                <div style="display:flex; align-items:center; gap:20px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:20px;">
+                    <div id="p-avatar" style="width:80px; height:80px; background:var(--primary); color:black; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:2rem; font-weight:800; border:4px solid rgba(255,255,255,0.1);">
+                        ${currentUser[0].toUpperCase()}
+                    </div>
+                    <div>
+                        <h2 style="${nameStyle} font-size:2rem; margin:0;">${currentUser.toUpperCase()}</h2>
+                        <span style="background:rgba(255,255,255,0.1); padding:2px 10px; border-radius:20px; font-size:0.8rem; color:#ccc;">${u.job || 'İşsiz'}</span>
+                    </div>
+                </div>
+
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
-                    <div class="stat-box">
+                    <div class="stat-box" style="background:rgba(0,0,0,0.3);">
                         <label>Cüzdan</label>
                         <div class="val">${u.balance.toLocaleString()} 💰</div>
                     </div>
-                    <div class="stat-box">
-                        <label>Meslek</label>
-                        <div class="val">${u.job || 'İşsiz'}</div>
-                    </div>
-                    <div class="stat-box">
+                    <div class="stat-box" style="background:rgba(0,0,0,0.3);">
                         <label>Eğitim</label>
                         <div class="val">${EDUCATION[u.edu || 0]}</div>
                     </div>
-                    <div class="stat-box">
+                    <div class="stat-box" style="background:rgba(0,0,0,0.3);">
+                        <label>Sıralama</label>
+                        <div class="val">#--</div>
+                    </div>
+                    <div class="stat-box" style="background:rgba(0,0,0,0.3);">
                         <label>Durum</label>
                         <div class="val">${u.is_infinite ? '♾️ Sınırsız' : '👤 Oyuncu'}</div>
                     </div>
@@ -1490,6 +1529,178 @@ async function executePropertyBuy(cityId, propId, price, cityName) {
     } catch (e) {
         showToast("İşlem sırasında bir hata oluştu!", "error");
     }
+}
+
+async function loadLiveStats() {
+    const container = document.getElementById('stats-container');
+    if (!container) return;
+    if (!currentChannelId) {
+        container.innerHTML = '<p style="text-align:center; padding:40px; color:#666;">Kanal istatistiklerini görmek için bir kanalda !doğrulama yapmalısın.</p>';
+        return;
+    }
+    container.innerHTML = '<div class="loader"></div>';
+
+    try {
+        const snap = await db.ref('users').once('value');
+        const users = snap.val() || {};
+
+        // Bu kanalda aktif olan kullanıcıları filtrele
+        const userList = Object.entries(users)
+            .map(([name, data]) => ({
+                name,
+                ...data,
+                chan_m: data.channel_m?.[currentChannelId] || 0,
+                chan_w: data.channel_watch_time?.[currentChannelId] || 0
+            }))
+            .filter(u => u.chan_m > 0 || u.chan_w > 0);
+
+        if (userList.length === 0) {
+            container.innerHTML = '<p style="text-align:center; padding:40px; color:#666;">Bu kanal için henüz istatistik verisi toplanmamış.</p>';
+            return;
+        }
+
+        // 1. En Zenginler (Bu kanalda bulunanlar arasından)
+        const richest = [...userList].sort((a, b) => (b.balance || 0) - (a.balance || 0)).slice(0, 5);
+        // 2. En Aktifler (Sadece bu kanalın mesajları)
+        const mostActive = [...userList].sort((a, b) => b.chan_m - a.chan_m).slice(0, 5);
+        // 3. Sadık İzleyiciler (Sadece bu kanalın izleme süresi)
+        const hardestWorkers = [...userList].sort((a, b) => b.chan_w - a.chan_w).slice(0, 5);
+
+        container.innerHTML = `
+            <div class="glass-panel" style="padding:20px;">
+                <h3 style="color:var(--primary); margin-bottom:15px; display:flex; align-items:center; gap:10px;">🏆 Kanal Zenginleri <small style="font-size:0.6rem; color:#666;">(Global Bakiye)</small></h3>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    ${richest.map((u, i) => `
+                        <div style="display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.03); padding:10px; border-radius:10px;">
+                            <span style="font-weight:700;">${i + 1}. ${u.name.toUpperCase()}</span>
+                            <span style="color:var(--primary); font-weight:800;">${(u.balance || 0).toLocaleString()} 💰</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="glass-panel" style="padding:20px;">
+                <h3 style="color:var(--secondary); margin-bottom:15px; display:flex; align-items:center; gap:10px;">💬 En Aktif Chat <small style="font-size:0.6rem; color:#666;">(Bu Kanal)</small></h3>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    ${mostActive.map((u, i) => {
+            const maxVal = mostActive[0].chan_m || 1;
+            const percent = (u.chan_m / maxVal) * 100;
+            return `
+                            <div style="display:flex; flex-direction:column; gap:5px; background:rgba(255,255,255,0.03); padding:10px; border-radius:10px;">
+                                <div style="display:flex; justify-content:space-between; font-size:0.85rem;">
+                                    <span style="font-weight:700;">${i + 1}. ${u.name.toUpperCase()}</span>
+                                    <span>${u.chan_m.toLocaleString()} Mesaj</span>
+                                </div>
+                                <div class="progress-bar" style="height:6px; background:rgba(255,255,255,0.05);"><div class="progress-fill" style="width:${percent}%; background:var(--secondary);"></div></div>
+                            </div>
+                        `;
+        }).join('')}
+                </div>
+            </div>
+
+            <div class="glass-panel" style="padding:20px;">
+                <h3 style="color:#f1c40f; margin-bottom:15px; display:flex; align-items:center; gap:10px;">👁️ Sadık İzleyiciler <small style="font-size:0.6rem; color:#666;">(Bu Kanal)</small></h3>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    ${hardestWorkers.map((u, i) => {
+            const maxVal = hardestWorkers[0].chan_w || 1;
+            const percent = (u.chan_w / maxVal) * 100;
+            return `
+                            <div style="display:flex; flex-direction:column; gap:5px; background:rgba(255,255,255,0.03); padding:10px; border-radius:10px;">
+                                <div style="display:flex; justify-content:space-between; font-size:0.85rem;">
+                                    <span style="font-weight:700;">${i + 1}. ${u.name.toUpperCase()}</span>
+                                    <span>${u.chan_w.toLocaleString()} dk</span>
+                                </div>
+                                <div class="progress-bar" style="height:6px; background:rgba(255,255,255,0.05);"><div class="progress-fill" style="width:${percent}%; background:#f1c40f;"></div></div>
+                            </div>
+                        `;
+        }).join('')}
+                </div>
+            </div>
+        `;
+    } catch (e) {
+        container.innerHTML = "<p>İstatistikler şu an yüklenemiyor.</p>";
+    }
+}
+
+async function showCustomizationMarket() {
+    const title = document.querySelector('#tab-career h2');
+    const desc = document.querySelector('#tab-career p');
+
+    // Switch to Career tab visually but change content
+    switchTab('career');
+
+    title.innerHTML = "✨ Profil Özelleştirme Mağazası";
+    desc.innerHTML = "İsmini renklendir ve profiline şık arka planlar ekleyerek fark yarat! (Aldığın her yenisi eskisinin yerine geçer)";
+
+    const grid = document.getElementById('career-grid');
+    grid.innerHTML = "";
+
+    // Back to Careers button
+    const backBtn = document.createElement('div');
+    backBtn.innerHTML = `<button class="primary-btn" style="width: auto; padding: 10px 20px; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);">🔙 Mesleklere Geri Dön</button>`;
+    backBtn.style = "grid-column: 1 / -1; margin-bottom: 20px;";
+    backBtn.onclick = () => {
+        title.innerHTML = "💼 Kariyer & Meslekler";
+        desc.innerHTML = "İşe başlamak için diploman (eğitim seviyen) yetmeli ve gerekli meslek eşyasını satın almalısın.";
+        loadCareer();
+    };
+    grid.appendChild(backBtn);
+
+    // Render Colors
+    PROFILE_CUSTOMIZATIONS.colors.forEach(c => {
+        const card = document.createElement('div');
+        card.className = "market-card";
+        card.innerHTML = `
+            <div class="item-icon" style="color:${c.color}; text-shadow: 0 0 10px ${c.color};">🎨</div>
+            <div class="item-info">
+                <h3 style="color:${c.color}">${c.name}</h3>
+                <p>İsim Rengi</p>
+                <span class="item-cost">${c.price.toLocaleString()} 💰</span>
+            </div>
+            <button class="buy-btn" onclick="buyCustomization('color', '${c.id}', ${c.price})">Satın Al</button>
+        `;
+        grid.appendChild(card);
+    });
+
+    // Render Backgrounds
+    PROFILE_CUSTOMIZATIONS.backgrounds.forEach(bg => {
+        const card = document.createElement('div');
+        card.className = "market-card";
+        card.innerHTML = `
+            <div class="item-icon" style="${bg.style}; border-radius:10px; width:40px; height:40px; margin: 0 auto 10px;"></div>
+            <div class="item-info">
+                <h3>${bg.name}</h3>
+                <p>Profil Arkaplanı</p>
+                <span class="item-cost">${bg.price.toLocaleString()} 💰</span>
+            </div>
+            <button class="buy-btn" onclick="buyCustomization('bg', '${bg.id}', ${bg.price})">Satın Al</button>
+        `;
+        grid.appendChild(card);
+    });
+}
+
+async function buyCustomization(type, id, price) {
+    if (!currentUser) return;
+    const snap = await db.ref('users/' + currentUser).once('value');
+    const u = snap.val() || { balance: 0 };
+
+    if (!u.is_infinite && u.balance < price) {
+        return showToast("Bakiye yetersiz! ❌", "error");
+    }
+
+    if (!confirm(`Bu özelleştirmeyi ${price.toLocaleString()} 💰 karşılığında almak istediğine emin misin?`)) return;
+
+    await db.ref('users/' + currentUser).transaction(user => {
+        if (user) {
+            if (!user.is_infinite) user.balance -= price;
+            if (type === 'color') user.name_color = id;
+            if (type === 'bg') user.profile_bg = id;
+        }
+        return user;
+    });
+
+    showToast("Profilin başarıyla güncellendi! ✨", "success");
+    loadProfile();
 }
 
 // init is called via DOMContentLoaded

@@ -213,6 +213,7 @@
             <button class="tab-btn" onclick="switchTab('borsa')">📈 Borsa</button>
             <button class="tab-btn" onclick="switchTab('emlak')">🏠 Emlak</button>
             <button class="tab-btn" onclick="switchTab('quests')">🎯 Görevler</button>
+            <button class="tab-btn" onclick="switchTab('stats')">📊 İstatistikler</button>
             <button class="tab-btn" onclick="switchTab('profile')">👤 Profilim</button>
         </nav>
 
@@ -340,11 +341,25 @@
                     </div>
                 </div>
 
+                <!-- STATS TAB -->
+                <div id="tab-stats" class="tab-content hidden">
+                    <h2 style="margin-bottom:20px;">📊 Canlı Topluluk İstatistikleri</h2>
+                    <div id="stats-container" class="market-grid"
+                        style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+                        <!-- JS fills -->
+                    </div>
+                </div>
+
                 <!-- PROFILE TAB -->
                 <div id="tab-profile" class="tab-content hidden">
-                    <h2 style="margin-bottom:20px;">👤 Oyuncu Profili</h2>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                        <h2 style="margin:0;">👤 Oyuncu Profili</h2>
+                        <button class="primary-btn" onclick="showCustomizationMarket()"
+                            style="width:auto; padding:10px 20px; background:linear-gradient(45deg, #ff00ff, #00ffff); color:white; border:none;">✨
+                            Profili Özelleştir</button>
+                    </div>
                     <div id="profile-card" class="glass-panel"
-                        style="position:static; transform:none; width:100%; text-align:left;">
+                        style="position:static; transform:none; width:100%; text-align:left; transition: all 0.5s ease;">
                         <!-- JS fills -->
                     </div>
                 </div>
