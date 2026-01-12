@@ -503,6 +503,7 @@
             <button id="tab-quests" class="tab-btn" onclick="showTab('quests')">🎯 Görevler</button>
             <button id="tab-stocks" class="tab-btn" onclick="showTab('stocks')">📈 Borsa</button>
             <button id="tab-memory" class="tab-btn" onclick="showTab('memory'); loadMemory();">🧠 Bot Hafızası</button>
+            <button id="tab-bot-commands" class="tab-btn" onclick="showTab('bot-commands')">🤖 Bot Komutları</button>
             <button id="tab-global" class="tab-btn" onclick="showTab('global')">⚙️ Duyuru</button>
             <button id="tab-admins" class="tab-btn" style="display:none;" onclick="showTab('admins'); loadAdmins();">🔐
                 Admin Yetkileri</button>
@@ -657,6 +658,60 @@
                     </thead>
                     <tbody id="admin-quest-list"></tbody>
                 </table>
+            </div>
+        </div>
+
+        <!-- BOT COMMANDS -->
+        <div id="bot-commands" class="section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 style="margin:0;">🤖 Yetkili/Moderatör Komutları</h2>
+            </div>
+            <div class="card" style="margin-bottom: 20px; border-left: 4px solid var(--primary); padding: 15px 25px;">
+                <p style="color:var(--muted); font-size:0.9rem; margin:0;">Bu komutlar Kick sohbet ekranından, yetkili
+                    kişiler (Broadcaster & Moderator) tarafından kullanılır. Master yetkisi gerektirenler sadece ana
+                    admin (omegacyr) içindir.</p>
+            </div>
+            <div class="grid">
+                <div class="card">
+                    <h3 style="font-size: 1.1rem; color: var(--primary);">!bot-kontrol [aç/kapat]</h3>
+                    <p style="font-size: 0.85rem; line-height: 1.5;">Botu tamamen aktif eder veya geçici olarak
+                        susturur. Sadece "omegacyr" kullanabilir.</p>
+                </div>
+                <div class="card">
+                    <h3 style="font-size: 1.1rem; color: var(--primary);">!host [kanal]</h3>
+                    <p style="font-size: 0.85rem; line-height: 1.5;">Belirtilen kanala host (raid) atar. Sadece
+                        Moderatör/Yayıncı.</p>
+                </div>
+                <div class="card">
+                    <h3 style="font-size: 1.1rem; color: var(--primary);">!airesim [prompt]</h3>
+                    <p style="font-size: 0.85rem; line-height: 1.5;">Yapay zeka ile resim üretir. Sadece
+                        Moderatör/Yayıncı.</p>
+                </div>
+                <div class="card">
+                    <h3 style="font-size: 1.1rem; color: var(--primary);">!ban-zaman @nick [sayı] [dk]</h3>
+                    <p style="font-size: 0.85rem; line-height: 1.5;">Otomatik ban sistemi. Belirtilen sayıdaki mesajda
+                        bir belirtilen süre kadar banlar. Temizlemek için sayıya 0 yazın.</p>
+                </div>
+                <div class="card">
+                    <h3 style="font-size: 1.1rem; color: var(--primary);">!transfer-yasakla @nick</h3>
+                    <p style="font-size: 0.85rem; line-height: 1.5;">Bir kullanıcının para gönderme ve alma yetkisini
+                        kilitler/açar. (Toggle)</p>
+                </div>
+                <div class="card">
+                    <h3 style="font-size: 1.1rem; color: var(--primary);">!sustur @nick</h3>
+                    <p style="font-size: 0.85rem; line-height: 1.5;">Hedeflenen kullanıcıyı 2 dakika boyunca susturur.
+                        Bakiye gerektirir (ayardan kapatılabilir/fiyatı değişebilir).</p>
+                </div>
+                <div class="card">
+                    <h3 style="font-size: 1.1rem; color: #f1c40f;">!aiemir [emir]</h3>
+                    <p style="font-size: 0.85rem; line-height: 1.5;">Botun AI hafızasına kalıcı talimat ekler.
+                        <b>(Master Only)</b></p>
+                </div>
+                <div class="card">
+                    <h3 style="font-size: 1.1rem; color: #f1c40f;">!aireset</h3>
+                    <p style="font-size: 0.85rem; line-height: 1.5;">Botun AI talimatlarını sıfırlar. <b>(Master
+                            Only)</b></p>
+                </div>
             </div>
         </div>
 

@@ -3158,7 +3158,7 @@ EK TALİMAT: ${aiInst}`;
 
         else if (isEnabled('gundem') && lowMsg === '!gündem') {
             try {
-                await reply(`🔍 @${user}, BBC Türkçe Gündemi taranıyor...`);
+                await reply(`🔍 @${user}, Gündem taranıyor...`);
                 // BBC TR RSS Fetch
                 const rssRes = await axios.get('http://feeds.bbci.co.uk/turkce/rss.xml', {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
@@ -3166,32 +3166,40 @@ EK TALİMAT: ${aiInst}`;
                 });
 
                 const xml = rssRes.data;
-                const items = [];
-                // Simple regex to extract titles (first 3-4)
-                // <item>...<title>...</title>...</item>
+                const allItems = [];
+                // Extract all titles (up to 15)
                 const itemRegex = /<item>[\s\S]*?<title><!\[CDATA\[(.*?)\]\]><\/title>[\s\S]*?<\/item>/g;
                 let match;
-                while ((match = itemRegex.exec(xml)) !== null && items.length < 3) {
-                    items.push(match[1]); // CDATA content
+                while ((match = itemRegex.exec(xml)) !== null && allItems.length < 15) {
+                    allItems.push(match[1]); // CDATA content
                 }
 
-                if (items.length === 0) {
-                    // CDATA'sız fallback (bazı RSS'lerde CDATA olmayabilir)
+                if (allItems.length === 0) {
                     const fallbackRegex = /<title>(?!<!\[CDATA\[)(.*?)<\/title>/g;
-                    // Skip channel title, loop through matches
                     let fbMatch;
                     let count = 0;
-                    while ((fbMatch = fallbackRegex.exec(xml)) !== null) {
-                        if (count > 0 && items.length < 3) { // Skip first title (Channel Name)
-                            items.push(fbMatch[1]);
+                    while ((fbMatch = fallbackRegex.exec(xml)) !== null && allItems.length < 15) {
+                        if (count > 0) { // Skip first title (Channel Name)
+                            allItems.push(fbMatch[1]);
                         }
                         count++;
                     }
                 }
 
-                if (items.length > 0) {
-                    const summary = items.join(" | ");
-                    await reply(`📈 BBC Gündem: ${summary}`);
+                if (allItems.length > 0) {
+                    // Randomly select 3 items from allItems
+                    const selected = [];
+                    const countToSelect = Math.min(allItems.length, 3);
+                    const tempItems = [...allItems];
+
+                    for (let i = 0; i < countToSelect; i++) {
+                        const randomIndex = Math.floor(Math.random() * tempItems.length);
+                        selected.push(tempItems[randomIndex]);
+                        tempItems.splice(randomIndex, 1);
+                    }
+
+                    const summary = selected.join(" | ");
+                    await reply(`📈 Gündemden Seçmeler: ${summary}`);
                 } else {
                     await reply(`⚠️ @${user}, Şu an güncel haber çekilemedi.`);
                 }
