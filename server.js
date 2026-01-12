@@ -2494,7 +2494,28 @@ app.post('/webhook/kick', async (req, res) => {
                 "Sağlık sorunların düzelmeye başlıyor, morali bozma. 💚",
                 "Evrendeki enerjiler senin için çalışıyor. 🌌",
                 "Beklenmedik bir yerden iş teklifi gelebilir. 📋",
-                "Eski bir aşktan haber alabilirsin, şaşırma! 💔➡️❤️"
+                "Eski bir aşktan haber alabilirsin, şaşırma! 💔➡️❤️",
+                // DAHA FAZLA FAL - USER ISTEGI
+                "Bugün sakarlık peşini bırakmayabilir, dikkat et! 🍌",
+                "Bir bardak kahve tüm sorunlarını çözemez ama iyi bir başlangıçtır. ☕",
+                "Yıldızlar senin için dans ediyor, bu enerjiyi boşa harcama! 💃",
+                "Beklediğin kargo sandığından daha erken gelecek! 📦",
+                "Bir sırrını paylaşacağın kişi seni çok şaşırtacak. 🤐",
+                "Bugün mavi giymek sana şans getirecek. 💙",
+                "E-postalarını kontrol et, önemli bir fırsat orada gizli olabilir. 📧",
+                "Bir kitaptan okuyacağın rastgele bir cümle sana yol gösterecek. 📖",
+                "Eski bir fotoğraf albümü bugün seni duygulandırabilir. 📸",
+                "Rüyalar alemi bu gece sana önemli mesajlar verecek. 🌙",
+                "Bir sokak hayvanı bugün sana şans getirecek, onu sev! 🐈",
+                "Telefonun şarjına dikkat et, en lazım olduğu anda bitebilir! 🔋",
+                "Bugün duyacağın bir şarkı seni geçmişe götürecek. 🎵",
+                "Yeteneklerini sergilemekten korkma, sahne senin! 🎤",
+                "Bir tartışmadan kaçınmak bugün sana huzur getirecek. ☮️",
+                "Bugün yediklerine biraz daha dikkat et, miden hassas olabilir. 🍏",
+                "Akşam saatlerinde sürpriz bir misafir kapını çalabilir. 🚪",
+                "Biraz daha gülümse, dünya seninle daha güzel! 😊",
+                "Bugün şanslı sayın 7, onu aklında tut. 7️⃣",
+                "Gözlüklerini sil, dünyayı daha net görmen gereken bir gün. 👓"
             ];
             await reply(`🔮 @${user}, Falın: ${list[Math.floor(Math.random() * list.length)]}`);
         }
@@ -2761,7 +2782,40 @@ app.post('/webhook/kick', async (req, res) => {
                 "Hayallerin, ruhunun kanatlarıdır; onları asla kırma.",
                 "Dürüstlük, en iyi politikadır.",
                 "Başka birinin ışığını söndürmek, senin ışığını daha parlak yapmaz.",
-                "Hayat bir yankıdır; ne gönderirsen o geri gelir."
+                "Başka birinin ışığını söndürmek, senin ışığını daha parlak yapmaz.",
+                "Hayat bir yankıdır; ne gönderirsen o geri gelir.",
+                // DAHA FAZLA SÖZ - USER ISTEGI
+                "Gittiğin yola inandıysan, attığın adımlardan korkma.",
+                "Deniz sakin olduğu zaman dümeni herkes tutar. 🌊",
+                "Bir gün değil, her gün istersen olur.",
+                "Kaybetmekten korkma; bir şeyi kazanman için bazı şeyleri kaybetmen gerekir.",
+                "Yıldızlara ulaşamazsan, göğe yükselmiş olursun.",
+                "Her şey vaktini bekler; ne gül vaktinden önce açar, ne güneş vaktinden önce doğar. - Mevlana",
+                "Cesaret, korkuya rağmen devam edebilmektir. 🦁",
+                "Dün akıllıydım, dünyayı değiştirmek istedim. Bugün bilgeyim, kendimi değiştiriyorum. - Mevlana",
+                "Başlamak için mükemmel olmak zorunda değilsin, ama mükemmel olmak için başlamak zorundasın.",
+                "En uzun yolculuklar bile tek bir adımla başlar.",
+                "Sessizlik en güçlü çığlıktır. 🤫",
+                "Kuşlar gibi uçmayı, balıklar gibi yüzmeyi öğrendik; ama bu arada çok basit bir sanatı unuttuk: İnsan gibi yaşamayı. - Martin Luther King",
+                "Hayallerinin peşinden git, bir gün yorulup seni bekleyecekler.",
+                "Zirveye çıkarken rastladığın insanlara iyi davran, çünkü inerken onlarla tekrar karşılaşacaksın.",
+                "Fırtınalar ağaçların köklerini daha derine salmasını sağlar.",
+                "Kendi ışığına güvenen, başkasının parlamasından rahatsız olmaz.",
+                "Hayat, fırtınanın geçmesini beklemek değil, yağmurda dans etmeyi öğrenmektir. ☔",
+                "Gülümsemek, iki insan arasındaki en kısa mesafedir. 😊",
+                // ATATÜRK SÖZLERİ
+                "Hayatta en hakiki mürşit ilimdir. - Mustafa Kemal Atatürk 🇹🇷",
+                "Egemenlik, kayıtsız şartsız milletindir. - Mustafa Kemal Atatürk 🇹🇷",
+                "Yurtta sulh, cihanda sulh. - Mustafa Kemal Atatürk 🇹🇷",
+                "Ne mutlu Türk'üm diyene! - Mustafa Kemal Atatürk 🇹🇷",
+                "İstikbal göklerdedir. - Mustafa Kemal Atatürk ✈️",
+                "Beni görmek demek mutlaka yüzümü görmek demek değildir. Benim fikirlerimi, benim duygularımı anlıyorsanız ve hissediyorsanız bu kafidir. - Mustafa Kemal Atatürk",
+                "Öğretmenler! Yeni nesil sizin eseriniz olacaktır. - Mustafa Kemal Atatürk 📚",
+                "Ey yükselen yeni nesil! İstikbal sizsiniz. Cumhuriyeti biz kurduk, onu yükseltecek ve yaşatacak sizsiniz. - Mustafa Kemal Atatürk",
+                "Türk milleti çalışkandır, Türk milleti zekidir. - Mustafa Kemal Atatürk",
+                "Sanatsız kalan bir milletin hayat damarlarından biri kopmuş demektir. - Mustafa Kemal Atatürk 🎨",
+                "Bir ulusun asker ordusu ne kadar güçlü olursa olsun, kazandığı zaferler ne kadar yüce olursa olsun, bir ulus ilim ordusuna sahip değilse, savaş meydanlarında kazanılmış zaferlerin sonu olacaktır. - Mustafa Kemal Atatürk",
+                "Dünyada her şey için, medeniyet için, hayat için, başarı için, en hakiki mürşit ilimdir, fendir. - Mustafa Kemal Atatürk"
             ];
             await reply(`✍️ @${user}: ${list[Math.floor(Math.random() * list.length)]}`);
         }
