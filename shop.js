@@ -20,7 +20,7 @@ const EDUCATION = {
 const EDU_XP = [0, 50, 150, 400, 1000, 2500, 5000, 10000];
 
 const JOBS = {
-    // SEVİYE 0: CAHİL
+    // SEVİYE 0: CAHİL (GEREKSİNİM YOK / 50 - 1.000 💰)
     "İşsiz": { reward: 0, icon: "👤", req_edu: 0, req_item: null },
     "Dilenci": { reward: 20, icon: "🪣", req_edu: 0, req_item: "Yırtık Karton", price: 50 },
     "Mendil Satıcısı": { reward: 35, icon: "🧻", req_edu: 0, req_item: "Mendil Paketi", price: 100 },
@@ -30,40 +30,117 @@ const JOBS = {
     "Sokak Müzisyeni": { reward: 70, icon: "🎸", req_edu: 0, req_item: "Gitar", price: 500 },
     "Kağıt Toplayıcı": { reward: 75, icon: "🥡", req_edu: 0, req_item: "Çekçek", price: 600 },
     "Simitçi": { reward: 80, icon: "🥯", req_edu: 0, req_item: "Simit Tepsisi", price: 750 },
+    "Broşürcü": { reward: 85, icon: "📄", req_edu: 0, req_item: "El İlanları", price: 850 },
     "Boyacı": { reward: 90, icon: "👞", req_edu: 0, req_item: "Boya Sandığı", price: 1000 },
-    // SEVİYE 1: İLKOKUL
-    "Tezgahtar": { reward: 180, icon: "🏷️", req_edu: 1, req_item: "Yazar Kasa", price: 2500 },
-    "Bekçi": { reward: 200, icon: "🔦", req_edu: 1, req_item: "Fener", price: 3000 },
-    "Vale": { reward: 210, icon: "🔑", req_edu: 1, req_item: "Vale Kartı", price: 3500 },
-    "Kurye": { reward: 250, icon: "🛵", req_edu: 1, req_item: "Eski Motor", price: 5000 },
-    "Şoför": { reward: 280, icon: "🚕", req_edu: 1, req_item: "Taksi Plakası", price: 7500 },
-    // SEVİYE 2: ORTAOKUL
-    "Güvenlik": { reward: 350, icon: "👮", req_edu: 2, req_item: "Telsiz", price: 10000 },
-    "Garson": { reward: 400, icon: "☕", req_edu: 2, req_item: "Önlük", price: 12000 },
-    "Berber": { reward: 500, icon: "✂️", req_edu: 2, req_item: "Makas Seti", price: 15000 },
-    "Youtuber": { reward: 650, icon: "▶️", req_edu: 2, req_item: "Yayıncı Ekipmanı", price: 30000 },
-    // SEVİYE 3: LİSE
-    "Tamirci": { reward: 850, icon: "🔧", req_edu: 3, req_item: "Alet Çantası", price: 45000 },
-    "Polis": { reward: 1000, icon: "👮‍♂️", req_edu: 3, req_item: "Silah Ruhsatı", price: 60000 },
-    "Emlakçı": { reward: 1200, icon: "🏠", req_edu: 3, req_item: "Ajanda", price: 75000 },
-    "Tıbbi Laboratuvar": { reward: 1150, icon: "🧪", req_edu: 3, req_item: "Mikrosantrifüj", price: 70000 },
-    // SEVİYE 4: ÜNİVERSİTE
-    "Yazılımcı": { reward: 1800, icon: "💻", req_edu: 4, req_item: "Yazılım Lisansı", price: 150000 },
-    "Mimar": { reward: 2000, icon: "📐", req_edu: 4, req_item: "Çizim Masası", price: 180000 },
-    "Avukat": { reward: 2500, icon: "⚖️", req_edu: 4, req_item: "Cübbe", price: 250000 },
-    // SEVİYE 5: YÜKSEK LİSANS
-    "Doktor": { reward: 4000, icon: "🩺", req_edu: 5, req_item: "Tıp Diploması", price: 500000 },
-    "Pilot": { reward: 5000, icon: "✈️", req_edu: 5, req_item: "Pilot Lisansı", price: 750000 },
-    "Hakim": { reward: 6000, icon: "🔨", req_edu: 5, req_item: "Tokmak", price: 900000 },
-    // SEVİYE 6: DOKTORA
-    "Cerrah": { reward: 7000, icon: "🏥", req_edu: 6, req_item: "Neşter", price: 1500000 },
-    "Bilim İnsanı": { reward: 8000, icon: "🧪", req_edu: 6, req_item: "Mikroskop", price: 2000000 },
-    "Yönetmen": { reward: 9000, icon: "🎬", req_edu: 6, req_item: "Klaket", price: 2500000 },
-    // SEVİYE 7: PROFESÖR
-    "Astronot": { reward: 15000, icon: "🚀", req_edu: 7, req_item: "Uzay Mekiği Bileti", price: 10000000 },
-    "CEO": { reward: 20000, icon: "👔", req_edu: 7, req_item: "Şirket Hissesi", price: 25000000 },
-    "Devlet Başkanı": { reward: 30000, icon: "👑", req_edu: 7, req_item: "Kral Tacı", price: 50000000 },
-    "Kripto Kralı": { reward: 50000, icon: "💎", req_edu: 7, req_item: "Soğuk Cüzdan", price: 100000000 }
+    "Oto Yıkamacı": { reward: 95, icon: "🧽", req_edu: 0, req_item: "Sünger", price: 1200 },
+    "Hamal": { reward: 100, icon: "🏋️", req_edu: 0, req_item: "Sırtlık", price: 1500 },
+    "Çöpçü": { reward: 110, icon: "🧹", req_edu: 0, req_item: "Süpürge", price: 1800 },
+    "Bulaşıkçı": { reward: 120, icon: "🍽️", req_edu: 0, req_item: "Eldiven", price: 2000 },
+    "Amele": { reward: 130, icon: "🧱", req_edu: 0, req_item: "Baret", price: 2200 },
+    "Çiftçi": { reward: 140, icon: "🚜", req_edu: 0, req_item: "Çapa", price: 2500 },
+    "Balıkçı": { reward: 150, icon: "🎣", req_edu: 0, req_item: "Olta", price: 3000 },
+
+    // SEVİYE 1: İLKOKUL (2.500 - 10.000 💰)
+    "Tezgahtar": { reward: 180, icon: "🏷️", req_edu: 1, req_item: "Yazar Kasa", price: 4000 },
+    "Bekçi": { reward: 200, icon: "🔦", req_edu: 1, req_item: "Fener", price: 5000 },
+    "Vale": { reward: 210, icon: "🔑", req_edu: 1, req_item: "Vale Kartı", price: 5500 },
+    "Bahçıvan": { reward: 220, icon: "🌻", req_edu: 1, req_item: "Budama Makası", price: 6000 },
+    "Garaj Sorumlusu": { reward: 230, icon: "🅿️", req_edu: 1, req_item: "Düdük", price: 6500 },
+    "Depocu": { reward: 240, icon: "📦", req_edu: 1, req_item: "Transpalet", price: 7000 },
+    "Kurye": { reward: 250, icon: "🛵", req_edu: 1, req_item: "Eski Motor", price: 8000 },
+    "Market Görevlisi": { reward: 260, icon: "🏪", req_edu: 1, req_item: "Maket Bıçağı", price: 8500 },
+    "Benzinci": { reward: 270, icon: "⛽", req_edu: 1, req_item: "Pompa", price: 9000 },
+    "Şoför": { reward: 280, icon: "🚕", req_edu: 1, req_item: "Taksi Plakası", price: 10000 },
+    "Kasiyer": { reward: 300, icon: "💵", req_edu: 1, req_item: "Barkod Okuyucu", price: 12000 },
+    "Tabelacı": { reward: 310, icon: "🏗️", req_edu: 1, req_item: "Fırça Seti", price: 13000 },
+    "Terzi": { reward: 320, icon: "🧵", req_edu: 1, req_item: "Dikiş Makinesi", price: 14000 },
+
+    // SEVİYE 2: ORTAOKUL (15.000 - 40.000 💰)
+    "Güvenlik": { reward: 350, icon: "👮", req_edu: 2, req_item: "Telsiz", price: 18000 },
+    "Bodyguard": { reward: 360, icon: "🕶️", req_edu: 2, req_item: "Kulaklık", price: 20000 },
+    "Garson": { reward: 400, icon: "☕", req_edu: 2, req_item: "Önlük", price: 22000 },
+    "Makyaj Artisti": { reward: 420, icon: "💄", req_edu: 2, req_item: "Makyaj Çantası", price: 25000 },
+    "Kuaför": { reward: 450, icon: "💇", req_edu: 2, req_item: "Fön Makinesi", price: 28000 },
+    "Tattoo Artisti": { reward: 480, icon: "✒️", req_edu: 2, req_item: "Dövme Makinesi", price: 30000 },
+    "Berber": { reward: 500, icon: "✂️", req_edu: 2, req_item: "Makas Seti", price: 32000 },
+    "Fitness Eğitmeni": { reward: 520, icon: "💪", req_edu: 2, req_item: "Halter", price: 35000 },
+    "Barista": { reward: 530, icon: "☕️", req_edu: 2, req_item: "Kahve Makinesi", price: 38000 },
+    "DJ": { reward: 550, icon: "🎧", req_edu: 2, req_item: "DJ Setup", price: 40000 },
+    "Fotoğrafçı": { reward: 600, icon: "📸", req_edu: 2, req_item: "Kamera", price: 45000 },
+    "Youtuber": { reward: 650, icon: "▶️", req_edu: 2, req_item: "Yayıncı Ekipmanı", price: 50000 },
+    "Cankurtaran": { reward: 680, icon: "🆘", req_edu: 2, req_item: "Can Simidi", price: 55000 },
+
+    // SEVİYE 3: LİSE (60.000 - 150.000 💰)
+    "Elektrikçi": { reward: 700, icon: "⚡", req_edu: 3, req_item: "Kontrol Kalemi", price: 70000 },
+    "Tesisatçı": { reward: 750, icon: "🚰", req_edu: 3, req_item: "İngiliz Anahtarı", price: 75000 },
+    "Marangoz": { reward: 800, icon: "🪚", req_edu: 3, req_item: "Testere", price: 80000 },
+    "Hemşire": { reward: 820, icon: "💉", req_edu: 3, req_item: "Şırınga", price: 85000 },
+    "Sekreter": { reward: 830, icon: "📞", req_edu: 3, req_item: "Telefon", price: 90000 },
+    "Kütüphaneci": { reward: 840, icon: "📚", req_edu: 3, req_item: "Barkod Okuyucu", price: 95000 },
+    "Tamirci": { reward: 850, icon: "🔧", req_edu: 3, req_item: "Alet Çantası", price: 100000 },
+    "Laborant": { reward: 860, icon: "🔬", req_edu: 3, req_item: "Tüp", price: 110000 },
+    "Tıbbi Laboratuvar": { reward: 1150, icon: "🧪", req_edu: 3, req_item: "Mikrosantrifüj", price: 120000 },
+    "Aşçı": { reward: 900, icon: "👨‍🍳", req_edu: 3, req_item: "Aşçı Bıçağı", price: 125000 },
+    "Kabin Memuru": { reward: 920, icon: "💁", req_edu: 3, req_item: "Uçuş Kartı", price: 130000 },
+    "İtfaiyeci": { reward: 950, icon: "🚒", req_edu: 3, req_item: "Yangın Tüpü", price: 140000 },
+    "Gümrük Memuru": { reward: 980, icon: "🛂", req_edu: 3, req_item: "Mühür", price: 150000 },
+    "Polis": { reward: 1000, icon: "👮‍♂️", req_edu: 3, req_item: "Silah Ruhsatı", price: 180000 },
+    "Grafiker": { reward: 1100, icon: "🎨", req_edu: 3, req_item: "Çizim Tableti", price: 200000 },
+    "Emlakçı": { reward: 1200, icon: "🏠", req_edu: 3, req_item: "Ajanda", price: 220000 },
+    "Dalgıç": { reward: 1250, icon: "🤿", req_edu: 3, req_item: "Oksijen Tüpü", price: 240000 },
+    "Kaynakçı": { reward: 1280, icon: "👨‍🏭", req_edu: 3, req_item: "Kaynak Maskesi", price: 250000 },
+
+    // SEVİYE 4: ÜNİVERSİTE (300.000 - 1.000.000 💰)
+    "Bankacı": { reward: 1300, icon: "🏦", req_edu: 4, req_item: "Hesap Makinesi", price: 350000 },
+    "Arkeolog": { reward: 1350, icon: "🏺", req_edu: 4, req_item: "Fırça", price: 370000 },
+    "Muhasebeci": { reward: 1400, icon: "📉", req_edu: 4, req_item: "Mali Mühür", price: 400000 },
+    "Sosyolog": { reward: 1450, icon: "👥", req_edu: 4, req_item: "Anket Formu", price: 420000 },
+    "Öğretmen": { reward: 1500, icon: "👨‍🏫", req_edu: 4, req_item: "Kitap Seti", price: 450000 },
+    "Psikolojik Danışman": { reward: 1550, icon: "🗣️", req_edu: 4, req_item: "Not Defteri", price: 480000 },
+    "Gazeteci": { reward: 1600, icon: "📰", req_edu: 4, req_item: "Mikrofon", price: 500000 },
+    "Yatırım Uzmanı": { reward: 1700, icon: "📈", req_edu: 4, req_item: "Borsa Ekranı", price: 550000 },
+    "Editör": { reward: 1750, icon: "✍️", req_edu: 4, req_item: "Laptop", price: 600000 },
+    "Yazılımcı": { reward: 1800, icon: "💻", req_edu: 4, req_item: "Yazılım Lisansı", price: 750000 },
+    "Mimar": { reward: 2000, icon: "📐", req_edu: 4, req_item: "Çizim Masası", price: 850000 },
+    "Mühendis": { reward: 2200, icon: "👷", req_edu: 4, req_item: "Mühendislik Diploması", price: 1000000 },
+    "Avukat": { reward: 2500, icon: "⚖️", req_edu: 4, req_item: "Cübbe", price: 1200000 },
+    "Diyetisyen": { reward: 2700, icon: "🥗", req_edu: 4, req_item: "Diyet Listesi", price: 1400000 },
+    "Denetçi": { reward: 2800, icon: "📝", req_edu: 4, req_item: "Audit Dosyası", price: 1600000 },
+    "Biyolog": { reward: 2900, icon: "🌿", req_edu: 4, req_item: "Petri Kabı", price: 1800000 },
+
+    // SEVİYE 5: YÜKSEK LİSANS (2.000.000 - 8.000.000 💰)
+    "Psikolog": { reward: 3000, icon: "🧠", req_edu: 5, req_item: "Terapi Koltuğu", price: 2500000 },
+    "Veri Bilimci": { reward: 3100, icon: "📊", req_edu: 5, req_item: "Süper Bilgisayar", price: 2800000 },
+    "Eczacı": { reward: 3200, icon: "💊", req_edu: 5, req_item: "Laboratuvar Önlüğü", price: 3000000 },
+    "Yapay Zeka Mühendisi": { reward: 3300, icon: "🤖", req_edu: 5, req_item: "GPU Server", price: 3500000 },
+    "Veteriner": { reward: 3400, icon: "🐾", req_edu: 5, req_item: "Stetoskop", price: 4000000 },
+    "Genetik Mühendisi": { reward: 3600, icon: "🧬", req_edu: 5, req_item: "DNA Kiti", price: 5000000 },
+    "Doktor": { reward: 4000, icon: "🩺", req_edu: 5, req_item: "Tıp Diploması", price: 8000000 },
+    "Diş Hekimi": { reward: 4200, icon: "🦷", req_edu: 5, req_item: "Dişçi Koltuğu", price: 9000000 },
+    "Başhekim": { reward: 4500, icon: "🏥", req_edu: 5, req_item: "Başhekim Kaşesi", price: 10000000 },
+    "Pilot": { reward: 5000, icon: "✈️", req_edu: 5, req_item: "Pilot Lisansı", price: 15000000 },
+    "Savcı": { reward: 5500, icon: "🏛️", req_edu: 5, req_item: "Kanun Kitabı", price: 18000000 },
+    "Hakim": { reward: 6000, icon: "🔨", req_edu: 5, req_item: "Tokmak", price: 20000000 },
+    "Uçuş Mühendisi": { reward: 6200, icon: "🛫", req_edu: 5, req_item: "Uçuş Manueli", price: 22000000 },
+    "Siber Güvenlik Uzmanı": { reward: 6500, icon: "🛡️", req_edu: 5, req_item: "Şifreleme Kartı", price: 25000000 },
+
+    // SEVİYE 6: DOKTORA (30.000.000 - 100.000.000 💰)
+    "Cerrah": { reward: 7000, icon: "🏥", req_edu: 6, req_item: "Neşter", price: 40000000 },
+    "Rektör": { reward: 7200, icon: "🎓", req_edu: 6, req_item: "Rektörlük Mührü", price: 45000000 },
+    "Büyükelçi": { reward: 7500, icon: "🌍", req_edu: 6, req_item: "Diplomat Pasaportu", price: 50000000 },
+    "Orkestra Şefi": { reward: 7800, icon: "🎼", req_edu: 6, req_item: "Baton", price: 55000000 },
+    "Bilim İnsanı": { reward: 8000, icon: "🧪", req_edu: 6, req_item: "Mikroskop", price: 60000000 },
+    "Yönetmen": { reward: 9000, icon: "🎬", req_edu: 6, req_item: "Klaket", price: 80000000 },
+    "Nükleer Fizikçi": { reward: 9500, icon: "⚛️", req_edu: 6, req_item: "Radyasyon Ölçer", price: 100000000 },
+    "Uzay Mühendisi": { reward: 10000, icon: "🛰️", req_edu: 6, req_item: "Uydu Alıcısı", price: 150000000 },
+
+    // SEVİYE 7: PROFESÖR (250.000.000 - 2.000.000.000 💰)
+    "Astronot": { reward: 15000, icon: "🚀", req_edu: 7, req_item: "Uzay Mekiği Bileti", price: 500000000 },
+    "CEO": { reward: 20000, icon: "👔", req_edu: 7, req_item: "Şirket Hissesi", price: 1000000000 },
+    "Milletvekili": { reward: 25000, icon: "🏛️", req_edu: 7, req_item: "Mazbata", price: 1500000000 },
+    "Devlet Başkanı": { reward: 30000, icon: "👑", req_edu: 7, req_item: "Kral Tacı", price: 2500000000 },
+    "Dünya Bankası Başkanı": { reward: 35000, icon: "💸", req_edu: 7, req_item: "Altın Kasa", price: 5000000000 },
+    "Kripto Kralı": { reward: 50000, icon: "💎", req_edu: 7, req_item: "Soğuk Cüzdan", price: 10000000000 }
 };
 
 // Global Variables
@@ -277,6 +354,8 @@ function login(user) {
             if (marketStat) marketStat.innerText = "Market ürünlerini görmek için herhangi bir kanalda !doğrulama yapmalısın.";
         }
     });
+    // Her oturum açışta kariyer sekmesini yükle (varsayılan sekme yaptık)
+    loadCareer();
 }
 
 async function loadChannelMarket(channelId) {
