@@ -755,6 +755,43 @@ setInterval(saveHourlyStockHistory, 3600000); // 1 Saat
 setInterval(updateGlobalStocks, 2000);
 updateGlobalStocks(); // İlk çalıştırma
 
+app.post('/api/borsa/fix-costs', authAdmin, hasPerm('stocks'), async (req, res) => {
+    try {
+        const stocksSnap = await db.ref('global_stocks').once('value');
+        const stocks = stocksSnap.val() || {};
+
+        const usersSnap = await db.ref('users').once('value');
+        const users = usersSnap.val() || {};
+
+        const updates = {};
+        let count = 0;
+
+        for (const [uid, u] of Object.entries(users)) {
+            if (!u.stocks) continue;
+            for (const [code, amount] of Object.entries(u.stocks)) {
+                // Check if cost is missing or invalid (0) but user has stock
+                const cost = u.stock_costs ? u.stock_costs[code] : 0;
+
+                if ((!cost || cost <= 0) && amount > 0) {
+                    const currentPrice = stocks[code]?.price || 1000; // Fallback price
+                    const estimatedCost = Math.ceil(amount * currentPrice);
+                    updates[`users/${uid}/stock_costs/${code}`] = estimatedCost;
+                    count++;
+                }
+            }
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await db.ref().update(updates);
+        }
+
+        res.json({ success: true, message: `${count} adet eksik maliyet verisi onarıldı.` });
+    } catch (e) {
+        console.error("Fix Costs Error:", e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 app.post('/api/borsa/reset', authAdmin, hasPerm('stocks'), async (req, res) => {
     try {
         console.log(`🚨 BORSA SIFIRLAMA BAŞLATILDI (${req.adminUser.username} tarafından)`);
@@ -2980,6 +3017,49 @@ app.post('/webhook/kick', async (req, res) => {
         }
 
         else if (isEnabled('ship') && lowMsg.startsWith('!ship')) {
+            const shipQuotes = [
+                "Aşk, iki bedende yaşayan tek bir ruhtur.",
+                "Seninle her şeye varım ben.",
+                "Gözlerinin içinde kaybolmak istiyorum.",
+                "Dünyanın en güzel manzarası senin gülüşün.",
+                "Sen benim en güzel rüyam, en tatlı gerçeğimsin.",
+                "Kalbim sadece senin için atıyor.",
+                "Seni sevmek, nefes almak kadar doğal.",
+                "Aşkın matematiği yok, sen varsın.",
+                "Ruh eşim, hayat arkadaşım...",
+                "Seninle geçen her saniye, ömre bedel.",
+                "Bir bakışınla dünyamı aydınlatıyorsun.",
+                "Aşk tesadüfleri sever, biz en güzel tesadüfüz.",
+                "Sen varsan, her şey tamam.",
+                "Gözlerin gözlerime değince felaketim olurdu, ağlardım.",
+                "Beni güzel hatırla, bunlar son satırlar... Şaka şaka, sonsuza kadar beraberiz!",
+                "Seninle yaşlanmak istiyorum, seninle çocuklaşmak.",
+                "Gülüşün, şehrin bütün ışıklarından daha parlak.",
+                "Sen benim gökyüzümsün, ben senin uçurtman.",
+                "Aşk bir yolculuksa, son durağım sensin.",
+                "Seni her gördüğümde kalbim ilk günkü gibi çarpıyor.",
+                "Sen benim en sevdiğim şarkısın, hiç bıkmadan dinlediğim.",
+                "Gözlerin diyorum, oturup bir ömür izlenir.",
+                "Sen, benim hayata tutunma sebebimsin.",
+                "Seni sevmek, güneşe dokunmak gibi; sıcak ve vazgeçilmez.",
+                "Bütün şairler seni anlatmış sanki, bütün şiirler senin için.",
+                "Seninle olmak, evin yolunu bulmak gibi.",
+                "Kalbimdeki en güzel yer sana ayrıldı.",
+                "Sensiz geçen bir gün, yaşanmamış bir gündür.",
+                "Sen benim için bir mucizesin.",
+                "Seni düşünmek bile yüzümü güldürmeye yetiyor.",
+                "Benim en güzel hikayem sensin.",
+                "Ellerin ellerimde oldukça, her zorluğun üstesinden gelirim.",
+                "Sen benim huzur limanımsın.",
+                "Aşkın adı sen, soyadı biz olsun.",
+                "Seni seviyorum, dünden daha çok, yarından daha az.",
+                "Gözlerin deniz, ben içinde bir balık; kaybolmuşum, bulma beni.",
+                "Seninle susmak bile güzel, konuşmayı sen düşün.",
+                "Hayatımın en güzel 'iyiki'sisin.",
+                "Sen varsan, her mevsim bahar.",
+                "Seni bulmak, hazine bulmaktan daha değerli."
+            ];
+            const randomQuote = shipQuotes[Math.floor(Math.random() * shipQuotes.length)];
             let target = args[0]?.replace('@', '');
             const rig = riggedShips[user.toLowerCase()];
 
@@ -3009,10 +3089,10 @@ app.post('/webhook/kick', async (req, res) => {
 
             if (rig) {
                 target = rig.target || target || "Gizli Hayran";
-                await reply(`❤️ @${user} & @${target} ❤️`);
+                await reply(`❤️ @${user} & @${target} ❤️\n💌 ${randomQuote}`);
                 delete riggedShips[user.toLowerCase()];
             } else {
-                await reply(`❤️ @${user} & @${target} ❤️`);
+                await reply(`❤️ @${user} & @${target} ❤️\n💌 ${randomQuote}`);
             }
         }
 
