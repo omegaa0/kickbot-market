@@ -3324,57 +3324,47 @@ EK TALİMAT: ${aiInst}`;
             }
         }
 
-        // --- AI CHAT ÖZETİ ---
-        else if (isEnabled('ai') && lowMsg === '!ozet') {
-            const isSub = payload.sender?.identity?.badges?.some(b => b.type === 'subscriber' || b.type === 'broadcaster' || b.type === 'moderator' || b.type === 'founder') || user.toLowerCase() === "omegacyr";
-            if (!isSub) return await reply(`🤫 @${user}, Bu komut sadece ABONELERE özeldir! ✨`);
+        // --- AI CHAT ÖZETİ (Pollinations AI - Ücretsiz) ---
+        else if (isEnabled('ai') && (lowMsg === '!ozet' || lowMsg === '!özet')) {
+            // Cooldown kontrol (1 dakika)
+            if (selamCooldowns[`ozet_${broadcasterId}`] && Date.now() - selamCooldowns[`ozet_${broadcasterId}`] < 60000) {
+                return; // Sessiz cooldown
+            }
+            selamCooldowns[`ozet_${broadcasterId}`] = Date.now();
 
-            const GROK_KEY = process.env.GROK_API_KEY;
-            if (!GROK_KEY) return await reply(`⚠️ @${user}, AI sistemi şu an yapılandırılmamış.`);
-
-            await reply(`🤖 @${user}, Chat geçmişini analiz ediyorum, lütfen bekle... 🧠`);
+            await reply(`📝 @${user}, biraz bekle, chat defterini karıştırıp özet çıkarıyorum...`);
 
             try {
-                const chatLogSnap = await db.ref(`channels/${broadcasterId}/chat_log`).limitToLast(200).once('value');
-                const chatLogs = chatLogSnap.val();
+                const logsSnap = await db.ref(`channels/${broadcasterId}/chat_log`).limitToLast(60).once('value');
+                const logs = logsSnap.val();
+                if (!logs) return await reply("Henüz özetlenecek kadar konuşma yok.");
 
-                if (!chatLogs) {
-                    return await reply(`🤖 @${user}, Henüz yeterli chat geçmişi birikmemiş.`);
-                }
-
-                const chatContent = Object.values(chatLogs)
-                    .map(l => `${l.user}: ${l.message}`)
-                    .join("\n");
-
-                const systemMsg = `Sen deneyimli bir yayın asistanısın. Görevin, sana verilen chat geçmişini analiz edip yayında neler konuşulduğunu, izleyicilerin enerjisini ve varsa önemli olayları özetlemek. 
-Maksimum 3-4 cümlelik, samimi ve akıcı bir özet hazırla. 
-- Kimler neyden bahsetti?
-- Genel hava nasıl?
-- Yayının şu anki gündemi ne? 
-Özeti "Yayında şu ana kadar..." diye başlat.`;
-
-                const response = await axios.post('https://api.x.ai/v1/chat/completions', {
-                    messages: [
-                        { role: "system", content: systemMsg },
-                        { role: "user", content: `Aşağıdaki chat geçmişini özetler misin?\n\n${chatContent}` }
-                    ],
-                    model: "grok-3",
-                    temperature: 0.7
-                }, {
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${GROK_KEY}`
-                    },
-                    timeout: 45000
+                let chatText = "";
+                Object.values(logs).forEach(l => {
+                    // Bot mesajlarını ve komutları filtrele
+                    if (l.user.toLowerCase() !== 'aloskegangbot' && !l.message.startsWith('!')) {
+                        chatText += `${l.user}: ${l.message}\n`;
+                    }
                 });
 
-                const summary = response.data.choices[0].message.content;
-                const finalSummary = summary.length > 450 ? summary.substring(0, 447) + "..." : summary;
+                if (chatText.length < 50) return await reply("Chat çok sessiz, özetleyecek bir şey bulamadım.");
 
-                await reply(`📝 @${user}, İşte Özeti: ${finalSummary}`);
-            } catch (error) {
-                console.error("Summary Error:", error.response?.data || error.message);
-                await reply(`❌ @${user}, Özet hazırlanırken bir teknik sorun oluştu.`);
+                // Prompt oluştur
+                const prompt = `Sen çılgın ve eğlenceli bir Twitch/Kick moderatörüsün. Aşağıdaki chat konuşmalarını oku ve neler konuşulduğunu 2-3 cümleyle, esprili bir dille, Türkçe olarak özetle. Dedikoduları kaçırma. Konuşmalar:\n${chatText}`;
+
+                // AI İsteği (Pollinations.ai Text API - Ücretsiz)
+                const aiRes = await axios.get(`https://text.pollinations.ai/${encodeURIComponent(prompt)}`);
+
+                if (aiRes.data) {
+                    const summary = aiRes.data.toString().substring(0, 450); // Chat limiti
+                    await reply(`📋 CHAT ÖZETİ: ${summary}`);
+                } else {
+                    await reply("Özet çıkarırken kalemimin ucu kırıldı. Tekrar dene.");
+                }
+
+            } catch (e) {
+                console.error("AI Summary Error:", e.message);
+                await reply("Beynim yandı, şu an özetleyemiyorum.");
             }
         }
 
