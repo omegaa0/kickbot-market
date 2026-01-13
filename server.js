@@ -546,16 +546,16 @@ let botMasterSwitch = true; // Omegacyr için master switch
 const INITIAL_STOCKS = {
     "APPLE": { price: 5000, trend: 1, history: [], volatility: 0.02, drift: 0.0001 },
     "BITCOIN": { price: 45000, trend: 1, history: [], volatility: 0.08, drift: 0.0005 },
-    "GOLD": { price: 2500, trend: -1, history: [], volatility: 0.05, drift: 0.0001 },
+    "GOLD": { price: 2500, trend: -1, history: [], volatility: 0.12, drift: 0.0003 },
     "SILVER": { price: 850, trend: 1, history: [], volatility: 0.06, drift: 0.0002 },
-    "PLATINUM": { price: 3200, trend: 1, history: [], volatility: 0.04, drift: 0.0001 },
+    "PLATINUM": { price: 3200, trend: 1, history: [], volatility: 0.09, drift: 0.0002 },
     "KICK": { price: 100, trend: 1, history: [], volatility: 0.15, drift: 0.001 },
     "ETHER": { price: 15000, trend: -1, history: [], volatility: 0.06, drift: 0.0004 },
     "TESLA": { price: 7500, trend: 1, history: [], volatility: 0.05, drift: 0.0003 },
     "NVIDIA": { price: 12000, trend: 1, history: [], volatility: 0.04, drift: 0.0006 },
     "GOOGLE": { price: 6200, trend: -1, history: [], volatility: 0.02, drift: 0.0002 },
     "AMAZON": { price: 5800, trend: 1, history: [], volatility: 0.02, drift: 0.0002 },
-    "OMEGA": { price: 1000, trend: 1, history: [], volatility: 0.08, drift: 0.0005 }
+    "OMEGA": { price: 1000, trend: 1, history: [], volatility: 0.15, drift: 0.0008 }
 };
 
 let currentMarketCycle = "NORMAL";
@@ -679,11 +679,11 @@ async function updateGlobalStocks() {
 
         // Döngü Etkileri (Daha belirgin)
         const cycleMultipliers = {
-            "BULLISH": { drift: 0.0004, vol: 1 },    // Güçlü Yükseliş
-            "BEARISH": { drift: -0.0004, vol: 1 },   // Güçlü Düşüş
-            "VOLATILE": { drift: 0, vol: 3.5 },      // Çok Oynak
-            "STAGNANT": { drift: 0, vol: 0.1 },      // Durgun
-            "CRASH": { drift: -0.002, vol: 2 },      // ÇÖKÜŞ
+            "BULLISH": { drift: 0.0006, vol: 1.2 },  // Güçlü Yükseliş
+            "BEARISH": { drift: -0.0008, vol: 1.5 }, // Güçlü Düşüş (Daha sert)
+            "VOLATILE": { drift: 0, vol: 4.0 },      // Çok Oynak
+            "STAGNANT": { drift: 0, vol: 0.2 },      // Durgun (Biraz hareketlendi)
+            "CRASH": { drift: -0.005, vol: 3 },      // ÇÖKÜŞ (Çok sert düşüş)
             "NORMAL": { drift: 0.0001, vol: 1 }      // Normal Hafif Yükseliş
         };
 
@@ -4431,13 +4431,13 @@ app.post('/dashboard-api/data', authDashboard, async (req, res) => {
     let totalMsgs = 0;
     let totalWatch = 0;
     const today = getTodayKey();
+    const bots = ['aloskegangbot', 'botrix'];
 
-    Object.values(users).forEach(u => {
-        // Sadece bu kanala ait verileri topla (Firebase filtresi bazen tümünü dönebilir)
-        if (u.last_channel === channelId) {
-            totalWatch += (u.channel_watch_time?.[channelId] || 0);
-            totalMsgs += (u.channel_m?.[channelId] || 0);
-        }
+    const filteredUsers = Object.entries(users).filter(([k, u]) => !bots.includes(k.toLowerCase()) && u.last_channel === channelId);
+
+    filteredUsers.forEach(([k, u]) => {
+        totalWatch += (u.channel_watch_time?.[channelId] || 0);
+        totalMsgs += (u.channel_m?.[channelId] || 0);
     });
 
     const statsSnap = await db.ref(`channels/${channelId}/stats`).once('value');
@@ -4455,7 +4455,7 @@ app.post('/dashboard-api/data', authDashboard, async (req, res) => {
     const history = historySnap.val() || {};
 
     channelData.stats = {
-        users: Object.keys(users).filter(k => users[k].last_channel === channelId).length,
+        users: filteredUsers.length,
         msgs: totalMsgs,
         watch: totalWatch,
         followers: liveStats.followers || 0,
