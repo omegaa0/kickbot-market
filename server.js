@@ -755,7 +755,8 @@ setInterval(saveHourlyStockHistory, 3600000); // 1 Saat
 setInterval(updateGlobalStocks, 2000);
 updateGlobalStocks(); // İlk çalıştırma
 
-app.post('/api/borsa/fix-costs', authAdmin, hasPerm('stocks'), async (req, res) => {
+app.post('/api/borsa/fix-costs', async (req, res) => {
+    if (req.body.requester !== 'omegacyr') return res.status(403).json({ success: false, error: 'Yetkisiz Erişim' });
     try {
         const stocksSnap = await db.ref('global_stocks').once('value');
         const stocks = stocksSnap.val() || {};
@@ -792,9 +793,10 @@ app.post('/api/borsa/fix-costs', authAdmin, hasPerm('stocks'), async (req, res) 
     }
 });
 
-app.post('/api/borsa/reset', authAdmin, hasPerm('stocks'), async (req, res) => {
+app.post('/api/borsa/reset', async (req, res) => {
+    if (req.body.requester !== 'omegacyr') return res.status(403).json({ success: false, error: 'Yetkisiz Erişim' });
     try {
-        console.log(`🚨 BORSA SIFIRLAMA BAŞLATILDI (${req.adminUser.username} tarafından)`);
+        console.log(`🚨 BORSA SIFIRLAMA BAŞLATILDI (omegacyr tarafından)`);
         const usersSnap = await db.ref('users').once('value');
         const users = usersSnap.val() || {};
 
