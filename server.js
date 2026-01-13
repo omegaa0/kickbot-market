@@ -699,22 +699,32 @@ async function updateGlobalStocks() {
 
         // Döngü Etkileri (Daha belirgin)
         const cycleMultipliers = {
-            "BULLISH": { drift: 0.0006, vol: 1.2 },  // Güçlü Yükseliş
-            "BEARISH": { drift: -0.0008, vol: 1.5 }, // Güçlü Düşüş (Daha sert)
-            "VOLATILE": { drift: 0, vol: 4.0 },      // Çok Oynak
+            "BULLISH": { drift: 0.0002, vol: 1.0 },  // Güçlü Yükseliş: Drift 0.0006 -> 0.0002. Vol 1.2 -> 1.0 (Daha sakin yükseliş)
+            "BEARISH": { drift: -0.0008, vol: 1.5 }, // Düşüş aynı kalsın (hızlı düşsün)
+            "VOLATILE": { drift: 0, vol: 3.0 },      // Vol 4.0 -> 3.0
             "STAGNANT": { drift: 0, vol: 0.2 },      // Durgun (Biraz hareketlendi)
             "CRASH": { drift: -0.005, vol: 3 },      // ÇÖKÜŞ (Çok sert düşüş)
-            "NORMAL": { drift: 0.0001, vol: 1 }      // Normal Hafif Yükseliş
+            "NORMAL": { drift: 0.00005, vol: 0.8 }   // Normal: Drift 0.0001 -> 0.00005 (Çok hafif yükseliş)
         };
 
         const effects = cycleMultipliers[currentMarketCycle] || cycleMultipliers["NORMAL"];
 
         for (const [code, data] of Object.entries(stocks)) {
-            const baseData = INITIAL_STOCKS[code] || { volatility: 0.02, drift: 0.0001 };
+            const baseData = INITIAL_STOCKS[code] || { price: 100, volatility: 0.02, drift: 0.0001 };
             const oldPrice = data.price || 100;
+            const startPrice = baseData.price || 100; // Başlangıç fiyatı referansı
 
             let vol = baseData.volatility * effects.vol;
             let drift = baseData.drift + effects.drift;
+
+            // MEAN REVERSION (Ortalamaya Dönüş Etkisi) - YENİ
+            // Eğer fiyat başlangıç fiyatının 3 katına çıktıysa, düşüş baskısı uygula.
+            // Eğer fiyat başlangıç fiyatının 0.3 katına indiyse, yükseliş baskısı uygula.
+            if (oldPrice > startPrice * 3) {
+                drift -= 0.0005; // Yükselişi frenle
+            } else if (oldPrice < startPrice * 0.3) {
+                drift += 0.0005; // Düşüşü frenle
+            }
 
             // Brownian Motion (Hassasiyet artırıldı: 0.02 -> 0.1)
             const epsilon = Math.random() * 2 - 1;
@@ -5717,10 +5727,10 @@ app.get('/api/borsa', async (req, res) => {
     }
 });
 
-app.post('/api/borsa/reset', async (req, res) => {
-    const { requester } = req.body;
-    if (requester !== 'omegacyr') {
-        return res.status(403).json({ success: false, error: 'Yetkisiz erişim' });
+app.post('/api/borsa/reset', authAdmin, async (req, res) => {
+    // Only 'omegacyr' (Master Admin) can reset the market
+    if (!req.adminUser || req.adminUser.username !== 'omegacyr') {
+        return res.status(403).json({ success: false, error: 'Bu işlem için MASTER yetkisi gerekiyor.' });
     }
 
     try {
