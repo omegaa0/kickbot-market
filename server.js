@@ -472,6 +472,58 @@ async function registerAllWebhooks() {
     }
 }
 
+// --- MIDDLEWARE DEFINITIONS ---
+const ADMIN_KEY_PRE = process.env.ADMIN_KEY || "";
+
+const authAdmin = async (req, res, next) => {
+    const key = req.headers['authorization'] || req.body.key;
+    if (!key) return res.status(403).json({ success: false, error: 'Yetkisiz Erişim' });
+
+    // Multi-user kontrolü (format: username:password)
+    if (key.includes(':')) {
+        const parts = key.split(':');
+        const username = parts[0].trim().toLowerCase();
+        const password = parts.slice(1).join(':').trim(); // Şifrede : varsa koru
+
+        const userSnap = await db.ref(`admin_users/${username}`).once('value');
+        const userData = userSnap.val();
+        if (userData && userData.password === password) {
+            req.adminUser = { username, ...userData };
+
+            // Omegacyr için her zaman master yetkileri (veritabanında olmasa bile)
+            if (username === 'omegacyr') {
+                req.adminUser.role = 'master';
+                req.adminUser.permissions = {
+                    channels: true, users: true, troll: true, logs: true,
+                    quests: true, stocks: true, memory: true, global: true, admins: true
+                };
+            }
+
+            return next();
+        }
+    } else if (key === ADMIN_KEY_PRE && ADMIN_KEY_PRE !== "") {
+        // Eski usul şifre ile girilirse MASTER kabul et (omegacyr)
+        req.adminUser = {
+            username: 'omegacyr',
+            role: 'master',
+            permissions: {
+                channels: true, users: true, troll: true, logs: true,
+                quests: true, stocks: true, memory: true, global: true, admins: true
+            }
+        };
+        return next();
+    }
+
+    res.status(403).json({ success: false, error: 'Yetkisiz Erişim' });
+};
+
+// Yetki kontrolü için yardımcı middleware
+const hasPerm = (p) => (req, res, next) => {
+    if (req.adminUser?.username === 'omegacyr') return next();
+    if (req.adminUser?.permissions && req.adminUser.permissions[p]) return next();
+    res.status(403).json({ success: false, error: `Bu işlem için yetkiniz yok (${p}).` });
+};
+
 // GLOBAL STATES
 const activeDuels = {};
 const channelHeists = {};
@@ -3884,55 +3936,6 @@ const ADMIN_KEY = process.env.ADMIN_KEY || "";
 let active2FACodes = {};
 
 app.get('/admin', (req, res) => { res.sendFile(path.join(__dirname, 'admin.html')); });
-
-const authAdmin = async (req, res, next) => {
-    const key = req.headers['authorization'] || req.body.key;
-    if (!key) return res.status(403).json({ success: false, error: 'Yetkisiz Erişim' });
-
-    // Multi-user kontrolü (format: username:password)
-    if (key.includes(':')) {
-        const parts = key.split(':');
-        const username = parts[0].trim().toLowerCase();
-        const password = parts.slice(1).join(':').trim(); // Şifrede : varsa koru
-
-        const userSnap = await db.ref(`admin_users/${username}`).once('value');
-        const userData = userSnap.val();
-        if (userData && userData.password === password) {
-            req.adminUser = { username, ...userData };
-
-            // Omegacyr için her zaman master yetkileri (veritabanında olmasa bile)
-            if (username === 'omegacyr') {
-                req.adminUser.role = 'master';
-                req.adminUser.permissions = {
-                    channels: true, users: true, troll: true, logs: true,
-                    quests: true, stocks: true, memory: true, global: true, admins: true
-                };
-            }
-
-            return next();
-        }
-    } else if (key === ADMIN_KEY && ADMIN_KEY !== "") {
-        // Eski usul şifre ile girilirse MASTER kabul et (omegacyr)
-        req.adminUser = {
-            username: 'omegacyr',
-            role: 'master',
-            permissions: {
-                channels: true, users: true, troll: true, logs: true,
-                quests: true, stocks: true, memory: true, global: true, admins: true
-            }
-        };
-        return next();
-    }
-
-    res.status(403).json({ success: false, error: 'Yetkisiz Erişim' });
-};
-
-// Yetki kontrolü için yardımcı middleware
-const hasPerm = (p) => (req, res, next) => {
-    if (req.adminUser?.username === 'omegacyr') return next();
-    if (req.adminUser?.permissions && req.adminUser.permissions[p]) return next();
-    res.status(403).json({ success: false, error: `Bu işlem için yetkiniz yok (${p}).` });
-};
 
 // STREAMER DASHBOARD AUTH
 const authDashboard = async (req, res, next) => {
