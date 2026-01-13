@@ -3623,7 +3623,7 @@ EK TALİMAT: ${aiInst}`;
                 timestamp: Date.now(),
                 broadcasterId: broadcasterId
             });
-            await reply(`🎵 @${user}, ${soundTrigger} sesi çalınıyor! (-${soundCost.toLocaleString()} 💰)`);
+            await reply(`🎵 @${user}, !ses ${soundTrigger} komutu ile ses çaldı! (-${soundCost.toLocaleString()} 💰)`);
         }
 
         else if ((lowMsg === '!sr' || lowMsg.startsWith('!sr ') || lowMsg === '!şarkı' || lowMsg.startsWith('!şarkı ')) && isEnabled('sr')) {
