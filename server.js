@@ -1441,6 +1441,7 @@ async function fetchKickGraphQL(slug) {
         });
         return response.data?.data?.channel;
     } catch (e) {
+        console.error(`Kick GraphQL Error (${slug}):`, e.message);
         return null;
     }
 }
@@ -3998,9 +3999,13 @@ Maksimum 3-4 cümlelik, samimi ve akıcı bir özet hazırla.
                 await userRef.transaction(u => {
                     if (u) {
                         if (!u.is_infinite) u.balance -= totalCost;
+
                         if (!u.stocks) u.stocks = {};
-                        // Küsüratlı miktarı ekle (Örn: 0.005)
                         u.stocks[code] = (u.stocks[code] || 0) + amount;
+
+                        // Maliyet takibi (Ortalama maliyet için)
+                        if (!u.stock_costs) u.stock_costs = {};
+                        u.stock_costs[code] = (u.stock_costs[code] || 0) + totalCost;
                     }
                     return u;
                 });
@@ -4020,9 +4025,21 @@ Maksimum 3-4 cümlelik, samimi ve akıcı bir özet hazırla.
                 await userRef.transaction(u => {
                     if (u) {
                         u.balance = (u.balance || 0) + totalGain;
+
+                        // Maliyet düşme (Ortalamayı korumak için)
+                        if (u.stocks[code] && u.stock_costs && u.stock_costs[code]) {
+                            const avgCost = u.stock_costs[code] / u.stocks[code];
+                            const reducedCost = avgCost * amount;
+                            u.stock_costs[code] -= reducedCost;
+                            if (u.stock_costs[code] < 0) u.stock_costs[code] = 0;
+                        }
+
                         u.stocks[code] -= amount;
                         // Float hassasiyeti nedeniyle 0'dan çok küçükse temizle
-                        if (u.stocks[code] <= 0.00001) delete u.stocks[code];
+                        if (u.stocks[code] <= 0.00001) {
+                            delete u.stocks[code];
+                            if (u.stock_costs) delete u.stock_costs[code];
+                        }
                     }
                     return u;
                 });
@@ -5411,5 +5428,5 @@ app.listen(PORT, () => {
         syncChannelStats();
     }, 5000);
 
-    setInterval(syncChannelStats, 600000);
+    setInterval(syncChannelStats, 60000);
 });
