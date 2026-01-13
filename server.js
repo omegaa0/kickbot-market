@@ -601,22 +601,28 @@ async function updateGlobalStocks() {
         // Meta verilerini kaydet
         await metaRef.set({ cycle: currentMarketCycle, duration: cycleDuration });
 
+        // Döngü Etkileri (Daha belirgin)
+        const cycleMultipliers = {
+            "BULLISH": { drift: 0.0004, vol: 1 },    // Güçlü Yükseliş
+            "BEARISH": { drift: -0.0004, vol: 1 },   // Güçlü Düşüş
+            "VOLATILE": { drift: 0, vol: 3.5 },      // Çok Oynak
+            "STAGNANT": { drift: 0, vol: 0.1 },      // Durgun
+            "CRASH": { drift: -0.002, vol: 2 },      // ÇÖKÜŞ
+            "NORMAL": { drift: 0.0001, vol: 1 }      // Normal Hafif Yükseliş
+        };
+
+        const effects = cycleMultipliers[currentMarketCycle] || cycleMultipliers["NORMAL"];
+
         for (const [code, data] of Object.entries(stocks)) {
             const baseData = INITIAL_STOCKS[code] || { volatility: 0.02, drift: 0.0001 };
             const oldPrice = data.price || 100;
 
-            let vol = baseData.volatility;
-            let drift = baseData.drift;
+            let vol = baseData.volatility * effects.vol;
+            let drift = baseData.drift + effects.drift;
 
-            // Döngüye göre ayarla (Daha zor ve yavaş piyasa)
-            if (currentMarketCycle === "BULLISH") drift += 0.0001; // 0.0005 idi, düşürüldü
-            if (currentMarketCycle === "BEARISH") drift -= 0.0001; // 0.0005 idi, düşürüldü
-            if (currentMarketCycle === "VOLATILE") vol *= 1.2; // 1.5 idi, düşürüldü
-            if (currentMarketCycle === "STAGNANT") { vol *= 0.1; drift = 0; }
-
-            // Brownian Motion (Daha küçük hareketler)
+            // Brownian Motion
             const epsilon = Math.random() * 2 - 1;
-            const changePercent = (drift * 0.5) + (vol * epsilon * 0.02); // Çarpan 0.1 den 0.02 ye çekildi
+            const changePercent = (drift * 0.5) + (vol * epsilon * 0.02);
 
             let newPrice = Math.round(oldPrice * (1 + changePercent));
 
@@ -673,14 +679,9 @@ setInterval(saveHourlyStockHistory, 3600000); // 1 Saat
 setInterval(updateGlobalStocks, 2000);
 updateGlobalStocks(); // İlk çalıştırma
 
-app.post('/api/borsa/reset', async (req, res) => {
+app.post('/api/borsa/reset', authAdmin, hasPerm('stocks'), async (req, res) => {
     try {
-        const { requester } = req.body;
-        if (requester !== 'omegacyr') {
-            return res.status(403).json({ success: false, error: "Yetkisiz erişim!" });
-        }
-
-        console.log("🚨 BORSA SIFIRLAMA BAŞLATILDI (Omegacyr tarafından)");
+        console.log(`🚨 BORSA SIFIRLAMA BAŞLATILDI (${req.adminUser.username} tarafından)`);
         const usersSnap = await db.ref('users').once('value');
         const users = usersSnap.val() || {};
 
@@ -702,6 +703,22 @@ app.post('/api/borsa/reset', async (req, res) => {
     }
 });
 
+app.post('/admin-api/stocks/cycle', authAdmin, hasPerm('stocks'), async (req, res) => {
+    try {
+        const { cycle } = req.body;
+        // Geçerli döngüler: BULLISH, BEARISH, VOLATILE, STAGNANT, NORMAL, CRASH
+        currentMarketCycle = cycle;
+        cycleDuration = 600; // Manual set edildiğinde 20 dakika (1200 / 2sn = 600 tik) boyunca sürsün
+
+        await db.ref('market_meta').update({ cycle: currentMarketCycle, duration: cycleDuration });
+        console.log(`🚨 Admin tarafından piyasa döngüsü değiştirildi: ${cycle}`);
+
+        res.json({ success: true, message: `Piyasa modu ${cycle} olarak ayarlandı.` });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 // HARİTA PROXY (Bağlantı Sorunlarını Aşmak İçin)
 app.get('/api/map/turkey', (req, res) => {
     const mapPath = path.join(__dirname, 'turkey_map_local.svg');
@@ -714,14 +731,9 @@ app.get('/api/map/turkey', (req, res) => {
     }
 });
 
-app.post('/api/emlak/reset', async (req, res) => {
+app.post('/api/emlak/reset', authAdmin, hasPerm('stocks'), async (req, res) => {
     try {
-        const { requester } = req.body;
-        if (requester !== 'omegacyr') {
-            return res.status(403).json({ success: false, error: "Yetkisiz erişim!" });
-        }
-
-        console.log("🚨 EMLAK PİYASASI SIFIRLAMA BAŞLATILDI (Omegacyr tarafından)");
+        console.log(`🚨 EMLAK PİYASASI SIFIRLAMA BAŞLATILDI (${req.adminUser.username} tarafından)`);
 
         // 1. Tüm şehirlerdeki mülk pazarını sil
         await db.ref('real_estate_market').remove();
@@ -3202,7 +3214,8 @@ EK TALİMAT: ${aiInst}`;
 
         // --- AI CHAT ÖZETİ ---
         else if (isEnabled('ai') && lowMsg === '!ozet') {
-            if (!isAuthorized) return await reply(`🤫 @${user}, Bu komut sadece yetkililere özeldir! ✨`);
+            const isSub = payload.sender?.identity?.badges?.some(b => b.type === 'subscriber' || b.type === 'broadcaster' || b.type === 'moderator' || b.type === 'founder') || user.toLowerCase() === "omegacyr";
+            if (!isSub) return await reply(`🤫 @${user}, Bu komut sadece ABONELERE özeldir! ✨`);
 
             const GROK_KEY = process.env.GROK_API_KEY;
             if (!GROK_KEY) return await reply(`⚠️ @${user}, AI sistemi şu an yapılandırılmamış.`);
@@ -4360,9 +4373,11 @@ app.post('/api/leaderboard', async (req, res) => {
 
         const users = snap.val() || {};
         const sorted = Object.entries(users)
-            .sort((a, b) => (b[1].balance || 0) - (a[1].balance || 0))
-            .slice(0, 10)
-            .map(([name, data]) => ({ name, balance: data.balance || 0 }));
+            .map(([name, data]) => ({ name, balance: data.balance || 0 }))
+            .filter(u => u.name.toLowerCase() !== 'aloskegangbot') // BOTU GİZLE
+            .sort((a, b) => (b.balance || 0) - (a.balance || 0))
+            .slice(0, 25); // İLK 25
+
         res.json(sorted);
     } catch (e) {
         console.error("Leaderboard Error:", e.message);

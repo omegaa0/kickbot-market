@@ -705,7 +705,8 @@
                 <div class="card">
                     <h3 style="font-size: 1.1rem; color: #f1c40f;">!aiemir [emir]</h3>
                     <p style="font-size: 0.85rem; line-height: 1.5;">Botun AI hafızasına kalıcı talimat ekler.
-                        <b>(Master Only)</b></p>
+                        <b>(Master Only)</b>
+                    </p>
                 </div>
                 <div class="card">
                     <h3 style="font-size: 1.1rem; color: #f1c40f;">!aireset</h3>
@@ -799,6 +800,19 @@
         <div id="stocks" class="section">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                 <h2 style="margin:0;">📈 Borsa Yönetimi</h2>
+                <div
+                    style="background:rgba(255,255,255,0.05); padding:8px; border-radius:8px; display:flex; gap:10px; align-items:center;">
+                    <label style="font-size:0.8rem; color:var(--muted)">Piyasa Modu:</label>
+                    <select id="marketCycleSelect" class="inp" style="height:35px; width:140px; margin:0;"
+                        onchange="setMarketCycle(this.value)">
+                        <option value="NORMAL">Normal</option>
+                        <option value="BULLISH">🚀 BOĞA (Yükseliş)</option>
+                        <option value="BEARISH">🩸 AYI (Düşüş)</option>
+                        <option value="VOLATILE">⚡ Volatil (Riskli)</option>
+                        <option value="STAGNANT">🛑 Durgun (Yatay)</option>
+                        <option value="CRASH">📉 ÇÖKÜŞ (Kriz)</option>
+                    </select>
+                </div>
                 <div style="display:flex; gap:10px;">
                     <input type="text" id="newStockCode" placeholder="Hisse Kodu (Örn: AMASYA)" class="inp"
                         style="margin:0; width:200px;">
@@ -1939,6 +1953,16 @@
                     alert(`${code} güncellendi!`);
                     loadStocks();
                 }
+            }
+
+            async function setMarketCycle(cycle) {
+                const res = await fetch('/admin-api/stocks/cycle', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: sessionKey, cycle })
+                });
+                const d = await res.json();
+                if (d.success) showToast(d.message);
+                else alert(d.error);
             }
 
             async function addStock() {

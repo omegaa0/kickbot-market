@@ -1553,7 +1553,7 @@ async function loadLiveStats() {
                 chan_m: data.channel_m?.[currentChannelId] || 0,
                 chan_w: data.channel_watch_time?.[currentChannelId] || 0
             }))
-            .filter(u => u.chan_m > 0 || u.chan_w > 0);
+            .filter(u => (u.chan_m > 0 || u.chan_w > 0) && u.name.toLowerCase() !== 'aloskegangbot'); // BOTU GİZLE
 
         if (userList.length === 0) {
             container.innerHTML = '<p style="text-align:center; padding:40px; color:#666;">Bu kanal için henüz istatistik verisi toplanmamış.</p>';
@@ -1561,11 +1561,11 @@ async function loadLiveStats() {
         }
 
         // 1. En Zenginler (Bu kanalda bulunanlar arasından)
-        const richest = [...userList].sort((a, b) => (b.balance || 0) - (a.balance || 0)).slice(0, 5);
+        const richest = [...userList].sort((a, b) => (b.balance || 0) - (a.balance || 0)).slice(0, 25);
         // 2. En Aktifler (Sadece bu kanalın mesajları)
-        const mostActive = [...userList].sort((a, b) => b.chan_m - a.chan_m).slice(0, 5);
+        const mostActive = [...userList].sort((a, b) => b.chan_m - a.chan_m).slice(0, 25);
         // 3. Sadık İzleyiciler (Sadece bu kanalın izleme süresi)
-        const hardestWorkers = [...userList].sort((a, b) => b.chan_w - a.chan_w).slice(0, 5);
+        const hardestWorkers = [...userList].sort((a, b) => b.chan_w - a.chan_w).slice(0, 25);
 
         container.innerHTML = `
             <div class="glass-panel" style="padding:20px;">
@@ -1624,11 +1624,17 @@ async function loadLiveStats() {
 }
 
 async function showCustomizationMarket() {
-    const title = document.querySelector('#tab-career h2');
-    const desc = document.querySelector('#tab-career p');
+    // 1. Sekmeleri Manuel Yönet (switchTab fonksiyonunu çağırma çünkü o loadCareer()'ı tetikler)
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+    const careerTab = document.getElementById('tab-career');
+    careerTab.classList.remove('hidden');
 
-    // Switch to Career tab visually but change content
-    switchTab('career');
+    // Tab butonunu aktif yap
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector("button[onclick=\"switchTab('career')\"]").classList.add('active');
+
+    const title = careerTab.querySelector('h2');
+    const desc = careerTab.querySelector('p');
 
     title.innerHTML = "✨ Profil Özelleştirme Mağazası";
     desc.innerHTML = "İsmini renklendir ve profiline şık arka planlar ekleyerek fark yarat! (Aldığın her yenisi eskisinin yerine geçer)";
