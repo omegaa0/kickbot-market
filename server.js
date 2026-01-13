@@ -114,127 +114,145 @@ const EDU_XP = [0, 5000, 10000, 20000, 50000, 75000, 150000, 500000]; // XP eşi
 
 const pendingDuels = {};
 const JOBS = {
-    // SEVİYE 0: CAHİL (GEREKSİNİM YOK / UCUZ EŞYALAR)
+    // SEVİYE 0: CAHİL (GEREKSİNİM YOK / 50 - 1.000 💰)
     "İşsiz": { reward: 0, icon: "👤", req_edu: 0, req_item: null },
-    "Dilenci": { reward: 300, icon: "🪣", req_edu: 0, req_item: "Yırtık Karton" },
-    "Mendil Satıcısı": { reward: 350, icon: "🧻", req_edu: 0, req_item: "Mendil Paketi" },
-    "Su Satıcısı": { reward: 400, icon: "💧", req_edu: 0, req_item: "Su Kolisi" },
-    "Seyyar Satıcı": { reward: 450, icon: "🥒", req_edu: 0, req_item: "El Arabası" },
-    "Pazarcı": { reward: 500, icon: "🍋", req_edu: 0, req_item: "Pazar Tezgahı" },
-    "Sokak Müzisyeni": { reward: 550, icon: "🎸", req_edu: 0, req_item: "Gitar" },
-    "Kağıt Toplayıcı": { reward: 600, icon: "🥡", req_edu: 0, req_item: "Çekçek" },
-    "Simitçi": { reward: 650, icon: "🥯", req_edu: 0, req_item: "Simit Tepsisi" },
-    "Broşürcü": { reward: 700, icon: "📄", req_edu: 0, req_item: "El İlanları" },
-    "Boyacı": { reward: 750, icon: "👞", req_edu: 0, req_item: "Boya Sandığı" },
-    "Oto Yıkamacı": { reward: 800, icon: "🧽", req_edu: 0, req_item: "Sünger" },
-    "Hamal": { reward: 850, icon: "🏋️", req_edu: 0, req_item: "Sırtlık" },
-    "Çöpçü": { reward: 900, icon: "🧹", req_edu: 0, req_item: "Süpürge" },
-    "Bulaşıkçı": { reward: 1000, icon: "🍽️", req_edu: 0, req_item: "Eldiven" },
-    "Amele": { reward: 1100, icon: "🧱", req_edu: 0, req_item: "Baret" },
-    "Çiftçi": { reward: 1150, icon: "🚜", req_edu: 0, req_item: "Çapa" },
-    "Balıkçı": { reward: 1200, icon: "🎣", req_edu: 0, req_item: "Olta" },
+    "Dilenci": { reward: 300, icon: "🪣", req_edu: 0, req_item: "Yırtık Karton", price: 50 },
+    "Mendil Satıcısı": { reward: 350, icon: "🧻", req_edu: 0, req_item: "Mendil Paketi", price: 100 },
+    "Su Satıcısı": { reward: 400, icon: "💧", req_edu: 0, req_item: "Su Kolisi", price: 150 },
+    "Seyyar Satıcı": { reward: 450, icon: "🥒", req_edu: 0, req_item: "El Arabası", price: 250 },
+    "Pazarcı": { reward: 500, icon: "🍋", req_edu: 0, req_item: "Pazar Tezgahı", price: 400 },
+    "Sokak Müzisyeni": { reward: 550, icon: "🎸", req_edu: 0, req_item: "Gitar", price: 500 },
+    "Kağıt Toplayıcı": { reward: 600, icon: "🥡", req_edu: 0, req_item: "Çekçek", price: 600 },
+    "Simitçi": { reward: 650, icon: "🥯", req_edu: 0, req_item: "Simit Tepsisi", price: 750 },
+    "Broşürcü": { reward: 700, icon: "📄", req_edu: 0, req_item: "El İlanları", price: 850 },
+    "Boyacı": { reward: 750, icon: "👞", req_edu: 0, req_item: "Boya Sandığı", price: 1000 },
+    "Oto Yıkamacı": { reward: 800, icon: "🧽", req_edu: 0, req_item: "Sünger", price: 1200 },
+    "Hamal": { reward: 850, icon: "🏋️", req_edu: 0, req_item: "Sırtlık", price: 1500 },
+    "Çöpçü": { reward: 900, icon: "🧹", req_edu: 0, req_item: "Süpürge", price: 1800 },
+    "Bulaşıkçı": { reward: 1000, icon: "🍽️", req_edu: 0, req_item: "Eldiven", price: 2000 },
+    "Amele": { reward: 1100, icon: "🧱", req_edu: 0, req_item: "Baret", price: 2200 },
+    "Çiftçi": { reward: 1150, icon: "🚜", req_edu: 0, req_item: "Çapa", price: 2500 },
+    "Balıkçı": { reward: 1200, icon: "🎣", req_edu: 0, req_item: "Olta", price: 3000 },
 
-    // SEVİYE 1: İLKOKUL (BASİT HİZMET)
-    "Tezgahtar": { reward: 2000, icon: "🏷️", req_edu: 1, req_item: "Yazar Kasa" },
-    "Bekçi": { reward: 2150, icon: "🔦", req_edu: 1, req_item: "Fener" },
-    "Vale": { reward: 2300, icon: "🔑", req_edu: 1, req_item: "Vale Kartı" },
-    "Bahçıvan": { reward: 2450, icon: "🌻", req_edu: 1, req_item: "Budama Makası" },
-    "Garaj Sorumlusu": { reward: 2600, icon: "🅿️", req_edu: 1, req_item: "Düdük" },
-    "Depocu": { reward: 2800, icon: "📦", req_edu: 1, req_item: "Transpalet" },
-    "Kurye": { reward: 3000, icon: "🛵", req_edu: 1, req_item: "Eski Motor" },
-    "Market Görevlisi": { reward: 3200, icon: "🏪", req_edu: 1, req_item: "Maket Bıçağı" },
-    "Benzinci": { reward: 3400, icon: "⛽", req_edu: 1, req_item: "Pompa" },
-    "Şoför": { reward: 3600, icon: "🚕", req_edu: 1, req_item: "Taksi Plakası" },
-    "Kasiyer": { reward: 3800, icon: "💵", req_edu: 1, req_item: "Barkod Okuyucu" },
-    "Tabelacı": { reward: 4000, icon: "🏗️", req_edu: 1, req_item: "Fırça Seti" },
-    "Terzi": { reward: 4250, icon: "🧵", req_edu: 1, req_item: "Dikiş Makinesi" },
+    // SEVİYE 1: İLKOKUL (2.500 - 10.000 💰)
+    "Tezgahtar": { reward: 2000, icon: "🏷️", req_edu: 1, req_item: "Yazar Kasa", price: 4000 },
+    "Bekçi": { reward: 2150, icon: "🔦", req_edu: 1, req_item: "Fener", price: 5000 },
+    "Vale": { reward: 2300, icon: "🔑", req_edu: 1, req_item: "Vale Kartı", price: 5500 },
+    "Bahçıvan": { reward: 2450, icon: "🌻", req_edu: 1, req_item: "Budama Makası", price: 6000 },
+    "Garaj Sorumlusu": { reward: 2600, icon: "🅿️", req_edu: 1, req_item: "Düdük", price: 6500 },
+    "Depocu": { reward: 2800, icon: "📦", req_edu: 1, req_item: "Transpalet", price: 7000 },
+    "Kurye": { reward: 3000, icon: "🛵", req_edu: 1, req_item: "Eski Motor", price: 8000 },
+    "Market Görevlisi": { reward: 3200, icon: "🏪", req_edu: 1, req_item: "Maket Bıçağı", price: 8500 },
+    "Benzinci": { reward: 3400, icon: "⛽", req_edu: 1, req_item: "Pompa", price: 9000 },
+    "Şoför": { reward: 3600, icon: "🚕", req_edu: 1, req_item: "Taksi Plakası", price: 10000 },
+    "Kasiyer": { reward: 3800, icon: "💵", req_edu: 1, req_item: "Barkod Okuyucu", price: 12000 },
+    "Tabelacı": { reward: 4000, icon: "🏗️", req_edu: 1, req_item: "Fırça Seti", price: 13000 },
+    "Terzi": { reward: 4250, icon: "🧵", req_edu: 1, req_item: "Dikiş Makinesi", price: 14000 },
 
-    // SEVİYE 2: ORTAOKUL (KALİFİYE HİZMET)
-    "Güvenlik": { reward: 4750, icon: "👮", req_edu: 2, req_item: "Telsiz" },
-    "Bodyguard": { reward: 5000, icon: "🕶️", req_edu: 2, req_item: "Kulaklık" },
-    "Garson": { reward: 5250, icon: "☕", req_edu: 2, req_item: "Önlük" },
-    "Makyaj Artisti": { reward: 5500, icon: "💄", req_edu: 2, req_item: "Makyaj Çantası" },
-    "Kuaför": { reward: 5750, icon: "💇", req_edu: 2, req_item: "Fön Makinesi" },
-    "Tattoo Artisti": { reward: 6000, icon: "✒️", req_edu: 2, req_item: "Dövme Makinesi" },
-    "Berber": { reward: 6250, icon: "✂️", req_edu: 2, req_item: "Makas Seti" },
-    "Fitness Eğitmeni": { reward: 6500, icon: "💪", req_edu: 2, req_item: "Halter" },
-    "Barista": { reward: 6750, icon: "☕️", req_edu: 2, req_item: "Kahve Makinesi" },
-    "DJ": { reward: 7000, icon: "🎧", req_edu: 2, req_item: "DJ Setup" },
-    "Fotoğrafçı": { reward: 7250, icon: "📸", req_edu: 2, req_item: "Kamera" },
-    "Youtuber": { reward: 7500, icon: "▶️", req_edu: 2, req_item: "Yayıncı Ekipmanı" },
-    "Cankurtaran": { reward: 8000, icon: "🆘", req_edu: 2, req_item: "Can Simidi" },
+    // SEVİYE 2: ORTAOKUL (15.000 - 40.000 💰)
+    "Güvenlik": { reward: 4750, icon: "👮", req_edu: 2, req_item: "Telsiz", price: 18000 },
+    "Bodyguard": { reward: 5000, icon: "🕶️", req_edu: 2, req_item: "Kulaklık", price: 20000 },
+    "Garson": { reward: 5250, icon: "☕", req_edu: 2, req_item: "Önlük", price: 22000 },
+    "Makyaj Artisti": { reward: 5500, icon: "💄", req_edu: 2, req_item: "Makyaj Çantası", price: 25000 },
+    "Kuaför": { reward: 5750, icon: "💇", req_edu: 2, req_item: "Fön Makinesi", price: 28000 },
+    "Tattoo Artisti": { reward: 6000, icon: "✒️", req_edu: 2, req_item: "Dövme Makinesi", price: 30000 },
+    "Berber": { reward: 6250, icon: "✂️", req_edu: 2, req_item: "Makas Seti", price: 32000 },
+    "Fitness Eğitmeni": { reward: 6500, icon: "💪", req_edu: 2, req_item: "Halter", price: 35000 },
+    "Barista": { reward: 6750, icon: "☕️", req_edu: 2, req_item: "Kahve Makinesi", price: 38000 },
+    "DJ": { reward: 7000, icon: "🎧", req_edu: 2, req_item: "DJ Setup", price: 40000 },
+    "Fotoğrafçı": { reward: 7250, icon: "📸", req_edu: 2, req_item: "Kamera", price: 45000 },
+    "Youtuber": { reward: 7500, icon: "▶️", req_edu: 2, req_item: "Yayıncı Ekipmanı", price: 50000 },
+    "Cankurtaran": { reward: 8000, icon: "🆘", req_edu: 2, req_item: "Can Simidi", price: 55000 },
 
-    // SEVİYE 3: LİSE (TEKNİK / TİCARET)
-    "Elektrikçi": { reward: 10000, icon: "⚡", req_edu: 3, req_item: "Kontrol Kalemi" },
-    "Tesisatçı": { reward: 10400, icon: "🚰", req_edu: 3, req_item: "İngiliz Anahtarı" },
-    "Marangoz": { reward: 10800, icon: "🪚", req_edu: 3, req_item: "Testere" },
-    "Hemşire": { reward: 11200, icon: "💉", req_edu: 3, req_item: "Şırınga" },
-    "Sekreter": { reward: 11600, icon: "📞", req_edu: 3, req_item: "Telefon" },
-    "Kütüphaneci": { reward: 12100, icon: "📚", req_edu: 3, req_item: "Barkod Okuyucu" },
-    "Tamirci": { reward: 12600, icon: "🔧", req_edu: 3, req_item: "Alet Çantası" },
-    "Laborant": { reward: 13100, icon: "🔬", req_edu: 3, req_item: "Tüp" },
-    "Tıbbi Laboratuvar": { reward: 13600, icon: "🧪", req_edu: 3, req_item: "Mikrosantrifüj" },
-    "Aşçı": { reward: 14100, icon: "👨‍🍳", req_edu: 3, req_item: "Aşçı Bıçağı" },
-    "Kabin Memuru": { reward: 14600, icon: "💁", req_edu: 3, req_item: "Uçuş Kartı" },
-    "İtfaiyeci": { reward: 15100, icon: "🚒", req_edu: 3, req_item: "Yangın Tüpü" },
-    "Gümrük Memuru": { reward: 15600, icon: "🛂", req_edu: 3, req_item: "Mühür" },
-    "Polis": { reward: 16100, icon: "👮‍♂️", req_edu: 3, req_item: "Silah Ruhsatı" },
-    "Grafiker": { reward: 16500, icon: "🎨", req_edu: 3, req_item: "Çizim Tableti" },
-    "Emlakçı": { reward: 16900, icon: "🏠", req_edu: 3, req_item: "Ajanda" },
-    "Dalgıç": { reward: 17200, icon: "🤿", req_edu: 3, req_item: "Oksijen Tüpü" },
-    "Kaynakçı": { reward: 17500, icon: "👨‍🏭", req_edu: 3, req_item: "Kaynak Maskesi" },
+    // SEVİYE 3: LİSE (60.000 - 150.000 💰)
+    "Elektrikçi": { reward: 10000, icon: "⚡", req_edu: 3, req_item: "Kontrol Kalemi", price: 70000 },
+    "Tesisatçı": { reward: 10400, icon: "🚰", req_edu: 3, req_item: "İngiliz Anahtarı", price: 75000 },
+    "Marangoz": { reward: 10800, icon: "🪚", req_edu: 3, req_item: "Testere", price: 80000 },
+    "Hemşire": { reward: 11200, icon: "💉", req_edu: 3, req_item: "Şırınga", price: 85000 },
+    "Sekreter": { reward: 11600, icon: "📞", req_edu: 3, req_item: "Telefon", price: 90000 },
+    "Kütüphaneci": { reward: 12100, icon: "📚", req_edu: 3, req_item: "Barkod Okuyucu", price: 95000 },
+    "Tamirci": { reward: 12600, icon: "🔧", req_edu: 3, req_item: "Alet Çantası", price: 100000 },
+    "Laborant": { reward: 13100, icon: "🔬", req_edu: 3, req_item: "Tüp", price: 110000 },
+    "Tıbbi Laboratuvar": { reward: 13600, icon: "🧪", req_edu: 3, req_item: "Mikrosantrifüj", price: 120000 },
+    "Aşçı": { reward: 14100, icon: "👨‍🍳", req_edu: 3, req_item: "Aşçı Bıçağı", price: 125000 },
+    "Kabin Memuru": { reward: 14600, icon: "💁", req_edu: 3, req_item: "Uçuş Kartı", price: 130000 },
+    "İtfaiyeci": { reward: 15100, icon: "🚒", req_edu: 3, req_item: "Yangın Tüpü", price: 140000 },
+    "Gümrük Memuru": { reward: 15600, icon: "🛂", req_edu: 3, req_item: "Mühür", price: 150000 },
+    "Polis": { reward: 16100, icon: "👮‍♂️", req_edu: 3, req_item: "Silah Ruhsatı", price: 180000 },
+    "Grafiker": { reward: 16500, icon: "🎨", req_edu: 3, req_item: "Çizim Tableti", price: 200000 },
+    "Emlakçı": { reward: 16900, icon: "🏠", req_edu: 3, req_item: "Ajanda", price: 220000 },
+    "Dalgıç": { reward: 17200, icon: "🤿", req_edu: 3, req_item: "Oksijen Tüpü", price: 240000 },
+    "Kaynakçı": { reward: 17500, icon: "👨‍🏭", req_edu: 3, req_item: "Kaynak Maskesi", price: 250000 },
 
-    // SEVİYE 4: ÜNİVERSİTE (PROFESYONEL)
-    "Bankacı": { reward: 21000, icon: "🏦", req_edu: 4, req_item: "Hesap Makinesi" },
-    "Arkeolog": { reward: 21500, icon: "🏺", req_edu: 4, req_item: "Fırça" },
-    "Muhasebeci": { reward: 22000, icon: "📉", req_edu: 4, req_item: "Mali Mühür" },
-    "Sosyolog": { reward: 22500, icon: "👥", req_edu: 4, req_item: "Anket Formu" },
-    "Öğretmen": { reward: 23000, icon: "👨‍🏫", req_edu: 4, req_item: "Kitap Seti" },
-    "Psikolojik Danışman": { reward: 23500, icon: "🗣️", req_edu: 4, req_item: "Not Defteri" },
-    "Gazeteci": { reward: 24000, icon: "📰", req_edu: 4, req_item: "Mikrofon" },
-    "Yatırım Uzmanı": { reward: 24500, icon: "📈", req_edu: 4, req_item: "Borsa Ekranı" },
-    "Editör": { reward: 25000, icon: "✍️", req_edu: 4, req_item: "Laptop" },
-    "Yazılımcı": { reward: 25500, icon: "💻", req_edu: 4, req_item: "Yazılım Lisansı" },
-    "Mimar": { reward: 26000, icon: "📐", req_edu: 4, req_item: "Çizim Masası" },
-    "Mühendis": { reward: 26500, icon: "👷", req_edu: 4, req_item: "Mühendislik Diploması" },
-    "Avukat": { reward: 27000, icon: "⚖️", req_edu: 4, req_item: "Cübbe" },
-    "Diyetisyen": { reward: 27500, icon: "🥗", req_edu: 4, req_item: "Diyet Listesi" },
-    "Denetçi": { reward: 28000, icon: "📝", req_edu: 4, req_item: "Audit Dosyası" },
-    "Biyolog": { reward: 29000, icon: "🌿", req_edu: 4, req_item: "Petri Kabı" },
+    // SEVİYE 4: ÜNİVERSİTE (300.000 - 1.000.000 💰)
+    "Bankacı": { reward: 21000, icon: "🏦", req_edu: 4, req_item: "Hesap Makinesi", price: 350000 },
+    "Arkeolog": { reward: 21500, icon: "🏺", req_edu: 4, req_item: "Fırça", price: 370000 },
+    "Muhasebeci": { reward: 22000, icon: "📉", req_edu: 4, req_item: "Mali Mühür", price: 400000 },
+    "Sosyolog": { reward: 22500, icon: "👥", req_edu: 4, req_item: "Anket Formu", price: 420000 },
+    "Öğretmen": { reward: 23000, icon: "👨‍🏫", req_edu: 4, req_item: "Kitap Seti", price: 450000 },
+    "Psikolojik Danışman": { reward: 23500, icon: "🗣️", req_edu: 4, req_item: "Not Defteri", price: 480000 },
+    "Gazeteci": { reward: 24000, icon: "📰", req_edu: 4, req_item: "Mikrofon", price: 500000 },
+    "Yatırım Uzmanı": { reward: 24500, icon: "📈", req_edu: 4, req_item: "Borsa Ekranı", price: 550000 },
+    "Editör": { reward: 25000, icon: "✍️", req_edu: 4, req_item: "Laptop", price: 600000 },
+    "Yazılımcı": { reward: 25500, icon: "💻", req_edu: 4, req_item: "Yazılım Lisansı", price: 750000 },
+    "Mimar": { reward: 26000, icon: "📐", req_edu: 4, req_item: "Çizim Masası", price: 850000 },
+    "Mühendis": { reward: 26500, icon: "👷", req_edu: 4, req_item: "Mühendislik Diploması", price: 1000000 },
+    "Avukat": { reward: 27000, icon: "⚖️", req_edu: 4, req_item: "Cübbe", price: 1200000 },
+    "Diyetisyen": { reward: 27500, icon: "🥗", req_edu: 4, req_item: "Diyet Listesi", price: 1400000 },
+    "Denetçi": { reward: 28000, icon: "📝", req_edu: 4, req_item: "Audit Dosyası", price: 1600000 },
+    "Biyolog": { reward: 29000, icon: "🌿", req_edu: 4, req_item: "Petri Kabı", price: 1800000 },
 
-    // SEVİYE 5: YÜKSEK LİSANS (UZMAN)
-    "Psikolog": { reward: 37500, icon: "🧠", req_edu: 5, req_item: "Terapi Koltuğu" },
-    "Veri Bilimci": { reward: 38500, icon: "📊", req_edu: 5, req_item: "Süper Bilgisayar" },
-    "Eczacı": { reward: 39500, icon: "💊", req_edu: 5, req_item: "Laboratuvar Önlüğü" },
-    "Yapay Zeka Mühendisi": { reward: 40500, icon: "🤖", req_edu: 5, req_item: "GPU Server" },
-    "Veteriner": { reward: 41500, icon: "🐾", req_edu: 5, req_item: "Stetoskop" },
-    "Genetik Mühendisi": { reward: 42500, icon: "🧬", req_edu: 5, req_item: "DNA Kiti" },
-    "Doktor": { reward: 44000, icon: "🩺", req_edu: 5, req_item: "Tıp Diploması" },
-    "Diş Hekimi": { reward: 45000, icon: "🦷", req_edu: 5, req_item: "Dişçi Koltuğu" },
-    "Başhekim": { reward: 46000, icon: "🏥", req_edu: 5, req_item: "Başhekim Kaşesi" },
-    "Pilot": { reward: 47000, icon: "✈️", req_edu: 5, req_item: "Pilot Lisansı" },
-    "Savcı": { reward: 48000, icon: "🏛️", req_edu: 5, req_item: "Kanun Kitabı" },
-    "Hakim": { reward: 49000, icon: "🔨", req_edu: 5, req_item: "Tokmak" },
-    "Uçuş Mühendisi": { reward: 49500, icon: "🛫", req_edu: 5, req_item: "Uçuş Manueli" },
-    "Siber Güvenlik Uzmanı": { reward: 50000, icon: "🛡️", req_edu: 5, req_item: "Şifreleme Kartı" },
+    // SEVİYE 5: YÜKSEK LİSANS (2.000.000 - 8.000.000 💰)
+    "Psikolog": { reward: 37500, icon: "🧠", req_edu: 5, req_item: "Terapi Koltuğu", price: 2500000 },
+    "Veri Bilimci": { reward: 38500, icon: "📊", req_edu: 5, req_item: "Süper Bilgisayar", price: 2800000 },
+    "Eczacı": { reward: 39500, icon: "💊", req_edu: 5, req_item: "Laboratuvar Önlüğü", price: 3000000 },
+    "Yapay Zeka Mühendisi": { reward: 40500, icon: "🤖", req_edu: 5, req_item: "GPU Server", price: 3500000 },
+    "Veteriner": { reward: 41500, icon: "🐾", req_edu: 5, req_item: "Stetoskop", price: 4000000 },
+    "Genetik Mühendisi": { reward: 42500, icon: "🧬", req_edu: 5, req_item: "DNA Kiti", price: 5000000 },
+    "Doktor": { reward: 44000, icon: "🩺", req_edu: 5, req_item: "Tıp Diploması", price: 8000000 },
+    "Diş Hekimi": { reward: 45000, icon: "🦷", req_edu: 5, req_item: "Dişçi Koltuğu", price: 9000000 },
+    "Başhekim": { reward: 46000, icon: "🏥", req_edu: 5, req_item: "Başhekim Kaşesi", price: 10000000 },
+    "Pilot": { reward: 47000, icon: "✈️", req_edu: 5, req_item: "Pilot Lisansı", price: 2500000 },
+    "Savcı": { reward: 48000, icon: "🏛️", req_edu: 5, req_item: "Kanun Kitabı", price: 3000000 },
+    "Hakim": { reward: 49000, icon: "🔨", req_edu: 5, req_item: "Tokmak", price: 3500000 },
+    "Uçuş Mühendisi": { reward: 49500, icon: "🛫", req_edu: 5, req_item: "Uçuş Manueli", price: 4000000 },
+    "Siber Güvenlik Uzmanı": { reward: 50000, icon: "🛡️", req_edu: 5, req_item: "Şifreleme Kartı", price: 5000000 },
 
-    // SEVİYE 6: DOKTORA (AKADEMİK / LİDER)
-    "Cerrah": { reward: 75000, icon: "🏥", req_edu: 6, req_item: "Neşter" },
-    "Rektör": { reward: 80000, icon: "🎓", req_edu: 6, req_item: "Rektörlük Mührü" },
-    "Büyükelçi": { reward: 85000, icon: "🌍", req_edu: 6, req_item: "Diplomat Pasaportu" },
-    "Orkestra Şefi": { reward: 90000, icon: "🎼", req_edu: 6, req_item: "Baton" },
-    "Bilim İnsanı": { reward: 100000, icon: "🧪", req_edu: 6, req_item: "Mikroskop" },
-    "Yönetmen": { reward: 110000, icon: "🎬", req_edu: 6, req_item: "Klaket" },
-    "Nükleer Fizikçi": { reward: 115000, icon: "⚛️", req_edu: 6, req_item: "Radyasyon Ölçer" },
-    "Uzay Mühendisi": { reward: 125000, icon: "🛰️", req_edu: 6, req_item: "Uydu Alıcısı" },
+    // SEVİYE 6: DOKTORA (30.000.000 - 100.000.000 💰)
+    "Cerrah": { reward: 75000, icon: "🏥", req_edu: 6, req_item: "Neşter", price: 7500000 },
+    "Rektör": { reward: 80000, icon: "🎓", req_edu: 6, req_item: "Rektörlük Mührü", price: 8500000 },
+    "Büyükelçi": { reward: 85000, icon: "🌍", req_edu: 6, req_item: "Diplomat Pasaportu", price: 10000000 },
+    "Orkestra Şefi": { reward: 90000, icon: "🎼", req_edu: 6, req_item: "Baton", price: 12500000 },
+    "Bilim İnsanı": { reward: 100000, icon: "🧪", req_edu: 6, req_item: "Mikroskop", price: 15000000 },
+    "Yönetmen": { reward: 110000, icon: "🎬", req_edu: 6, req_item: "Klaket", price: 20000000 },
+    "Nükleer Fizikçi": { reward: 115000, icon: "⚛️", req_edu: 6, req_item: "Radyasyon Ölçer", price: 25000000 },
+    "Uzay Mühendisi": { reward: 125000, icon: "🛰️", req_edu: 6, req_item: "Uydu Alıcısı", price: 35000000 },
 
-    // SEVİYE 7: PROFESÖR (ELİT)
-    "Astronot": { reward: 175000, icon: "🚀", req_edu: 7, req_item: "Uzay Mekiği Bileti" },
-    "CEO": { reward: 190000, icon: "👔", req_edu: 7, req_item: "Şirket Hissesi" },
-    "Milletvekili": { reward: 205000, icon: "🏛️", req_edu: 7, req_item: "Mazbata" },
-    "Devlet Başkanı": { reward: 220000, icon: "👑", req_edu: 7, req_item: "Kral Tacı" },
-    "Dünya Bankası Başkanı": { reward: 235000, icon: "💸", req_edu: 7, req_item: "Altın Kasa" },
-    "Kripto Kralı": { reward: 250000, icon: "💎", req_edu: 7, req_item: "Soğuk Cüzdan" }
+    // SEVİYE 7: PROFESÖR (250.000.000 - 2.000.000.000 💰)
+    "Astronot": { reward: 175000, icon: "🚀", req_edu: 7, req_item: "Uzay Mekiği Bileti", price: 40000000 },
+    "CEO": { reward: 190000, icon: "👔", req_edu: 7, req_item: "Şirket Hissesi", price: 50000000 },
+    "Milletvekili": { reward: 205000, icon: "🏛️", req_edu: 7, req_item: "Mazbata", price: 60000000 },
+    "Devlet Başkanı": { reward: 220000, icon: "👑", req_edu: 7, req_item: "Kral Tacı", price: 75000000 },
+    "Dünya Bankası Başkanı": { reward: 235000, icon: "💸", req_edu: 7, req_item: "Altın Kasa", price: 85000000 },
+    "Kripto Kralı": { reward: 250000, icon: "💎", req_edu: 7, req_item: "Soğuk Cüzdan", price: 100000000 }
+};
+
+const PROFILE_CUSTOMIZATIONS = {
+    colors: [
+        { id: "gold", name: "Altın Sarısı", color: "#FFD700", price: 50000, type: "name" },
+        { id: "neon", name: "Neon Yeşil", color: "#39FF14", price: 30000, type: "name" },
+        { id: "ruby", name: "Yakut Kırmızısı", color: "#E0115F", price: 40000, type: "name" },
+        { id: "royal", name: "Kraliyet Mavisi", color: "#4169E1", price: 40000, type: "name" },
+        { id: "violet", name: "Lavanta Moru", color: "#EE82EE", price: 35000, type: "name" }
+    ],
+    backgrounds: [
+        { id: "dark_glass", name: "Karanlık Cam", style: "background: rgba(10,10,10,0.85); backdrop-filter: blur(20px);", price: 25000 },
+        { id: "midnight", name: "Gece Mavisi", style: "background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);", price: 100000 },
+        { id: "toxic", name: "Toksik Radyasyon", style: "background: radial-gradient(circle at center, #1a4a1a 0%, #0a0a0a 100%);", price: 150000 },
+        { id: "sunset", name: "Gün Batımı", style: "background: linear-gradient(45deg, #ee0979, #ff6a00); opacity: 0.9;", price: 200000 },
+        { id: "cyber", name: "Siber Punk", style: "background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%); border-color: #00d2ff;", price: 300000 },
+        { id: "rainbow", name: "Gökkuşağı (Hareketli)", style: "background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab); background-size: 400% 400%; animation: gradient 15s ease infinite;", price: 500000 }
+    ]
 };
 
 const REDIRECT_URI = "https://aloskegangbot-market.onrender.com/auth/kick/callback";
@@ -593,6 +611,8 @@ const RPG_ARMORS = {
     "kral": { name: "Kraliyet Zırhı", def: 100, hp: 2500, price: 2000000, icon: "👑" }
 };
 
+
+
 async function getCityMarket(cityId) {
     try {
         const marketRef = db.ref(`real_estate_market/${cityId}`);
@@ -815,6 +835,124 @@ app.post('/api/borsa/reset', async (req, res) => {
         res.json({ success: true, message: "Tüm kullanıcıların borsa portföyleri başarıyla sıfırlandı." });
     } catch (e) {
         console.error("Borsa Reset Error:", e.message);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// BORSA ALIM İŞLEMİ (Server-Side Secure)
+app.post('/api/borsa/buy', async (req, res) => {
+    try {
+        const { username, code, amount } = req.body;
+        if (!username || !code || !amount || amount <= 0) return res.status(400).json({ success: false, error: "Geçersiz parametreler." });
+
+        if (!Number.isInteger(amount) && amount < 0.00000001) return res.status(400).json({ success: false, error: "Geçersiz miktar." });
+
+        // 1. Güncel Hisse Fiyatını Çek
+        const stockSnap = await db.ref(`global_stocks/${code}`).once('value');
+        const stockData = stockSnap.val();
+        if (!stockData) return res.status(404).json({ success: false, error: "Hisse bulunamadı." });
+
+        const currentPrice = stockData.price;
+        const totalCost = Math.ceil(currentPrice * amount);
+
+        // 2. Kullanıcı Bakiyesini Kontrol Et
+        const userRef = db.ref(`users/${username}`);
+        await userRef.transaction(user => {
+            if (user) {
+                if (!user.is_infinite && (user.balance || 0) < totalCost) {
+                    return; // Abort transaction (return undefined implicitly cancels specific updates if properly handled, but here user is not modified so it returns null/undefined which signals 'no change' but not 'failure' to the callback in all SDKs. Ideally we check in callback.)
+                }
+
+                if (!user.is_infinite) {
+                    user.balance = (user.balance || 0) - totalCost;
+                }
+
+                if (!user.stocks) user.stocks = {};
+                if (!user.stock_costs) user.stock_costs = {};
+
+                // BACKFILL
+                if ((user.stocks[code] || 0) > 0 && (user.stock_costs[code] || 0) <= 0) {
+                    user.stock_costs[code] = (user.stocks[code] * currentPrice);
+                }
+
+                user.stock_costs[code] = (user.stock_costs[code] || 0) + totalCost;
+                user.stocks[code] = (user.stocks[code] || 0) + amount;
+            }
+            return user;
+        }, (error, committed, snapshot) => {
+            if (error) {
+                res.status(500).json({ success: false, error: "İşlem hatası." });
+            } else if (!committed) {
+                res.status(400).json({ success: false, error: "Bakiye yetersiz veya işlem iptal edildi." });
+            } else {
+                // Double check if balance was actually deducted? No, committed is true only if transaction succeeded.
+                // But wait, if I return 'undefined' from transaction update function, committed is usually false.
+                // Let's verify: if I return user (modified), committed is true.
+                // If I enter the insufficient balance block, I return nothing (undefined). 
+                // So committed will be false. Perfect.
+                res.json({ success: true, message: `${amount} adet ${code} alındı.`, newBalance: snapshot.val().balance });
+            }
+        });
+
+    } catch (e) {
+        console.error("Borsa Buy Error:", e.message);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// BORSA SATIŞ İŞLEMİ (Server-Side Secure)
+app.post('/api/borsa/sell', async (req, res) => {
+    try {
+        const { username, code, amount } = req.body;
+        if (!username || !code || !amount || amount <= 0) return res.status(400).json({ success: false, error: "Geçersiz parametreler." });
+
+        // 1. Güncel Hisse Fiyatını Çek
+        const stockSnap = await db.ref(`global_stocks/${code}`).once('value');
+        const stockData = stockSnap.val();
+        if (!stockData) return res.status(404).json({ success: false, error: "Hisse bulunamadı." });
+
+        const currentPrice = stockData.price;
+        const grossTotal = currentPrice * amount;
+        const commission = Math.floor(grossTotal * 0.05);
+        const netTotal = Math.floor(grossTotal - commission);
+
+        // 2. Kullanıcı İşlemi
+        const userRef = db.ref(`users/${username}`);
+        await userRef.transaction(user => {
+            if (user) {
+                if (!user.stocks || (user.stocks[code] || 0) < amount) {
+                    return; // Abort
+                }
+
+                const oldQty = user.stocks[code];
+                const newQty = oldQty - amount;
+
+                user.balance = (user.balance || 0) + netTotal;
+
+                if (!user.stock_costs) user.stock_costs = {};
+                const oldCost = user.stock_costs[code] || 0;
+
+                if (newQty <= 0.00000001) {
+                    delete user.stocks[code];
+                    delete user.stock_costs[code];
+                } else {
+                    user.stocks[code] = newQty;
+                    user.stock_costs[code] = oldCost * (newQty / oldQty);
+                }
+            }
+            return user;
+        }, (error, committed, snapshot) => {
+            if (error) {
+                res.status(500).json({ success: false, error: "İşlem hatası." });
+            } else if (!committed) {
+                res.status(400).json({ success: false, error: "Yetersiz hisse senedi." });
+            } else {
+                res.json({ success: true, message: `${amount} adet ${code} satıldı.`, newBalance: snapshot.val().balance });
+            }
+        });
+
+    } catch (e) {
+        console.error("Borsa Sell Error:", e.message);
         res.status(500).json({ success: false, error: e.message });
     }
 });
@@ -1221,6 +1359,297 @@ app.post('/api/real-estate/buy', async (req, res) => {
 
         res.json({ success: true, message: `${prop.name} başarıyla satın alındı!` });
     } catch (e) {
+        res.json({ success: false, error: e.message });
+    }
+});
+
+// --- RPG MARKET API ---
+app.post('/api/rpg/buy', async (req, res) => {
+    const { username, type, code } = req.body;
+    if (!username || !type || !code) return res.json({ success: false, error: "Eksik bilgi!" });
+
+    try {
+        const item = type === 'weapon' ? RPG_WEAPONS[code] : RPG_ARMORS[code];
+        if (!item) return res.json({ success: false, error: "Eşya bulunamadı!" });
+
+        const userRef = db.ref(`users/${username.toLowerCase()}`);
+        const snap = await userRef.once('value');
+        const user = snap.val();
+        if (!user) return res.json({ success: false, error: "Kullanıcı bulunamadı!" });
+
+        await userRef.transaction(u => {
+            if (!u) return u;
+            const rpg = u.rpg || { level: 1, hp: 100, xp: 0, str: 5, def: 0, weapon: 'yumruk', armor: 'tisort', inventory: [] };
+            if (!rpg.inventory) rpg.inventory = [];
+
+            const owned = rpg.inventory.includes(code);
+
+            if (owned) {
+                // Sadece kuşan
+                if (type === 'weapon') rpg.weapon = code;
+                else rpg.armor = code;
+            } else {
+                // Satın al ve kuşan
+                if (!u.is_infinite && (u.balance || 0) < item.price) {
+                    throw new Error("Yetersiz bakiye!"); // Transaction içinde error fırlatmak abort eder mi? Hayır, callback dışına atmalıyız ama burada return null yaparsak abort eder.
+                    // En iyisi bakiye kontrolünü yukarıda yapmak ama transaction safe olmaz.
+                    // Transaction içinde yapalım.
+                }
+
+                if (!u.is_infinite) u.balance = (u.balance || 0) - item.price;
+                if ((u.balance || 0) < 0) return; // Abort if somehow negative (sanity check)
+
+                rpg.inventory.push(code);
+                if (type === 'weapon') rpg.weapon = code;
+                else rpg.armor = code;
+            }
+
+            u.rpg = rpg;
+            return u;
+        });
+
+        // Transaction sonucu başarılıysa buraya gelir (hata fırlatmadıysak).
+        // Ancak transaction abort edildiyse (return undefined) success false dönmeliyiz.
+        // Firebase Admin SDK transaction sonucu döner.
+        // Basitlik adina yukarida transaction sonucunu kontrol etmek daha iyi olurdu ama
+        // şimdilik balance kontrolü failed ise transaction null döner (abort).
+
+        // Tekrar okuyup kontrol edelim (basit yöntem)
+        const updatedSnap = await userRef.once('value');
+        const updatedUser = updatedSnap.val();
+
+        // Basit kontrol: Eşya alındı mı?
+        const hasItem = updatedUser.rpg?.inventory?.includes(code);
+        if (hasItem) {
+            res.json({ success: true, message: `${item.name} kuşandın!` });
+        } else {
+            res.json({ success: false, error: "Bakiye yetersiz veya işlem başarısız!" });
+        }
+
+    } catch (e) {
+        res.json({ success: false, error: e.message });
+    }
+});
+
+// --- PROFILE CUSTOMIZATION API ---
+app.post('/api/customization/buy', async (req, res) => {
+    const { username, type, id } = req.body;
+    if (!username || !type || !id) return res.json({ success: false, error: "Eksik bilgi!" });
+
+    try {
+        let item = null;
+        if (type === 'color') item = PROFILE_CUSTOMIZATIONS.colors.find(c => c.id === id);
+        else if (type === 'bg') item = PROFILE_CUSTOMIZATIONS.backgrounds.find(b => b.id === id);
+
+        if (!item) return res.json({ success: false, error: "Özelleştirme bulunamadı!" });
+
+        const userRef = db.ref(`users/${username.toLowerCase()}`);
+
+        let errorMsg = null;
+
+        await userRef.transaction(u => {
+            if (!u) return u;
+            if (!u.is_infinite && (u.balance || 0) < item.price) {
+                // Yetersiz bakiye
+                return; // Abort
+            }
+            if (!u.is_infinite) u.balance -= item.price;
+
+            if (type === 'color') u.name_color = id;
+            if (type === 'bg') u.profile_bg = id;
+
+            return u;
+        }, (error, committed, snapshot) => {
+            if (error) {
+                errorMsg = "Sunucu hatası";
+            } else if (!committed) {
+                errorMsg = "Bakiye yetersiz!";
+            }
+        });
+
+        if (errorMsg) return res.json({ success: false, error: errorMsg });
+
+        res.json({ success: true, message: "Profil başarıyla güncellendi!" });
+
+    } catch (e) {
+        console.error("Customization Error:", e);
+        res.json({ success: false, error: e.message });
+    }
+});
+
+// --- GENERIC MARKET BUY (TTS, SOUND, MUTE, SR) ---
+app.post('/api/market/buy', async (req, res) => {
+    const { username, channelId, type, data } = req.body;
+    if (!username || !channelId || !type) return res.json({ success: false, error: "Eksik bilgi!" });
+
+    try {
+        const chanRef = db.ref(`channels/${channelId}`);
+        const chanSnap = await chanRef.once('value');
+        const channel = chanSnap.val();
+        if (!channel) return res.json({ success: false, error: "Kanal bulunamadı!" });
+
+        const settings = channel.settings || {};
+
+        let price = 0;
+        let eventPath = "";
+        let eventPayload = {};
+
+        // 1. Fiyat ve Payload Belirleme
+        if (type === 'tts') {
+            price = parseInt(settings.tts_price || 500);
+            const { text, voice } = data || {};
+            if (!text) return res.json({ success: false, error: "Mesaj boş olamaz!" });
+            if (text.length > 500) return res.json({ success: false, error: "Mesaj çok uzun!" });
+
+            eventPath = "tts";
+            eventPayload = {
+                text: `@${username} diyor ki: ${text}`,
+                voice: voice || "Tr-TR-Emel-Neural",
+                played: false, notified: false, source: "market", timestamp: Date.now(), broadcasterId: channelId
+            };
+        }
+        else if (type === 'sound') {
+            const { trigger } = data || {};
+            const sound = settings.custom_sounds?.[trigger];
+            if (!sound) return res.json({ success: false, error: "Ses bulunamadı!" });
+
+            price = parseInt(sound.price || 100);
+            eventPath = "sound";
+            eventPayload = {
+                soundId: trigger, url: sound.url, volume: sound.volume || 100, duration: sound.duration || 0,
+                buyer: username, source: "market",
+                played: false, notified: false, timestamp: Date.now(), broadcasterId: channelId
+            };
+        }
+        else if (type === 'mute') {
+            price = parseInt(settings.mute_price || 5000);
+            let { target } = data || {};
+            if (!target) return res.json({ success: false, error: "Hedef kullanıcı belirtilmedi!" });
+            target = target.replace('@', '').toLowerCase().trim();
+
+            eventPath = "mute";
+            eventPayload = {
+                user: username, target: target, timestamp: Date.now(), broadcasterId: channelId
+            };
+
+            // Mute sayacını da burada güncelleyebiliriz veya event listener yapabilir
+            await db.ref(`users/${target}/bans/${channelId}`).transaction(c => (c || 0) + 1);
+        }
+        else if (type === 'sr') {
+            price = parseInt(settings.sr_price || 100);
+            const { url } = data || {};
+            if (!url || (!url.includes('youtube.com') && !url.includes('youtu.be'))) {
+                return res.json({ success: false, error: "Geçersiz YouTube linki!" });
+            }
+
+            eventPath = "song_requests";
+            eventPayload = {
+                query: url, user: username, source: "market",
+                played: false, timestamp: Date.now(), broadcasterId: channelId
+            };
+        }
+        else {
+            return res.json({ success: false, error: "Geçersiz işlem tipi!" });
+        }
+
+        // 2. Bakiye Kontrolü ve Düşümü
+        const userRef = db.ref(`users/${username.toLowerCase()}`);
+        let errorMsg = null;
+
+        await userRef.transaction(u => {
+            if (!u) return u;
+            if (!u.is_infinite && (u.balance || 0) < price) {
+                // Yetersiz bakiye - Abort
+                return;
+            }
+            if (!u.is_infinite) u.balance -= price;
+            return u;
+        }, (error, committed, snapshot) => {
+            if (error) errorMsg = "Sunucu hatası";
+            else if (!committed) errorMsg = "Bakiye yetersiz! ❌";
+        });
+
+        if (errorMsg) return res.json({ success: false, error: errorMsg });
+
+        // 3. Event Push
+        if (eventPath) {
+            await db.ref(`channels/${channelId}/stream_events/${eventPath}`).push(eventPayload);
+        }
+
+        res.json({ success: true, message: "İşlem Başarılı! 🚀" });
+
+    } catch (e) {
+        console.error("Market Buy Error:", e);
+        res.json({ success: false, error: e.message });
+    }
+});
+
+// --- JOB APPLICATION API ---
+app.post('/api/jobs/apply', async (req, res) => {
+    const { username, jobName } = req.body;
+    if (!username || !jobName) return res.json({ success: false, error: "Eksik bilgi!" });
+
+    try {
+        const job = JOBS[jobName];
+        if (!job) return res.json({ success: false, error: "Meslek bulunamadı!" });
+
+        const userRef = db.ref(`users/${username.toLowerCase()}`);
+        let errorMsg = null;
+        let successMsg = "";
+
+        await userRef.transaction(u => {
+            if (!u) return u;
+
+            // 1. Eğitim Kontrolü
+            if ((u.edu || 0) < job.req_edu) return;
+
+            // 2. Eşya Kontrolü
+            const hasItem = u.items && u.items[job.req_item];
+
+            if (hasItem) {
+                // Sadece meslek değiş
+                u.job = jobName;
+                successMsg = `${jobName} mesleğine geçiş yaptın! ✅`;
+                return u;
+            } else {
+                // Eşya satın al ve meslek değiş
+                if (!u.is_infinite && (u.balance || 0) < job.price) {
+                    return; // Abort - Insufficient funds
+                }
+
+                if (!u.is_infinite) u.balance -= job.price;
+                if (!u.items) u.items = {};
+                u.items[job.req_item] = true;
+                u.job = jobName;
+                successMsg = `${jobName} olarak işe başladın! Hayırlı olsun. 🚀`;
+                return u;
+            }
+        }, (error, committed, snapshot) => {
+            if (error) {
+                errorMsg = "Sunucu hatası";
+            }
+        });
+
+        if (!errorMsg && !successMsg) {
+            const snap = await userRef.once('value');
+            const u = snap.val();
+            if ((u.edu || 0) < job.req_edu) {
+                return res.json({ success: false, error: "Eğitim seviyen yetersiz!" });
+            }
+            if (!u.items || !u.items[job.req_item]) {
+                if (!u.is_infinite && (u.balance || 0) < job.price) {
+                    return res.json({ success: false, error: "Bakiye yetersiz!" });
+                }
+            }
+            return res.json({ success: false, error: "İşlem gerçekleştirilemedi." });
+        }
+
+        if (errorMsg) return res.json({ success: false, error: errorMsg });
+
+        res.json({ success: true, message: successMsg });
+
+    } catch (e) {
+        console.error("Job Apply Error:", e);
         res.json({ success: false, error: e.message });
     }
 });

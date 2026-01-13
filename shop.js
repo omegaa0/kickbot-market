@@ -579,6 +579,9 @@ async function executePurchase(type, trigger, price) {
     const userSnap = await db.ref('users/' + currentUser).once('value');
     const userData = userSnap.val() || { balance: 0 };
     const isInf = userData.is_infinite;
+
+    // Not: Fiyat kontrolünü sunucuda yapıyoruz ama UI'da hızlı feedback için bırakabiliriz.
+    // Ancak sunucu asıl yetkili.
     if (!isInf && (userData.balance || 0) < price) { return showToast("Bakiye yetersiz! ❌", "error"); }
 
     let userInput = "";
@@ -600,37 +603,37 @@ async function executePurchase(type, trigger, price) {
         if (!confirm(`"${trigger}" sesi çalınsın mı?`)) return;
     }
 
-    if (!isInf) {
-        await db.ref('users/' + currentUser).transaction(u => { if (u) u.balance -= price; return u; });
-    }
+    // --- SECURE API CALL ---
+    try {
+        const payload = {
+            username: currentUser,
+            channelId: currentChannelId,
+            type: type,
+            data: {}
+        };
 
-    if (type === 'tts') {
-        await db.ref(`channels/${currentChannelId}/stream_events/tts`).push({
-            text: `@${currentUser} diyor ki: ${userInput}`,
-            played: false, notified: false, source: "market", timestamp: Date.now(), broadcasterId: currentChannelId
+        if (type === 'sound') payload.data = { trigger: trigger };
+        if (type === 'mute') payload.data = { target: userInput };
+        if (type === 'sr') payload.data = { url: userInput };
+
+        const res = await fetch('/api/market/buy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
         });
-    } else if (type === 'sound') {
-        const snap = await db.ref(`channels/${currentChannelId}/settings/custom_sounds/${trigger}`).once('value');
-        const sound = snap.val();
-        if (sound) {
-            await db.ref(`channels/${currentChannelId}/stream_events/sound`).push({
-                soundId: trigger, url: sound.url, volume: sound.volume || 100, duration: sound.duration || 0,
-                buyer: currentUser, source: "market",
-                played: false, notified: false, timestamp: Date.now(), broadcasterId: currentChannelId
-            });
+
+        const data = await res.json();
+
+        if (data.success) {
+            showToast(data.message, "success");
+            loadProfile(); // Balance update
+        } else {
+            showToast(data.error || "Hata oluştu!", "error");
         }
-    } else if (type === 'mute') {
-        await db.ref(`channels/${currentChannelId}/stream_events/mute`).push({
-            user: currentUser, target: userInput, timestamp: Date.now(), broadcasterId: currentChannelId
-        });
-        await db.ref(`users/${userInput}/bans/${currentChannelId}`).transaction(c => (c || 0) + 1);
-    } else if (type === 'sr') {
-        await db.ref(`channels/${currentChannelId}/stream_events/song_requests`).push({
-            query: userInput, user: currentUser, source: "market",
-            played: false, timestamp: Date.now(), broadcasterId: currentChannelId
-        });
+    } catch (e) {
+        console.error(e);
+        showToast("Sunucu ile iletişim hatası.", "error");
     }
-    showToast("İşlem Başarılı! 🚀", "success");
 }
 
 function openTTSModal(price) {
@@ -654,25 +657,37 @@ async function finalizeTTSPurchase(price) {
     if (!text) return showToast("Mesaj boş olamaz!", "error");
     if (text.length > 500) return showToast("Mesaj çok uzun!", "error");
 
+    // Client-side quick check
     const userSnap = await db.ref('users/' + currentUser).once('value');
     const userData = userSnap.val() || { balance: 0 };
     if (!userData.is_infinite && (userData.balance || 0) < price) {
         return showToast("Bakiye yetersiz! ❌", "error");
     }
 
-    if (!userData.is_infinite) {
-        await db.ref('users/' + currentUser).transaction(u => { if (u) u.balance -= price; return u; });
+    try {
+        const res = await fetch('/api/market/buy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: currentUser,
+                channelId: currentChannelId,
+                type: 'tts',
+                data: { text: text, voice: voice }
+            })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            showToast("TTS Mesajın yayına gönderildi! 🎙️", "success");
+            closeTTSModal();
+            loadProfile();
+        } else {
+            showToast(data.error || "İşlem başarısız.", "error");
+        }
+    } catch (e) {
+        console.error(e);
+        showToast("Sunucu hatası!", "error");
     }
-
-    await db.ref(`channels/${currentChannelId}/stream_events/tts`).push({
-        text: `@${currentUser} diyor ki: ${text}`,
-        voice: voice,
-        played: false, notified: false, source: "market", timestamp: Date.now(), broadcasterId: currentChannelId
-    });
-
-    closeTTSModal();
-    showToast("TTS Mesajın yayına gönderildi! 🎙️", "success");
-    loadProfile();
 }
 
 function logout() {
@@ -959,79 +974,56 @@ async function executeBorsaBuy(code, price) {
     const amount = parseFloat(input.value.replace(',', '.')); // Virgül desteği
     if (!amount || isNaN(amount) || amount <= 0) return showToast("Geçersiz miktar!", "error");
 
-    const total = Math.ceil(price * amount); // Küsüratlı olsa da tam sayıya yuvarlayalım ki ekonomi zor olsun
-    if (!confirm(`${amount} adet ${code} için ${total.toLocaleString()} 💰 ödenecek. Onaylıyor musun?`)) return;
-
-    db.ref('users/' + currentUser).once('value', async (snap) => {
-        const u = snap.val() || { balance: 0 };
-        if (!u.is_infinite && u.balance < total) return showToast("Bakiye yetersiz!", "error");
-
-        await db.ref('users/' + currentUser).transaction(user => {
-            if (user) {
-                if (!user.is_infinite) user.balance -= total;
-                if (!user.stocks) user.stocks = {};
-                if (!user.stock_costs) user.stock_costs = {};
-
-                // BACKFILL: Eğer eski hisse var ama maliyeti yoksa, şu anki fiyattan almış saysın (Ortalamayı bozmamak için)
-                if ((user.stocks[code] || 0) > 0 && (user.stock_costs[code] || 0) <= 0) {
-                    user.stock_costs[code] = (user.stocks[code] * price);
-                }
-
-                // Update Average Cost
-                user.stock_costs[code] = (user.stock_costs[code] || 0) + total;
-                user.stocks[code] = (user.stocks[code] || 0) + amount;
-            }
-            return user;
+    // REMOVED ALERT AND MOVED TO SERVER
+    try {
+        const res = await fetch('/api/borsa/buy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser, code, amount })
         });
-        showToast(`${amount} adet ${code} alındı!`, "success");
-        loadProfile();
-    });
+        const data = await res.json();
+
+        if (data.success) {
+            showToast(data.message, "success");
+            loadProfile();
+        } else {
+            showToast(data.error, "error");
+        }
+    } catch (e) {
+        showToast("Sunucu hatası!", "error");
+    }
 }
 
 async function executeBorsaSell(code, price) {
     if (!currentUser) return;
     const input = document.getElementById(`input-${code}`);
     const amount = parseFloat(input.value.replace(',', '.')); // Virgül desteği
+    if (!amount || isNaN(amount) || amount <= 0) return showToast("Geçersiz miktar!", "error");
 
-    db.ref('users/' + currentUser).once('value', async (snap) => {
-        const u = snap.val() || {};
-        const owned = u.stocks?.[code] || 0;
+    // CONFIRMATION KEPT FOR SELL (Optional, user only asked to remove for buy, but safer to keep for sell or remove? User said "Alınsın mı? alertini kaldır". Usually selling is also better with confirm but consistency...)
+    // Let's keep confirm for SELL for now unless user complains, or maybe remove it too? 
+    // The user strictly said "Borsada alım yaparken Alınsın mı? alertini kaldır". 
+    // I will keep it for sell to avoid accidental dumps.
 
-        if (owned <= 0) return showToast("Bu hisseden elinde yok!", "error");
-        if (!amount || isNaN(amount) || amount <= 0) return showToast("Geçersiz miktar!", "error");
-        if (amount > owned) return showToast("Elindekinden fazlasını satamazsın!", "error");
+    if (!confirm(`${amount} adet ${code} satılacak. Onaylıyor musun?`)) return;
 
-        const grossTotal = price * amount;
-        const commission = Math.floor(grossTotal * 0.05);
-        const netTotal = Math.floor(grossTotal - commission); // Kazancı tam sayı yapalım
-
-        if (!confirm(`${amount} adet ${code} satılacak.\nBrüt: ${grossTotal.toLocaleString()} 💰\nKomisyon (%5): -${commission.toLocaleString()} 💰\nNet Kazanç: ${netTotal.toLocaleString()} 💰\n\nSatış işlemini onaylıyor musun?`)) return;
-
-        await db.ref('users/' + currentUser).transaction(user => {
-            if (user && user.stocks && user.stocks[code]) {
-                const oldQty = user.stocks[code];
-                const newQty = oldQty - amount;
-
-                // Balance update
-                user.balance = (user.balance || 0) + netTotal;
-
-                if (!user.stock_costs) user.stock_costs = {};
-                const oldCost = user.stock_costs[code] || 0;
-
-                if (newQty <= 0.00000001) {
-                    delete user.stocks[code];
-                    delete user.stock_costs[code];
-                } else {
-                    user.stocks[code] = newQty;
-                    // Reduce cost proportionally: NewCost = OldCost * (NewQty / OldQty)
-                    user.stock_costs[code] = oldCost * (newQty / oldQty);
-                }
-            }
-            return user;
+    try {
+        const res = await fetch('/api/borsa/sell', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser, code, amount })
         });
-        showToast(`${amount} adet ${code} satıldı! Komisyon sonrası kazanç: ${netTotal.toLocaleString()} 💰`, "success");
-        loadProfile();
-    });
+        const data = await res.json();
+
+        if (data.success) {
+            showToast(data.message, "success");
+            loadProfile();
+        } else {
+            showToast(data.error, "error");
+        }
+    } catch (e) {
+        showToast("Sunucu hatası!", "error");
+    }
 }
 
 let lbType = 'global';
@@ -1434,6 +1426,7 @@ async function applyForJob(jobName, price) {
     if (!currentUser) return;
     const job = JOBS[jobName];
 
+    // Client-side quick check
     const snap = await db.ref('users/' + currentUser).once('value');
     const u = snap.val() || { balance: 0, items: {} };
 
@@ -1442,32 +1435,40 @@ async function applyForJob(jobName, price) {
         return showToast(`Eğitim seviyen yetersiz! (${EDUCATION[job.req_edu]} gereklidir)`, "error");
     }
 
-    // 2. Eşya Kontrolü & Satın Alma
+    // 2. Eşya Kontrolü & Satın Alma - CONFIRMATION
     const hasItem = u.items && u.items[job.req_item];
     if (!hasItem) {
         if (!u.is_infinite && u.balance < price) {
             return showToast("Bakiye yetersiz! ❌", "error");
         }
         if (!confirm(`${jobName} olabilmek için ${job.req_item} satın almalısın. Fiyat: ${price.toLocaleString()} 💰 Onaylıyor musun?`)) return;
-
-        await db.ref('users/' + currentUser).transaction(user => {
-            if (user) {
-                if (!user.is_infinite) user.balance -= price;
-                if (!user.items) user.items = {};
-                user.items[job.req_item] = true;
-                user.job = jobName;
-            }
-            return user;
-        });
-        showToast(`${jobName} olarak işe başladın! Hayırlı olsun. 🚀`, "success");
-    } else {
-        // Eşyası varsa sadece mesleği güncelle
-        await db.ref('users/' + currentUser).update({ job: jobName });
-        showToast(`${jobName} mesleğine geçiş yaptın! ✅`, "success");
     }
-    loadCareer();
-    loadProfile();
+
+    try {
+        const res = await fetch('/api/jobs/apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: currentUser,
+                jobName: jobName
+            })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            showToast(data.message, "success");
+            loadCareer();
+            loadProfile();
+        } else {
+            showToast(data.error || "İşlem başarısız.", "error");
+        }
+    } catch (e) {
+        console.error(e);
+        showToast("Sunucu hatası!", "error");
+    }
 }
+
 
 function renderEmlakMap() {
     const overlay = document.getElementById('map-overlay');
@@ -1806,43 +1807,25 @@ async function buyRpgItem(code, type) {
     if (!confirm(`${item.name} - İşlem yapmak istiyor musun?`)) return;
 
     try {
-        const snap = await db.ref('users/' + currentUser).once('value');
-        const user = snap.val();
+        const res = await fetch('/api/rpg/buy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: currentUser,
+                type: type,
+                code: code
+            })
+        });
 
-        let rpg = user.rpg || { level: 1, hp: 100, xp: 0, str: 5, def: 0, weapon: 'yumruk', armor: 'tisort', inventory: [] };
-        if (!rpg.inventory) rpg.inventory = [];
+        const data = await res.json();
 
-        // Check ownership
-        const owned = rpg.inventory.includes(code);
-
-        if (owned) {
-            // Sadece kuşan
-            if (type === 'weapon') rpg.weapon = code;
-            else rpg.armor = code;
-
-            await db.ref('users/' + currentUser + '/rpg').set(rpg);
-            showToast(`${item.name} kuşandın!`, "success");
+        if (data.success) {
+            showToast(data.message, "success");
+            loadArena();
+            loadProfile(); // Bakiye güncellemesi için
         } else {
-            // Satın Al
-            if (!user.is_infinite && (user.balance || 0) < item.price) {
-                return showToast("Bakiye Yetersiz!", "error");
-            }
-
-            // Satın alma işlemi
-            const updates = {};
-            if (!user.is_infinite) updates['users/' + currentUser + '/balance'] = (user.balance || 0) - item.price;
-
-            rpg.inventory.push(code);
-            if (type === 'weapon') rpg.weapon = code;
-            else rpg.armor = code;
-
-            updates['users/' + currentUser + '/rpg'] = rpg;
-
-            await db.ref().update(updates);
-            showToast(`${item.name} satın aldın ve kuşandın!`, "success");
+            showToast(data.error || "İşlem başarısız.", "error");
         }
-        loadArena();
-        loadProfile(); // Bakiye güncellemesi için
     } catch (e) {
         console.error(e);
         showToast("Hata oluştu.", "error");
@@ -1914,26 +1897,34 @@ async function showCustomizationMarket() {
 
 async function buyCustomization(type, id, price) {
     if (!currentUser) return;
-    const snap = await db.ref('users/' + currentUser).once('value');
-    const u = snap.val() || { balance: 0 };
 
-    if (!u.is_infinite && u.balance < price) {
-        return showToast("Bakiye yetersiz! ❌", "error");
-    }
-
+    // Not: Artık fiyat kontrolü ve confirm sunucuya gitmeden önce UI'da yapılabilir ama 
+    // güvenlik için asıl kontrol sunucuda. Yine de UX için confirm tutuyoruz.
     if (!confirm(`Bu özelleştirmeyi ${price.toLocaleString()} 💰 karşılığında almak istediğine emin misin?`)) return;
 
-    await db.ref('users/' + currentUser).transaction(user => {
-        if (user) {
-            if (!user.is_infinite) user.balance -= price;
-            if (type === 'color') user.name_color = id;
-            if (type === 'bg') user.profile_bg = id;
-        }
-        return user;
-    });
+    try {
+        const res = await fetch('/api/customization/buy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: currentUser,
+                type: type,
+                id: id
+            })
+        });
 
-    showToast("Profilin başarıyla güncellendi! ✨", "success");
-    loadProfile();
+        const data = await res.json();
+
+        if (data.success) {
+            showToast(data.message, "success");
+            loadProfile();
+        } else {
+            showToast(data.error || "İşlem başarısız.", "error");
+        }
+    } catch (e) {
+        console.error(e);
+        showToast("Sunucu hatası!", "error");
+    }
 }
 
 // init is called via DOMContentLoaded
