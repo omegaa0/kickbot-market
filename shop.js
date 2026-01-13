@@ -1581,7 +1581,10 @@ async function loadLiveStats() {
                 chan_m: data.channel_m?.[currentChannelId] || 0,
                 chan_w: data.channel_watch_time?.[currentChannelId] || 0
             }))
-            .filter(u => (u.chan_m > 0 || u.chan_w > 0) && !['aloskegangbot', 'botrix'].includes(u.name.toLowerCase())); // BOTLARI GİZLE
+            .filter(u => {
+                const n = u.name.toLowerCase().replace('@', '');
+                return (u.chan_m > 0 || u.chan_w > 0) && !['aloskegangbot', 'botrix'].includes(n);
+            }); // BOTLARI GİZLE
 
         if (userList.length === 0) {
             container.innerHTML = '<p style="text-align:center; padding:40px; color:#666;">Bu kanal için henüz istatistik verisi toplanmamış.</p>';

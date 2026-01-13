@@ -45,17 +45,36 @@
             /* border-bottom: 1px solid var(--glass-border); */
             padding-bottom: 12px;
             overflow-x: auto;
-            scrollbar-width: none;
+            /* scrollbar-width: none; */
             /* Firefox */
-            -ms-overflow-style: none;
+            /* -ms-overflow-style: none; */
             /* IE/Edge */
             white-space: nowrap;
             -webkit-overflow-scrolling: touch;
         }
 
+        /* 
         .tabs-nav::-webkit-scrollbar {
             display: none;
-            /* Chrome/Safari */
+        } 
+        */
+
+        .tabs-nav::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .tabs-nav::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+
+        .tabs-nav::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+        }
+
+        .tabs-nav::-webkit-scrollbar-thumb:hover {
+            background: var(--primary);
         }
 
         .tab-btn {
@@ -212,7 +231,7 @@
             <button class="tab-btn" onclick="switchTab('leaderboard')">🏆 Liderlik</button>
             <button class="tab-btn" onclick="switchTab('borsa')">📈 Borsa</button>
             <button class="tab-btn" onclick="switchTab('emlak')">🏠 Emlak</button>
-            <button class="tab-btn" onclick="switchTab('arena')">⚔️ Arena (Beta)</button>
+            <!-- Arena Removed -->
             <button class="tab-btn" onclick="switchTab('quests')">🎯 Görevler</button>
             <button class="tab-btn" onclick="switchTab('stats')">📊 İstatistikler</button>
             <button class="tab-btn" onclick="switchTab('profile')">👤 Profilim</button>
@@ -268,25 +287,7 @@
                     </div>
                 </div>
 
-                <!-- ARENA TAB (RPG) -->
-                <div id="tab-arena" class="tab-content hidden">
-                    <h2 style="margin-bottom:20px;">⚔️ ARENA: Gladyatör Marketi</h2>
-                    <div
-                        style="background: linear-gradient(45deg, #222, #000); padding:20px; border-radius:12px; margin-bottom:20px; border:1px solid #333;">
-                        <h3 style="color: var(--primary);">🛡️ Karakterin</h3>
-                        <div id="my-rpg-stats" style="margin-top:10px; color:#ccc;">Yükleniyor...</div>
-                    </div>
 
-                    <h3 style="margin-bottom:10px;">🗡️ Silahlar</h3>
-                    <div id="arena-weapons" class="market-grid" style="margin-bottom:30px;">
-                        <!-- JS fills -->
-                    </div>
-
-                    <h3 style="margin-bottom:10px;">🛡️ Zırhlar</h3>
-                    <div id="arena-armors" class="market-grid">
-                        <!-- JS fills -->
-                    </div>
-                </div>
 
                 <!-- EMLAK TAB -->
                 <div id="tab-emlak" class="tab-content hidden">
