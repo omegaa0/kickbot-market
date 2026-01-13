@@ -3060,7 +3060,7 @@ app.post('/webhook/kick', async (req, res) => {
                 "Seni bulmak, hazine bulmaktan daha değerli."
             ];
             const randomQuote = shipQuotes[Math.floor(Math.random() * shipQuotes.length)];
-            let target = args[0]?.replace('@', '');
+            let target = null; // Kullanıcının seçmesine izin verme, hep rastgele olsun
             const rig = riggedShips[user.toLowerCase()];
 
             // ÖZEL EŞLEŞTİRME: omegacyr <-> iiremkk
