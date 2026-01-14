@@ -1487,8 +1487,39 @@ app.post('/api/customization/buy', async (req, res) => {
     }
 });
 
+// --- SECURITY: SESSION VERIFICATION MIDDLEWARE ---
+const verifySession = async (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.status(401).json({ success: false, error: "Yetkisiz Erişim (Token Yok)" });
+
+    // Accept Bearer token or direct token
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+    const username = req.body.username; // All secure endpoints MUST send username in body
+
+    if (!username) return res.status(400).json({ success: false, error: "Kullanıcı adı eksik" });
+
+    try {
+        const userSnap = await db.ref(`users/${username.toLowerCase()}`).once('value');
+        const userData = userSnap.val();
+
+        if (!userData || !userData.session_token) {
+            return res.status(403).json({ success: false, error: "Oturum geçersiz. Lütfen tekrar giriş yapın." });
+        }
+
+        if (userData.session_token !== token) {
+            return res.status(403).json({ success: false, error: "Oturum süresi dolmuş veya geçersiz token." });
+        }
+
+        req.user = userData; // Attach user data to request
+        next();
+    } catch (e) {
+        console.error("Session Verify Error:", e);
+        return res.status(500).json({ success: false, error: "Sunucu doğrulama hatası" });
+    }
+};
+
 // --- GENERIC MARKET BUY (TTS, SOUND, MUTE, SR) ---
-app.post('/api/market/buy', async (req, res) => {
+app.post('/api/market/buy', verifySession, async (req, res) => {
     const { username, channelId, type, data } = req.body;
     if (!username || !channelId || !type) return res.json({ success: false, error: "Eksik bilgi!" });
 
@@ -1595,7 +1626,7 @@ app.post('/api/market/buy', async (req, res) => {
 });
 
 // --- JOB APPLICATION API ---
-app.post('/api/jobs/apply', async (req, res) => {
+app.post('/api/jobs/apply', verifySession, async (req, res) => {
     const { username, jobName } = req.body;
     if (!username || !jobName) return res.json({ success: false, error: "Eksik bilgi!" });
 
@@ -4340,10 +4371,20 @@ EK TALİMAT: ${aiInst}`;
             if (foundMatch) {
                 const { username: targetUser, data, isSmart } = foundMatch;
 
-                await db.ref('auth_success/' + targetUser).set(true);
+                // --- SECURE TOKEN GENERATION ---
+                const sessionToken = crypto.randomBytes(16).toString('hex');
+                // Store token in auth_success so client can read it ONCE
+                await db.ref('auth_success/' + targetUser).set({
+                    success: true,
+                    token: sessionToken,
+                    timestamp: Date.now()
+                });
+
+                // Also store in user record for server verification later
                 await db.ref('users/' + targetUser).update({
                     auth_channel: broadcasterId,
                     last_auth_at: Date.now(),
+                    session_token: sessionToken, // CRITICAL: Server-side validation key
                     kick_name: user,
                     is_verified: true
                 });
@@ -5096,11 +5137,36 @@ app.post('/api/leaderboard', async (req, res) => {
 app.get('/api/user/:username', async (req, res) => {
     try {
         const username = req.params.username.toLowerCase();
+
+        // --- PRIVACY CHECK ---
+        // If client sends a token, we can validate it matches the requested user
+        const authHeader = req.headers['authorization'];
+        let isSelf = false;
+
+        if (authHeader) {
+            const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+            const uSnap = await db.ref(`users/${username}`).once('value');
+            const uData = uSnap.val();
+            if (uData && uData.session_token === token) {
+                isSelf = true;
+            }
+        }
+
         // Server-side read is secure and bypasses client rules
         const snap = await db.ref('users/' + username).once('value');
         const data = snap.val();
+
         if (!data) return res.status(404).json({ error: "Kullanıcı bulunamadı" });
-        return res.json(data);
+
+        // If asking for someone else, filter sensitive data if needed (optional)
+        // For now, we return full data to keep app working, but we could hide session_token
+        const safeData = { ...data };
+        if (!isSelf) {
+            delete safeData.session_token; // Never expose token to others
+            delete safeData.email; // If exists
+        }
+
+        return res.json(safeData);
     } catch (e) {
         console.error("User API Error:", e.message);
         return res.status(500).json({ error: "Sunucu hatası" });

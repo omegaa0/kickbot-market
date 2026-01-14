@@ -309,7 +309,13 @@ function startAuth() {
             // Onay bekleyen dinleyiciyi kur
             db.ref('auth_success/' + user).off(); // Eski varsa temizle
             db.ref('auth_success/' + user).on('value', (snap) => {
-                if (snap.val()) {
+                const result = snap.val();
+                if (result) {
+                    // Check if it's the new object format with token or legacy boolean
+                    if (result.token) {
+                        localStorage.setItem('aloskegang_token', result.token);
+                    }
+
                     db.ref('auth_success/' + user).remove();
                     db.ref('auth_success/' + user).off();
                     login(user);
@@ -345,7 +351,9 @@ async function getUserData() {
 
     // 3. Try API
     try {
-        const res = await fetch('/api/user/' + currentUser);
+        const res = await fetch('/api/user/' + currentUser, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('aloskegang_token')}` }
+        });
         const data = await res.json();
         if (data && !data.error) return data;
     } catch (e) { }
@@ -644,7 +652,10 @@ async function executePurchase(type, trigger, price) {
 
         const res = await fetch('/api/market/buy', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('aloskegang_token')}`
+            },
             body: JSON.stringify(payload)
         });
 
@@ -692,7 +703,10 @@ async function finalizeTTSPurchase(price) {
     try {
         const res = await fetch('/api/market/buy', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('aloskegang_token')}`
+            },
             body: JSON.stringify({
                 username: currentUser,
                 channelId: currentChannelId,
@@ -1521,7 +1535,10 @@ async function applyForJob(jobName, price) {
     try {
         const res = await fetch('/api/jobs/apply', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('aloskegang_token')}`
+            },
             body: JSON.stringify({
                 username: currentUser,
                 jobName: jobName
@@ -1671,7 +1688,10 @@ async function executePropertyBuy(cityId, propId, price, cityName) {
     try {
         const res = await fetch('/api/real-estate/buy', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('aloskegang_token')}`
+            },
             body: JSON.stringify({
                 username: currentUser,
                 cityId: cityId,
@@ -1883,7 +1903,10 @@ async function buyRpgItem(code, type) {
     try {
         const res = await fetch('/api/rpg/buy', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('aloskegang_token')}`
+            },
             body: JSON.stringify({
                 username: currentUser,
                 type: type,
@@ -1979,7 +2002,10 @@ async function buyCustomization(type, id, price) {
     try {
         const res = await fetch('/api/customization/buy', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('aloskegang_token')}`
+            },
             body: JSON.stringify({
                 username: currentUser,
                 type: type,
