@@ -353,6 +353,29 @@ async function getUserData() {
     return {};
 }
 
+async function fetchKickPFP(username) {
+    try {
+        const pfpImg = document.getElementById('user-pfp');
+        const pfpFallback = document.getElementById('user-pfp-fallback');
+
+        const res = await fetch(`/api/kick/pfp/${username}`);
+        if (!res.ok) throw new Error("PFP API error");
+        const data = await res.json();
+
+        if (data.pfp) {
+            if (pfpImg) {
+                pfpImg.src = data.pfp;
+                pfpImg.onload = () => {
+                    pfpImg.style.display = 'block';
+                    if (pfpFallback) pfpFallback.style.display = 'none';
+                };
+            }
+        }
+    } catch (e) {
+        // Fallback remains
+    }
+}
+
 // ... (FREE_COMMANDS array kept as is, skipping lines for brevity if using replace_file_content smartly, but here I replace the init block mostly)
 
 // ...
