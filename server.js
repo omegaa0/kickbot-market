@@ -560,26 +560,226 @@ const activeRR = {};
 const dbRecentUsers = {}; // Aktif kullanıcıları takip etmek için
 let botMasterSwitch = true; // Omegacyr için master switch
 
+
 // --- GLOBAL BORSA SİSTEMİ ---
 const INITIAL_STOCKS = {
-    "APPLE": { price: 5000, trend: 1, history: [], volatility: 0.02, drift: 0.0001 },
-    "BITCOIN": { price: 45000, trend: 1, history: [], volatility: 0.08, drift: 0.0005 },
-    "GOLD": { price: 2500, trend: -1, history: [], volatility: 0.12, drift: 0.0003 },
-    "SILVER": { price: 850, trend: 1, history: [], volatility: 0.06, drift: 0.0002 },
-    "PLATINUM": { price: 3200, trend: 1, history: [], volatility: 0.09, drift: 0.0002 },
-    "KICK": { price: 100, trend: 1, history: [], volatility: 0.15, drift: 0.001 },
-    "ETHER": { price: 15000, trend: -1, history: [], volatility: 0.06, drift: 0.0004 },
-    "TESLA": { price: 7500, trend: 1, history: [], volatility: 0.05, drift: 0.0003 },
-    "NVIDIA": { price: 12000, trend: 1, history: [], volatility: 0.04, drift: 0.0006 },
-    "GOOGLE": { price: 6200, trend: -1, history: [], volatility: 0.02, drift: 0.0002 },
-    "AMAZON": { price: 5800, trend: 1, history: [], volatility: 0.02, drift: 0.0002 },
-    "OMEGA": { price: 1000, trend: 1, history: [], volatility: 0.15, drift: 0.0008 }
+    "APPLE": { name: "Apple Inc.", price: 5000, trend: 1, history: [], volatility: 0.02, drift: 0.0001 },
+    "BITCOIN": { name: "Bitcoin", price: 45000, trend: 1, history: [], volatility: 0.08, drift: 0.0005 },
+    "GOLD": { name: "Altın (Ons)", price: 2500, trend: -1, history: [], volatility: 0.12, drift: 0.0003 },
+    "SILVER": { name: "Gümüş", price: 850, trend: 1, history: [], volatility: 0.06, drift: 0.0002 },
+    "PLATINUM": { name: "Platin", price: 3200, trend: 1, history: [], volatility: 0.09, drift: 0.0002 },
+    "KICK": { name: "Kick Streaming", price: 100, trend: 1, history: [], volatility: 0.15, drift: 0.001 },
+    "ETHER": { name: "Ethereum", price: 15000, trend: -1, history: [], volatility: 0.06, drift: 0.0004 },
+    "TESLA": { name: "Tesla", price: 7500, trend: 1, history: [], volatility: 0.05, drift: 0.0003 },
+    "NVIDIA": { name: "NVIDIA Corp.", price: 12000, trend: 1, history: [], volatility: 0.04, drift: 0.0006 },
+    "GOOGLE": { name: "Alphabet (Google)", price: 6200, trend: -1, history: [], volatility: 0.02, drift: 0.0002 },
+    "AMAZON": { name: "Amazon", price: 5800, trend: 1, history: [], volatility: 0.02, drift: 0.0002 },
+    "OMEGA": { name: "Omega Holding", price: 1000, trend: 1, history: [], volatility: 0.15, drift: 0.0008 }
 };
 
 let currentMarketCycle = "NORMAL";
 let cycleDuration = 0;
 
-// --- EMLAK SİSTEMİ (GLOBAL PAZAR) ---
+// ... (existing constants)
+
+// Borsa güncelleme (Concurrency Lock ile)
+let isUpdatingStocks = false;
+
+async function updateGlobalStocks() {
+    if (isUpdatingStocks) return;
+    isUpdatingStocks = true;
+
+    try {
+        const stockRef = db.ref('global_stocks');
+        const snap = await stockRef.once('value');
+        let stocks = snap.val();
+
+        if (!stocks || !stocks["APPLE"]) {
+            console.log("⚠️ Borsa verisi bulunamadı, başlangıç değerleri yükleniyor...");
+            stocks = JSON.parse(JSON.stringify(INITIAL_STOCKS));
+            for (let code in stocks) {
+                let h = [];
+                let p = stocks[code].price;
+                for (let i = 0; i < 24; i++) {
+                    p = Math.round(p * (1 + (Math.random() * 0.04 - 0.02)));
+                    h.push(p);
+                }
+                stocks[code].history = h;
+            }
+        }
+
+        const metaRef = db.ref('market_meta');
+        const metaSnap = await metaRef.once('value');
+        let meta = metaSnap.val();
+
+        if (meta) {
+            currentMarketCycle = meta.cycle || "NORMAL";
+            cycleDuration = meta.duration || 0;
+        }
+
+        if (cycleDuration <= 0) {
+            const cycles = ["NORMAL", "BULLISH", "BEARISH", "VOLATILE", "STAGNANT"];
+            currentMarketCycle = cycles[Math.floor(Math.random() * cycles.length)];
+            cycleDuration = Math.floor(Math.random() * 300) + 300;
+            console.log(`🔄 Yeni Piyasa Döngüsü: ${currentMarketCycle} (${cycleDuration} tik)`);
+        }
+        cycleDuration--;
+        await metaRef.set({ cycle: currentMarketCycle, duration: cycleDuration });
+
+        // VOLATILITY REDUCED (Daha sakin piyasa)
+        const cycleMultipliers = {
+            "BULLISH": { drift: 0.0001, vol: 0.5 },
+            "BEARISH": { drift: -0.0003, vol: 0.8 },
+            "VOLATILE": { drift: 0, vol: 1.5 },
+            "STAGNANT": { drift: 0, vol: 0.1 },
+            "CRASH": { drift: -0.002, vol: 2.0 },
+            "NORMAL": { drift: 0.00002, vol: 0.4 }
+        };
+
+        const effects = cycleMultipliers[currentMarketCycle] || cycleMultipliers["NORMAL"];
+
+        // NEWS GENERATION LOGIC (Haber Etkisi)
+        if (Math.random() < 0.005) { // Her 200 döngüde bir (~6-7 dk)
+            const codes = Object.keys(stocks);
+            const target = codes[Math.floor(Math.random() * codes.length)];
+            const newsType = Math.random() > 0.5 ? 'GOOD' : 'BAD';
+            const impact = newsType === 'GOOD' ? 1.05 : 0.90; // %5 - %10 anlık etki
+
+            stocks[target].price = Math.round(stocks[target].price * impact);
+
+            const newsMsg = newsType === 'GOOD'
+                ? `🚀 ${stocks[target].name || target} hakkında olumlu gelişmeler! Hisse yükselişte.`
+                : `📉 ${stocks[target].name || target} kritik bir sorunla karşılaştı! Hisse değer kaybediyor.`;
+
+            await db.ref('global_news').push({
+                text: newsMsg,
+                timestamp: Date.now(),
+                type: newsType
+            });
+            console.log(`📰 PİYASA HABEBİ: ${newsMsg}`);
+        }
+
+        for (const [code, data] of Object.entries(stocks)) {
+            const baseData = INITIAL_STOCKS[code] || { price: 100, volatility: 0.02, drift: 0.0001, name: code };
+            const oldPrice = data.price || 100;
+            const startPrice = baseData.price || 100;
+
+            let vol = baseData.volatility * effects.vol;
+            let drift = baseData.drift + effects.drift;
+
+            if (oldPrice > startPrice * 3) drift -= 0.0005;
+            else if (oldPrice < startPrice * 0.3) drift += 0.0005;
+
+            // Reduce noise
+            const epsilon = Math.random() * 2 - 1;
+            const changePercent = (drift * 0.5) + (vol * epsilon * 0.05); // Noise factor reduced 0.1 -> 0.05
+
+            let newPrice = Math.round(oldPrice * (1 + changePercent));
+            if (newPrice < 1) newPrice = 1;
+
+            // Ensure name persists if missing in DB but present in INITIAL
+            if (!data.name && baseData.name) data.name = baseData.name;
+
+            // Ensure history exists logic
+            if (!data.history) data.history = [];
+
+            stocks[code] = {
+                ...data,
+                price: newPrice,
+                oldPrice: oldPrice,
+                trend: newPrice > oldPrice ? 1 : (newPrice < oldPrice ? -1 : (data.trend || 1)),
+                lastUpdate: Date.now(),
+                marketStatus: currentMarketCycle
+            };
+        }
+
+        await stockRef.set(stocks);
+    } catch (e) {
+        console.error("Borsa Update Error:", e.message);
+    } finally {
+        isUpdatingStocks = false;
+    }
+}
+
+// ... (saveHourlyStockHistory logic remains similar)
+
+// --- ADMIN API UPDATES ---
+
+// ADMIN RESİM YÜKLEME (Market Görseli için)
+app.post('/admin-api/upload-image', authAdmin, hasPerm('troll'), upload.single('image'), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'Dosya yok' });
+    const channelId = req.headers['c-id'] || 'global';
+    const baseUrl = process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get('host')}`;
+    const fileUrl = `${baseUrl}/uploads/sounds/${channelId}/${req.file.filename}`; // Keeping in same dir logic for simplicity or create images dir
+    res.json({ url: fileUrl });
+});
+
+app.post('/admin-api/stocks/update', authAdmin, hasPerm('stocks'), async (req, res) => {
+    const { code, price, trend, name } = req.body;
+    if (!code) return res.json({ success: false, error: 'Kod eksik' });
+
+    const updateData = {
+        price: parseInt(price),
+        trend: parseInt(trend),
+        lastUpdate: Date.now()
+    };
+    if (name) updateData.name = name;
+
+    await db.ref(`global_stocks/${code}`).update(updateData);
+    addLog("Borsa Güncelleme", `${code}: ${price} 💰`);
+    res.json({ success: true });
+});
+
+app.post('/admin-api/stocks/add', authAdmin, hasPerm('stocks'), async (req, res) => {
+    const { code, price, name } = req.body;
+    const cleanCode = code.toUpperCase().trim();
+    if (!cleanCode || isNaN(price)) return res.json({ success: false, error: 'Eksik bilgi' });
+
+    // Initialize with history array to ensure graph works immediately
+    const startHistory = [];
+    for (let i = 0; i < 48; i++) startHistory.push(parseInt(price));
+
+    await db.ref(`global_stocks/${cleanCode}`).set({
+        name: name || cleanCode,
+        price: parseInt(price),
+        oldPrice: parseInt(price),
+        trend: 1,
+        lastUpdate: Date.now(),
+        history: startHistory
+    });
+    addLog("Borsa Yeni Hisse", `${cleanCode} eklendi: ${price} 💰`);
+    res.json({ success: true });
+});
+
+app.post('/admin-api/add-news', authAdmin, hasPerm('stocks'), async (req, res) => {
+    const { code, text, type, impact } = req.body;
+    if (!text || !type) return res.status(400).json({ error: "Eksik bilgi" });
+
+    // 1. Haberi Kaydet
+    await db.ref('global_news').push({
+        text,
+        type, // GOOD or BAD
+        timestamp: Date.now(),
+        relatedStock: code || 'GLOBAL'
+    });
+
+    // 2. Eğer spesifik bir hisse ise fiyatı güncelle
+    if (code && code !== 'GLOBAL' && impact) {
+        const stockRef = db.ref(`global_stocks/${code}`);
+        const s = (await stockRef.once('value')).val();
+        if (s) {
+            const multiplier = 1 + (parseInt(impact) / 100);
+            const newPrice = Math.round(s.price * multiplier);
+            await stockRef.update({ price: newPrice, lastUpdate: Date.now() });
+        }
+    }
+
+    addLog("Borsa Haber", `${code || 'Global'}: ${text} (${type})`);
+    res.json({ success: true });
+});
+
+// ... (rest of the file)
+
 const REAL_ESTATE_TYPES = [
     { name: "Küçük Esnaf Dükkanı", minPrice: 500000, maxPrice: 1200000, minInc: 500, maxInc: 1500, type: "low" },
     { name: "Pide Salonu", minPrice: 1000000, maxPrice: 2000000, minInc: 1200, maxInc: 2500, type: "low" },
@@ -647,118 +847,7 @@ async function getCityMarket(cityId) {
     }
 }
 
-// Borsa güncelleme (Concurrency Lock ile)
-let isUpdatingStocks = false;
 
-async function updateGlobalStocks() {
-    if (isUpdatingStocks) return; // Zaten çalışıyorsa bekle
-    isUpdatingStocks = true;
-
-    try {
-        const stockRef = db.ref('global_stocks');
-        const snap = await stockRef.once('value');
-        let stocks = snap.val();
-
-        if (!stocks || !stocks["APPLE"]) {
-            console.log("⚠️ Borsa verisi bulunamadı, başlangıç değerleri yükleniyor...");
-            stocks = JSON.parse(JSON.stringify(INITIAL_STOCKS)); // Deep copy to avoid reference issues
-            for (let code in stocks) {
-                let h = [];
-                let p = stocks[code].price;
-                for (let i = 0; i < 24; i++) {
-                    p = Math.round(p * (1 + (Math.random() * 0.04 - 0.02)));
-                    h.push(p);
-                }
-                stocks[code].history = h;
-            }
-        } else {
-            // console.log("✅ Mevcut borsa verileri yüklendi.");
-        }
-
-        // Piyasa Meta Verilerini Çek
-        const metaRef = db.ref('market_meta');
-        const metaSnap = await metaRef.once('value');
-        let meta = metaSnap.val();
-
-        if (meta) {
-            currentMarketCycle = meta.cycle || "NORMAL";
-            cycleDuration = meta.duration || 0;
-        }
-
-        // Piyasa döngüsü yönetimi
-        if (cycleDuration <= 0) {
-            const cycles = ["NORMAL", "BULLISH", "BEARISH", "VOLATILE", "STAGNANT"];
-            currentMarketCycle = cycles[Math.floor(Math.random() * cycles.length)];
-            cycleDuration = Math.floor(Math.random() * 300) + 300; // 5-10 dk
-            console.log(`🔄 Yeni Piyasa Döngüsü: ${currentMarketCycle} (${cycleDuration} tik)`);
-        }
-        cycleDuration--;
-
-        // Meta verilerini kaydet
-        await metaRef.set({ cycle: currentMarketCycle, duration: cycleDuration });
-
-        // Döngü Etkileri (Daha belirgin)
-        const cycleMultipliers = {
-            "BULLISH": { drift: 0.0002, vol: 1.0 },  // Güçlü Yükseliş: Drift 0.0006 -> 0.0002. Vol 1.2 -> 1.0 (Daha sakin yükseliş)
-            "BEARISH": { drift: -0.0008, vol: 1.5 }, // Düşüş aynı kalsın (hızlı düşsün)
-            "VOLATILE": { drift: 0, vol: 3.0 },      // Vol 4.0 -> 3.0
-            "STAGNANT": { drift: 0, vol: 0.2 },      // Durgun (Biraz hareketlendi)
-            "CRASH": { drift: -0.005, vol: 3 },      // ÇÖKÜŞ (Çok sert düşüş)
-            "NORMAL": { drift: 0.00005, vol: 0.8 }   // Normal: Drift 0.0001 -> 0.00005 (Çok hafif yükseliş)
-        };
-
-        const effects = cycleMultipliers[currentMarketCycle] || cycleMultipliers["NORMAL"];
-
-        for (const [code, data] of Object.entries(stocks)) {
-            const baseData = INITIAL_STOCKS[code] || { price: 100, volatility: 0.02, drift: 0.0001 };
-            const oldPrice = data.price || 100;
-            const startPrice = baseData.price || 100; // Başlangıç fiyatı referansı
-
-            let vol = baseData.volatility * effects.vol;
-            let drift = baseData.drift + effects.drift;
-
-            // MEAN REVERSION (Ortalamaya Dönüş Etkisi) - YENİ
-            // Eğer fiyat başlangıç fiyatının 3 katına çıktıysa, düşüş baskısı uygula.
-            // Eğer fiyat başlangıç fiyatının 0.3 katına indiyse, yükseliş baskısı uygula.
-            if (oldPrice > startPrice * 3) {
-                drift -= 0.0005; // Yükselişi frenle
-            } else if (oldPrice < startPrice * 0.3) {
-                drift += 0.0005; // Düşüşü frenle
-            }
-
-            // Brownian Motion (Hassasiyet artırıldı: 0.02 -> 0.1)
-            const epsilon = Math.random() * 2 - 1;
-            const changePercent = (drift * 0.5) + (vol * epsilon * 0.1);
-
-            let newPrice = Math.round(oldPrice * (1 + changePercent));
-
-            // Ani hareket olasılığı ve etkisi azaltıldı
-            if (Math.random() < 0.0001) { // 0.0002 idi
-                const modifier = Math.random() > 0.5 ? 1.05 : 0.95; // %15 yerine %5 hareket
-                newPrice = Math.round(newPrice * modifier);
-                console.log(`[Piyasa Olayı] ${code} Ani hareket: %${Math.round((modifier - 1) * 100)}`);
-            }
-
-            if (newPrice < 1) newPrice = 1;
-            if (newPrice > 5000000) newPrice = 5000000;
-
-            stocks[code] = {
-                ...data,
-                price: newPrice,
-                oldPrice: oldPrice,
-                trend: newPrice > oldPrice ? 1 : (newPrice < oldPrice ? -1 : (data.trend || 1)),
-                lastUpdate: Date.now(),
-                marketStatus: currentMarketCycle
-            };
-        }
-
-        await stockRef.set(stocks);
-    } catch (e) {
-        console.error("Borsa Update Error:", e.message);
-    } finally {
-        isUpdatingStocks = false;
-    }
-}
 
 // Borsa Saatlik Geçmiş Kaydı
 async function saveHourlyStockHistory() {
@@ -5837,7 +5926,25 @@ app.post('/api/borsa/reset', authAdmin, async (req, res) => {
     }
 });
 
-// --- EMLAK SİSTEMİ API & HELPER ---
+app.post('/admin-api/all-users', authAdmin, async (req, res) => {
+    const { search } = req.body;
+    try {
+        let snap;
+        if (search) {
+            const cleanSearch = search.toLowerCase();
+            // Try prefix search
+            snap = await db.ref('users').orderByKey().startAt(cleanSearch).endAt(cleanSearch + "\uf8ff").limitToFirst(50).once('value');
+        } else {
+            // Default: Fetch last 500 created/active users to prevent overload
+            // Getting all might verify crash the server if DB is huge
+            snap = await db.ref('users').limitToLast(500).once('value');
+        }
+        res.json(snap.val() || {});
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 
 // 1. GET JOBS (Admin Panel Sync)
 app.post('/admin-api/get-jobs', authAdmin, hasPerm('users'), (req, res) => {

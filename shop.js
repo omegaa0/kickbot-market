@@ -187,16 +187,35 @@ let currentChannelId = null;
 const FREE_COMMANDS = [
     { cmd: "!market", desc: "Market linkini sohbete atar." },
     { cmd: "!bakiye", desc: "Mevcut paranızı gösterir." },
-    { cmd: "!coinflip <miktar>", desc: "Yazı tura atar (x2 kazanç)." },
+    { cmd: "!yazitura <miktar> <y/t>", desc: "Yazı tura atar (x2 kazanç)." },
     { cmd: "!slot <miktar>", desc: "Slot makinesini çevirir." },
+    { cmd: "!kutu <miktar> <1-3>", desc: "Kutu açma oyunu (1, 2 veya 3)." },
     { cmd: "!zenginler", desc: "En zengin ilk 5 kişiyi listeler." },
     { cmd: "!transfer @kisi <miktar>", desc: "Arkadaşına para gönderir." },
     { cmd: "!duello @kisi <miktar>", desc: "Bahisli düello teklif eder." },
-    { cmd: "!kabulet", desc: "Gelen düello teklifini kabul eder." },
+    { cmd: "!kabul", desc: "Gelen düello teklifini kabul eder." },
     { cmd: "!reddet", desc: "Gelen düello teklifini reddeder." },
+    { cmd: "!rusruleti @kisi <miktar>", desc: "Rus ruleti teklif eder (timeout riski)." },
+    { cmd: "!ruskabul", desc: "Rus ruleti teklifini kabul eder." },
+    { cmd: "!soygun", desc: "Kanalda soygun başlatır veya katıl." },
     { cmd: "!profil", desc: "Detaylı profilinizi gösterir." },
-    { cmd: "!meslek", desc: "Mevcut mesleğinizi ve maaşınızı gösterir." },
-    { cmd: "!calis", desc: "Mesleğinizde çalışıp maaş alırsınız (30dk süre)." }
+    { cmd: "!meslek", desc: "Mevcut mesleğinizi gösterir." },
+    { cmd: "!calis", desc: "Çalışıp maaş alırsınız (30dk süre)." },
+    { cmd: "!fal", desc: "Günün falına bakar." },
+    { cmd: "!burç <burç>", desc: "Günlük burç yorumu." },
+    { cmd: "!efkar", desc: "Efkar seviyenizi ölçer." },
+    { cmd: "!söz", desc: "Günün sözünü paylaşır." },
+    { cmd: "!şarkıöner", desc: "Rastgele şarkı önerir." },
+    { cmd: "!8top <soru>", desc: "Sihirli 8 top cevaplar." },
+    { cmd: "!iq", desc: "IQ seviyenizi ölçer." },
+    { cmd: "!şans", desc: "Günlük şans ölçer." },
+    { cmd: "!kişilik", desc: "Kişilik analizi yapar." },
+    { cmd: "!zar", desc: "İki zar atar." },
+    { cmd: "!ırk", desc: "Genetik ırk analizi." },
+    { cmd: "!ship <ops:kisi>", desc: "Aşk uyumu ölçer." },
+    { cmd: "!hava <şehir>", desc: "Hava durumunu gösterir." },
+    { cmd: "!troll <salla/bsod/glitch>", desc: "Yayıncıyı troller (Ücretli)." },
+    { cmd: "!hangisi <A> mı <B> mi", desc: "Bot bir seçim yapar." }
 ];
 
 let currentPreview = null;
@@ -946,9 +965,16 @@ async function loadBorsa() {
             if (!data || typeof data !== 'object') return;
             if (code === 'status') return;
 
-            const trend = data.trend === 1 ? '📈' : '📉';
-            const color = data.trend === 1 ? '#05ea6a' : '#ff4d4d';
-            const diff = data.oldPrice ? (((data.price - data.oldPrice) / data.oldPrice) * 100).toFixed(2) : "0.00";
+            // GÜNLÜK YÜZDE HESAPLAMA (Son 24h ilk fiyat baz alınır)
+            let dailyStartPrice = data.oldPrice;
+            if (data.history && data.history.length > 0) {
+                dailyStartPrice = data.history[0]; // Listenin başı en eski kayıt (örn. 24 saat önce veya daha eski)
+            }
+
+            const diffVal = ((data.price - dailyStartPrice) / dailyStartPrice) * 100;
+            const diff = diffVal.toFixed(2);
+            const trendIcon = diffVal >= 0 ? '📈' : '📉';
+            const color = diffVal >= 0 ? '#05ea6a' : '#ff4d4d';
 
             let card = document.querySelector(`.borsa-card[data-code="${code}"]`);
             if (card) {
@@ -957,7 +983,7 @@ async function loadBorsa() {
                 const buyBtn = card.querySelector('.btn-buy-main');
                 const sellBtn = card.querySelector('.btn-sell-main');
 
-                trendEl.innerHTML = `${data.trend === 1 ? '+' : ''}${diff}% ${trend}`;
+                trendEl.innerHTML = `${diffVal > 0 ? '+' : ''}${diff}% ${trendIcon}`;
                 trendEl.style.color = color;
                 priceEl.innerHTML = `${(data.price || 0).toLocaleString()} <span style="font-size:0.8rem; color:var(--primary);">💰</span>`;
 
@@ -970,9 +996,12 @@ async function loadBorsa() {
                 card.setAttribute('data-code', code);
                 card.innerHTML = `
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                        <span style="font-weight:800; font-size:1.1rem; color:var(--primary);">${code}</span>
+                        <div style="display:flex; flex-direction:column;">
+                            <span style="font-weight:800; font-size:1.1rem; color:var(--primary);">${code}</span>
+                            ${data.name ? `<span style="font-size:0.75rem; color:#888;">${data.name}</span>` : ''}
+                        </div>
                         <span class="trend-val" style="color:${color}; font-weight:800; font-size:0.75rem;">
-                            ${data.trend === 1 ? '+' : ''}${diff}% ${trend}
+                            ${diffVal > 0 ? '+' : ''}${diff}% ${trendIcon}
                         </span>
                     </div>
                     
@@ -1004,6 +1033,35 @@ async function loadBorsa() {
 
     db.ref('global_stocks').on('value', snap => {
         if (snap.exists()) renderStocks(snap.val());
+    });
+
+    // Haberleri dinle
+    db.ref('global_news').limitToLast(10).on('value', snap => {
+        if (snap.exists()) renderNews(snap.val());
+    });
+}
+
+function renderNews(newsData) {
+    const container = document.getElementById('news-ticker-container');
+    if (!container) return;
+    container.innerHTML = "";
+
+    // Sort by timestamp desc (newest first)
+    const sorted = Object.values(newsData).sort((a, b) => b.timestamp - a.timestamp);
+
+    sorted.forEach(n => {
+        const timeStr = new Date(n.timestamp).toLocaleTimeString();
+        const color = n.type === 'GOOD' ? '#05ea6a' : '#ff4d4d';
+        const icon = n.type === 'GOOD' ? '🚀' : '📉';
+
+        const div = document.createElement('div');
+        div.style = "padding: 8px; background: rgba(255,255,255,0.03); border-radius: 6px; border-left: 3px solid " + color + "; font-size: 0.85rem;";
+        div.innerHTML = `
+            <span style="color:#666; font-size:0.75rem; margin-right:5px;">${timeStr}</span>
+            <span style="color:${color}; font-weight:bold; margin-right:5px;">${icon}</span>
+            <span style="color:#eee;">${n.text}</span>
+        `;
+        container.appendChild(div);
     });
 }
 
