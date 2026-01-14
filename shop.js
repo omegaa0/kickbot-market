@@ -199,7 +199,11 @@ function init() {
     }
 
     const genBtn = document.getElementById('generate-code-btn');
-    if (genBtn) genBtn.addEventListener('click', startAuth);
+    if (genBtn) {
+        // Remove old listeners to be safe (though not strictly possible easily without reference, but init runs once usually)
+        genBtn.replaceWith(genBtn.cloneNode(true));
+        document.getElementById('generate-code-btn').addEventListener('click', startAuth);
+    }
 
     const backBtn = document.getElementById('back-btn');
     if (backBtn) backBtn.addEventListener('click', showAuth);
