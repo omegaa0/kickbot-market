@@ -6100,6 +6100,26 @@ async function getAiMemory() {
     }
 }
 
+app.post('/admin-api/all-users', authAdmin, async (req, res) => {
+    const { search } = req.body;
+    try {
+        let ref = db.ref('users');
+        let query = ref.orderByKey();
+
+        if (search) {
+            query = query.startAt(search).endAt(search + "\uf8ff");
+        } else {
+            query = query.limitToFirst(500);
+        }
+
+        const snap = await query.once('value');
+        const users = snap.val() || {};
+        res.json(users);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 /**
  * Son aktiviteleri kaydeder (Takip, Abone, Bağış)
  */

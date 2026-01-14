@@ -1514,7 +1514,7 @@
                     </td>
                     <td>
                         <div style="font-size:0.75rem; color:var(--secondary); cursor:pointer;" onclick="openAssetModal('${u}')">
-                             🏢 ${(d.real_estate ? Object.keys(d.real_estate).length : 0)} Mülk<br>
+                             🏢 ${(d.properties ? (Array.isArray(d.properties) ? d.properties.length : Object.keys(d.properties).length) : 0)} Mülk<br>
                              📈 ${(d.stocks ? Object.keys(d.stocks).length : 0)} Hisse
                         </div>
                     </td>
