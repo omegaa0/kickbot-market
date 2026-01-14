@@ -184,8 +184,41 @@ const PROFILE_CUSTOMIZATIONS = {
 // Global Variables
 let currentUser = null;
 let currentChannelId = null;
+const FREE_COMMANDS = [
+    { cmd: "!market", desc: "Market linkini sohbete atar." },
+    { cmd: "!bakiye", desc: "Mevcut paranızı gösterir." },
+    { cmd: "!coinflip <miktar>", desc: "Yazı tura atar (x2 kazanç)." },
+    { cmd: "!slot <miktar>", desc: "Slot makinesini çevirir." },
+    { cmd: "!zenginler", desc: "En zengin ilk 5 kişiyi listeler." },
+    { cmd: "!transfer @kisi <miktar>", desc: "Arkadaşına para gönderir." },
+    { cmd: "!duello @kisi <miktar>", desc: "Bahisli düello teklif eder." },
+    { cmd: "!kabulet", desc: "Gelen düello teklifini kabul eder." },
+    { cmd: "!reddet", desc: "Gelen düello teklifini reddeder." },
+    { cmd: "!profil", desc: "Detaylı profilinizi gösterir." },
+    { cmd: "!meslek", desc: "Mevcut mesleğinizi ve maaşınızı gösterir." },
+    { cmd: "!calis", desc: "Mesleğinizde çalışıp maaş alırsınız (30dk süre)." }
+];
+
 let currentPreview = null;
 let currentPreviewTimeout = null;
+
+function renderFreeCommands() {
+    const container = document.getElementById('free-commands');
+    if (!container) return;
+    container.innerHTML = "";
+
+    FREE_COMMANDS.forEach(fc => {
+        const div = document.createElement('div');
+        div.className = 'cmd-item';
+        div.style.padding = "5px 0";
+        div.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
+        div.innerHTML = `
+            <code style="color:var(--primary); font-weight:bold;">${fc.cmd}</code>
+            <p style="margin:2px 0 0 0; color:#aaa; font-size:0.85rem;">${fc.desc}</p>
+        `;
+        container.appendChild(div);
+    });
+}
 
 function init() {
     console.log("Market initialized");
