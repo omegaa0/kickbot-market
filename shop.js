@@ -787,6 +787,7 @@ function switchTab(id) {
     if (id === 'profile') loadProfile();
     if (id === 'career') loadCareer();
     if (id === 'stats') loadLiveStats();
+    if (id === 'gangs') loadGangs();
 }
 
 let borsaActive = false;
