@@ -1857,33 +1857,33 @@ async function buyCustomization(type, id, price) {
 }
 
 // init is called via DOMContentLoaded
-// --- SECURITY: DISABLE F12 & RIGHT CLICK ---
-document.addEventListener('contextmenu', event => event.preventDefault());
+// SECURITY: DISABLE F12 & RIGHT CLICK (DEV MODE: DISABLED)
+// document.addEventListener('contextmenu', event => event.preventDefault());
 
-document.addEventListener('keydown', function (event) {
-    // F12
-    if (event.key === "F12" || event.keyCode === 123) {
-        event.preventDefault();
-        return false;
-    }
-    // Ctrl+Shift+I (DevTools)
-    if (event.ctrlKey && event.shiftKey && (event.key === 'I' || event.key === 'i')) {
-        event.preventDefault();
-        return false;
-    }
-    // Ctrl+Shift+J (Console)
-    if (event.ctrlKey && event.shiftKey && (event.key === 'J' || event.key === 'j')) {
-        event.preventDefault();
-        return false;
-    }
-    // Ctrl+Shift+C (Element Inspector)
-    if (event.ctrlKey && event.shiftKey && (event.key === 'C' || event.key === 'c')) {
-        event.preventDefault();
-        return false;
-    }
-    // Ctrl+U (View Source)
-    if (event.ctrlKey && (event.key === 'U' || event.key === 'u')) {
-        event.preventDefault();
-        return false;
-    }
-});
+// document.addEventListener('keydown', function (event) {
+//     // F12
+//     if (event.key === "F12" || event.keyCode === 123) {
+//         event.preventDefault();
+//         return false;
+//     }
+//     // Ctrl+Shift+I (DevTools)
+//     if (event.ctrlKey && event.shiftKey && (event.key === 'I' || event.key === 'i')) {
+//         event.preventDefault();
+//         return false;
+//     }
+//     // Ctrl+Shift+J (Console)
+//     if (event.ctrlKey && event.shiftKey && (event.key === 'J' || event.key === 'j')) {
+//         event.preventDefault();
+//         return false;
+//     }
+//     // Ctrl+Shift+C (Element Inspector)
+//     if (event.ctrlKey && event.shiftKey && (event.key === 'C' || event.key === 'c')) {
+//         event.preventDefault();
+//         return false;
+//     }
+//     // Ctrl+U (View Source)
+//     if (event.ctrlKey && (event.key === 'U' || event.key === 'u')) {
+//         event.preventDefault();
+//         return false;
+//     }
+// });
