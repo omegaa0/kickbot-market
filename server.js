@@ -1686,27 +1686,25 @@ app.get('/api/kick/pfp/:username', async (req, res) => {
 // ---------------------------------------------------------
 // BORSA RESET (ONLY FOR OMEGACYRA)
 // ---------------------------------------------------------
-app.post('/api/borsa/reset', async (req, res) => {
-    const { requester } = req.body;
-    if (requester !== 'omegacyra') return res.status(403).json({ success: false, error: "Yetkisiz işlem!" });
+// ---------------------------------------------------------
+// FORCE LOGOUT ALL USERS (SESSION TERMINATION)
+// ---------------------------------------------------------
+app.post('/api/market/reset-users', authAdmin, async (req, res) => {
+    // Only 'omegacyr' (Master Admin)
+    if (!req.adminUser || req.adminUser.username !== 'omegacyr') {
+        return res.status(403).json({ success: false, error: "Yetkisiz işlem! Sadece Omegacyr yapabilir." });
+    }
 
     try {
-        console.log("!!! BORSA RESETLENİYOR (Requester: omegacyra) !!!");
-        const usersSnap = await db.ref('users').once('value');
-        const users = usersSnap.val() || {};
+        console.log("!!! FORCE LOGOUT SIGNAL (Requester: omegacyr) !!!");
 
-        const updates = {};
-        for (const [uname, udata] of Object.entries(users)) {
-            if (udata.stocks) {
-                updates[`users/${uname}/stocks`] = null;
-            }
-        }
+        // Sadece timestamp'i güncelle, istemciler bunu dinleyip çıkış yapacak
+        const timestamp = Date.now();
+        await db.ref('system/force_logout').set(timestamp);
 
-        if (Object.keys(updates).length > 0) {
-            await db.ref().update(updates);
-        }
+        addLog("Sistem", "Tüm kullanıcılar hesaplarından çıkış yaptırıldı (Force Logout).", "Global");
 
-        res.json({ success: true, message: "Tüm borsa hisseleri sıfırlandı!" });
+        res.json({ success: true, message: "Tüm kullanıcıların oturumu kapatılıyor (Logout Signal Sent)!" });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }

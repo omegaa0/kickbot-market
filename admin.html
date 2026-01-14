@@ -819,6 +819,8 @@
                     <input type="number" id="newStockPrice" placeholder="Fiyat" class="inp"
                         style="margin:0; width:100px;">
                     <button class="btn" style="width: auto; padding: 0 20px;" onclick="addStock()">+ EKLE</button>
+                    <button class="btn btn-danger" style="width: auto; padding: 0 15px;" onclick="resetMarketUsers()">🚨
+                        TÜM KULLANICILARI SIFIRLA</button>
                 </div>
             </div>
             <div class="table-container">
@@ -2052,6 +2054,31 @@
             }
 
             // Auto login if possible (not implemented here but sessionKey could be in localStorage)
+
+            async function resetMarketUsers() {
+                if (!confirm("⚠️ DİKKAT!\n\nBu işlem TÜM kullanıcıların:\n1. Bakiyesini 0 yapar.\n2. Tüm hisse senetlerini siler.\n\nBu işlem geri alınamaz. Emin misin?")) return;
+
+                // İkinci onay (Master işlemi olduğu için)
+                if (!confirm("🚨 SON UYARI: Market sıfırlanıyor. Devam edilsin mi?")) return;
+
+                try {
+                    const res = await fetch('/api/market/reset-users', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ key: sessionKey }) // authAdmin middleware key bekler
+                    });
+
+                    const data = await res.json();
+                    if (data.success) {
+                        alert(data.message);
+                        showToast(data.message);
+                    } else {
+                        alert("Hata: " + data.error);
+                    }
+                } catch (e) {
+                    alert("Sunucu hatası!");
+                }
+            }
         </script>
         <script>
             // --- SECURITY: DISABLE F12 & RIGHT CLICK ---
