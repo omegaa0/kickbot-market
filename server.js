@@ -1949,7 +1949,10 @@ async function fetchKickGraphQL(slug) {
         });
         return response.data?.data?.channel;
     } catch (e) {
-        console.error(`Kick GraphQL Error (${slug}):`, e.message);
+        // Suppress 405 errors (Method Not Allowed) as they are expected for some endpoints/headers
+        if (!e.message.includes('405')) {
+            console.error(`Kick GraphQL Error (${slug}):`, e.message);
+        }
         return null;
     }
 }
