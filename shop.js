@@ -1573,6 +1573,13 @@ async function createGang() {
 
     if (!name || !tag || !baseCity) return showToast("Ad, etiket ve şehir zorunlu!", "error");
 
+    const isInf = lastUserData?.is_infinite === true;
+    const confirmMsg = isInf
+        ? `${name} [${tag.toUpperCase()}] çetesini Omega'nın Kartı ile ÜCRETSİZ kurmak istediğine emin misin?`
+        : `${name} [${tag.toUpperCase()}] çetesini 1.000.000 💰 karşılığında kurmak istediğine emin misin?`;
+
+    if (!confirm(confirmMsg)) return;
+
     // Optimistic UI interaction
     showToast("Çete kuruluyor...", "info");
 

@@ -1469,7 +1469,7 @@ app.post('/api/borsa/sell', async (req, res) => {
 
         const currentPrice = stockData.price;
         const grossTotal = currentPrice * amount;
-        const commission = Math.floor(grossTotal * 0.05);
+        const commission = Math.floor(grossTotal * 0.10);
         const netTotal = Math.floor(grossTotal - commission);
 
         // 2. Kullanıcı İşlemi
@@ -6503,29 +6503,31 @@ app.post('/api/gang/create', async (req, res) => {
         // For simplicity with Firebase and high-level logic, we will check balance carefully.
 
         const userRef = db.ref('users/' + cleanUser);
+        const userSnap = await userRef.once('value');
+        const user = userSnap.val();
 
-        // Transaction on User Balance to ensure they have funds and lock it
-        const transactionResult = await userRef.child('balance').transaction((currentBalance) => {
-            if (currentBalance === null) return currentBalance; // User doesn't exist handle later
-            if (currentBalance < GANG_CREATE_COST) return; // Abort
-            return currentBalance - GANG_CREATE_COST;
-        });
+        if (!user) return res.json({ success: false, error: 'Kullanıcı bulunamadı!' });
 
-        if (!transactionResult.committed) {
-            return res.json({ success: false, error: 'Yetersiz bakiye veya işlem hatası.' });
+        const isInf = user.is_infinite === true;
+
+        if (!isInf) {
+            // Transaction on User Balance to ensure they have funds and lock it
+            const transactionResult = await userRef.child('balance').transaction((currentBalance) => {
+                if (currentBalance === null) return currentBalance;
+                if (currentBalance < GANG_CREATE_COST) return;
+                return (currentBalance || 0) - GANG_CREATE_COST;
+            });
+
+            if (!transactionResult.committed) {
+                return res.json({ success: false, error: 'Yetersiz bakiye veya işlem hatası.' });
+            }
         }
 
-        // Now user has paid, proceed to create gang. 
-        // Note: If server crashes here, user lost money. This is a risk in non-SQL DBs without multi-path transactions.
-        // We accept this risk for this game scale, or we could implement a refund logic on error.
-
         try {
-            const userSnap = await userRef.once('value');
-            const userData = userSnap.val();
-
+            const userData = user; // Already fetched
             if (userData.gang) {
-                // User already in gang! REFUND and Abort
-                await userRef.child('balance').transaction(val => (val || 0) + GANG_CREATE_COST);
+                // User already in gang! REFUND and Abort (if not infinite)
+                if (!isInf) await userRef.child('balance').transaction(val => (val || 0) + GANG_CREATE_COST);
                 return res.json({ success: false, error: 'Zaten bir çetedesin!' });
             }
 
@@ -6535,8 +6537,8 @@ app.post('/api/gang/create', async (req, res) => {
             const exists = Object.values(gangs).some(g => g.name.toLowerCase() === name.toLowerCase() || g.tag.toLowerCase() === tag.toLowerCase());
 
             if (exists) {
-                // Refund
-                await userRef.child('balance').transaction(val => (val || 0) + GANG_CREATE_COST);
+                // Refund (if not infinite)
+                if (!isInf) await userRef.child('balance').transaction(val => (val || 0) + GANG_CREATE_COST);
                 return res.json({ success: false, error: 'Bu isim veya etiket zaten kullanılıyor!' });
             }
 
