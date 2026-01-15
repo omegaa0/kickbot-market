@@ -87,63 +87,38 @@ const upload = multer({ storage: storage });
 
 const admin = require('firebase-admin');
 
-// Firebase Admin initialization (File or Env Variable)
-let serviceAccount;
+// Firebase Admin initialization (Hardcoded for maximum reliability)
 let isFirebaseReady = false;
 
+const serviceAccount = {
+    "type": "service_account",
+    "project_id": "kickbot-market",
+    "private_key_id": "d0772fbaf521f9c434c64a154056a4e0f33c47a2",
+    "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC9AVCnJybRtWBa\njQqLfxrHJ19h8B4WEunYnHk4WkPumroptK77XlVxvJRnnpDwHa649aZvyPWZr3c7\ndRP8lLyXxzQX3GVSaUtYMKJSwGxyG6nWQUmavE1cc84w36zIPnHU+RkDQCZzrOlc\nMEir7JkGyjRw4yZ8x183S7zfZhbhy8PwqpwcEcKTRTHOQjmo0OdH87QTGO9Ao59y\nu9VshFrLDRMiNXQgtVOUkfxoN5+OosUi8L/nV/XT8qnrQbEuxrEYi05x8xK03gXe\nGmeat9375RjNjQoFehRjoAjWEDTGD53IWCduqXBOag9VEWmwQorvt/J7Jnmo8N1P\naOrzM9GVAgMBAAECggEAHl0WOGxFQ75oNtPexE9MnX75R1Icez5ZnAdzP/bcX/oy\nex3AWLiscGOz0bu7HCAgoC0yqlW2AxUZyg8CgXrhm16Qw16QVn9877OMeE/afDBu\nhfGiIf4rTXV7RAXDC75gai8Eci29n6rBKKLHIfuWD+2vJA2R8szSwp7jvl33whlD\neJoa2ksmIJVJqlBMINwB9WCXuzUl6wprBwQjVKsZ6rIDgpcuoDfydXqJck03MLMo\nReAUTqeicbbG12qsMznAOD8RWu6VxcMWWw2K97Z54Q1DkaZzjA1Bz7O2RAk1UlqY\ntjbnAEIhJ1bAf/j8nK8U/d87eSbT7WCqnucjTgkIQKBgQD314DOt23QbdFMfi7M\n3L4ALbFebeyYg/AwGEhFW0xKqD66plvjvOd73AGt+O/2D57b1kDd4xf+jU8gBWLV\n90Ff3aWK5aid61rFJGwMe/gWpaib2pcndRF/emTO6b74zN4Dn2YbPBKfOYGOjBG0\ndG5RL0oS6D6yQDt4z1LM5bdtEQKBgQDDOgLNXwxFaD96lHAzOkpL8IJUMPBA5c8w\nV7x8rkh5Oup/Uwtw3jEONmsCUhX8oYvVJERbktJv0i1OTBo364zFa001mOlpBb6H\nou/ZB2VfmK+BzU7r7N7zQQtTmxgGTw1GuXx8Y+Jc3WA9NIvfb60bt8DTinR/LHwY\n8Rh2g7ysRQKBgQDbixTZCPfH+F+9CNHgO3I7qj5CTdGV0NpFYF00wwkz4RGgOZmQ\nhVfxChSazbeTGoc4afSQGYi5vudmkB7bNum8SBVKkuHo8gE4PWlRLceXGArh9KKN\nG1DiwcLm33yB3MiWIO9MFMzSKxiu8zkDx1eppuBRG1XehLOp8s2AH8V6YQKBgQC9\ngRI3SIwg05DK7Ev1bhewn0Xjc53DYVA9HO1aGdM/2nDGJ1ZzuTrlEO3O0t+E20th\nGlNAkMS0xtAzsKvCnGOJPx8zZ7sqtui7wO4RPZyprwyucxyo5sWEWx8jiOlJNnMs\ns+Ci3lJc0ocY4mjj+wOOZFBJB50N1aCglWepozcCAQKBgHsj/c+JMM5w0hylSv1y\nY0R/M/re3XMKqn4i34FP9iz3gTNAM6FD0NiR1gAs8/B3JNICPVnCMuVNK3ED+PU2\nxsCKJm+OQwSxG0i2Nbwq+2dZOKGTQZlge1XoP6s7wi3kAY1ePyvmqnNsdXT27P2M\n+4g+8/gG+qu0rgMsXsH+3wa4\n-----END PRIVATE KEY-----\n",
+    "client_email": "firebase-adminsdk-fbsvc@kickbot-market.iam.gserviceaccount.com",
+    "client_id": "106450931618354685382",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40kickbot-market.iam.gserviceaccount.com",
+    "universe_domain": "googleapis.com"
+};
+
 try {
-    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-        console.log("ℹ️ Firebase SERVICE_ACCOUNT Environment Variable üzerinden okunuyor...");
-        let rawKey = process.env.FIREBASE_SERVICE_ACCOUNT;
-        serviceAccount = JSON.parse(rawKey);
-    } else {
-        console.log("ℹ️ Firebase anahtarı yerel dosyadan okunuyor...");
-        serviceAccount = require("./firebase-admin-key.json");
-    }
-
-    if (serviceAccount && serviceAccount.private_key) {
-        // ÇOK AGRESİF TEMİZLİK: Render/Vercel gibi ortamlar anahtarı bozabiliyor
-        serviceAccount.private_key = serviceAccount.private_key
-            .replace(/\\n/g, '\n') // Kaçış karakterlerini gerçek newline yap
-            .replace(/\n\n/g, '\n') // Çift satırları teke indir
-            .trim();
-
-        if (serviceAccount.private_key.startsWith('"')) serviceAccount.private_key = serviceAccount.private_key.slice(1);
-        if (serviceAccount.private_key.endsWith('"')) serviceAccount.private_key = serviceAccount.private_key.slice(0, -1);
-    }
-
     if (!admin.apps.length) {
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount),
-            databaseURL: process.env.FIREBASE_DB_URL
+            databaseURL: "https://kickbot-market-default-rtdb.europe-west1.firebasedatabase.app"
         });
     }
     isFirebaseReady = true;
     console.log("✅ Firebase Admin başarıyla başlatıldı.");
 } catch (e) {
-    console.error("❌ Firebase Admin başlatılamadı!");
-    console.error("⚠️ Hata:", e.message);
-    console.log("💡 İpucu: Render panelindeki FIREBASE_SERVICE_ACCOUNT değişkeninin tam ve doğru olduğundan emin ol.");
+    console.error("❌ Firebase Admin başlatılamadı:", e.message);
 }
 
-// Global DB instance (Crash korumalı)
-const db = isFirebaseReady ? admin.database() : {
-    ref: () => ({
-        once: () => Promise.resolve({
-            val: () => null,
-            exists: () => false,
-            numChildren: () => 0,
-            forEach: () => { }
-        }),
-        on: () => { },
-        off: () => { },
-        set: () => Promise.resolve(),
-        update: () => Promise.resolve(),
-        push: () => ({ key: 'error' }),
-        remove: () => Promise.resolve(),
-        transaction: () => Promise.resolve()
-    })
-};
+// Global DB instance
+const db = admin.database();
 
 const KICK_CLIENT_ID = process.env.KICK_CLIENT_ID || "01KDQNP2M930Y7YYNM62TVWJCP";
 const KICK_CLIENT_SECRET = process.env.KICK_CLIENT_SECRET;
