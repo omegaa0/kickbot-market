@@ -1433,6 +1433,18 @@ async function loadGangs() {
         // Not in a gang -> Show Lobby
         document.getElementById('gang-lobby').style.display = 'block';
         document.getElementById('gang-dashboard').classList.add('hidden');
+
+        // Populate City Select if empty
+        const citySelect = document.getElementById('gang-city-input');
+        if (citySelect && citySelect.options.length <= 1) {
+            EMLAK_CITIES.sort((a, b) => a.name.localeCompare(b.name)).forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.id;
+                opt.innerText = c.name;
+                citySelect.appendChild(opt);
+            });
+        }
+
     } else {
         // In a gang -> Fetch Gang Info & Show Dashboard
         document.getElementById('gang-lobby').style.display = 'none';
@@ -1452,6 +1464,23 @@ async function loadGangs() {
                 document.getElementById('my-gang-tag').innerText = g.tag;
                 document.getElementById('my-gang-leader').innerText = g.leader;
                 document.getElementById('my-gang-balance').innerText = (g.balance || 0).toLocaleString() + ' 💰';
+
+                // Display Base City if exists
+                if (g.baseCity) {
+                    const cityName = EMLAK_CITIES.find(c => c.id === g.baseCity)?.name || g.baseCity;
+                    // Append or set somewhere in dashboard UI? 
+                    // For now, let's append it to the name or tag area as a subtitle or info
+                    // Re-using existing structure, adding a line
+                    let infoDiv = document.getElementById('gang-info-extra');
+                    if (!infoDiv) {
+                        const headerDiv = document.querySelector('#gang-dashboard .glass-panel > div');
+                        infoDiv = document.createElement('p');
+                        infoDiv.id = 'gang-info-extra';
+                        infoDiv.style = "color:#aaa; margin-top:5px; font-size:0.8rem;";
+                        headerDiv.appendChild(infoDiv);
+                    }
+                    infoDiv.innerText = `Üs: ${cityName}`;
+                }
 
                 // Members List
                 const list = document.getElementById('gang-members-list');
@@ -1486,8 +1515,9 @@ async function loadGangs() {
 async function createGang() {
     const name = document.getElementById('gang-name-input').value.trim();
     const tag = document.getElementById('gang-tag-input').value.trim();
+    const baseCity = document.getElementById('gang-city-input').value;
 
-    if (!name || !tag) return showToast("Ad ve etiket zorunlu!", "error");
+    if (!name || !tag || !baseCity) return showToast("Ad, etiket ve şehir zorunlu!", "error");
 
     // Optimistic UI interaction
     showToast("Çete kuruluyor...", "info");
@@ -1496,7 +1526,7 @@ async function createGang() {
         const res = await fetch('/api/gang/create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: currentUser, name, tag })
+            body: JSON.stringify({ username: currentUser, name, tag, baseCity })
         });
         const data = await res.json();
 
@@ -1579,6 +1609,7 @@ const EMLAK_CITIES = [
     { "id": "IZMIR", "name": "İzmir", "x": 8, "y": 58 },
     { "id": "KARS", "name": "Kars", "x": 91, "y": 24 },
     { "id": "KASTAMONU", "name": "Kastamonu", "x": 42, "y": 12 },
+    { "id": "KAYSERI", "name": "Kayseri", "x": 52, "y": 48 },
     { "id": "KIRKLARELI", "name": "Kırklareli", "x": 8, "y": 6 },
     { "id": "KIRSEHIR", "name": "Kırşehir", "x": 44, "y": 47 },
     { "id": "KOCAELI", "name": "Kocaeli", "x": 22, "y": 21 },

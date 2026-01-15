@@ -585,6 +585,157 @@ let cycleDuration = 0;
 // Borsa güncelleme (Concurrency Lock ile)
 let isUpdatingStocks = false;
 
+// 100+ News Templates (Simplified for brevity in source view but fully expanded in execution)
+const NEWS_TEMPLATES = {
+    GOOD: [
+        "{coin} CEO'su yeni bir devrim niteliğinde ürün duyurdu!",
+        "{coin} yıllık kâr rekoru kırdığını açıkladı.",
+        "Ünlü yatırımcılar {coin} toplamaya başladı.",
+        "{coin} rakiplerini geride bırakarak pazar liderliğine oynuyor.",
+        "Hükümetten {coin} için vergi teşviği kararı çıktı.",
+        "{coin}, büyük bir teknoloji deviyle ortaklık imzaladı.",
+        "Analistler {coin} için 'AL' tavsiyesini güçlü bir şekilde yineliyor.",
+        "{coin} borsada günün en çok kazandıranı oldu.",
+        "Yapay zeka analizleri {coin} için büyük bir ralli öngörüyor.",
+        "{coin} Asya pazarında büyük bir genişleme başlattı.",
+        "{coin} yeni patent başvurularıyla inovasyon ödülü aldı.",
+        "Sosyal medyada {coin} çılgınlığı başladı, trendlerde 1 numara!",
+        "{coin} temettü oranlarını artıracağını duyurdu.",
+        "{coin} sürdürülebilirlik raporuyla çevrecilerden tam not aldı.",
+        "Büyük bir banka {coin} rezervlerini artırdı.",
+        "{coin} blockchain teknolojisine yatırım yapacağını açıkladı.",
+        "{coin} uzay madenciliği projesi ses getirdi.",
+        "{coin} kuantum bilgisayar yarışında öne geçti.",
+        "{coin} hisseleri 52 haftanın zirvesini gördü.",
+        "Elon Musk {coin} hakkında olumlu bir tweet attı 🚀",
+        "{coin} yeni veri merkezi yatırımını duyurdu.",
+        "{coin} oyun sektörüne dev bir giriş yaptı.",
+        "{coin} rakiplerinden kritik bir yönetici transfer etti.",
+        "{coin} için açılan dava lehte sonuçlandı.",
+        "{coin} global pazarda %20 büyüme kaydetti.",
+        "{coin} çalışanlarına rekor prim dağıttı, motivasyon yüksek.",
+        "{coin} savunma sanayi ihalesini kazandı.",
+        "{coin} sağlık teknolojilerinde çığır açtı.",
+        "{coin} otonom sürüş yazılımını tanıttı.",
+        "{coin} yenilenebilir enerji atılımı yaptı.",
+        "{coin} hisseleri açığa satışçıları ters köşeye yatırdı.",
+        "{coin} 4. çeyrek beklentilerini aştı.",
+        "{coin} yeni bir satın alma ile gücüne güç kattı.",
+        "{coin} marka değerini %50 artırdı.",
+        "{coin} reklam kampanyası viral oldu.",
+        "{coin} Hollywood filmlerine sponsor oldu.",
+        "{coin} Espor dünyasında ana sponsor oldu.",
+        "{coin} METAVERSE evreninde arsa satışına başladı.",
+        "{coin} NFT koleksiyonu saniyeler içinde tükendi.",
+        "{coin} mobil uygulaması indirme rekorları kırdı.",
+        "{coin} bulut bilişimde pazar payını artırdı.",
+        "{coin} siber güvenlik yatırımlarını ikiye katladı.",
+        "{coin} 6G teknolojisi için çalışmalara başladı.",
+        "{coin} biyoteknoloji laboratuvarını açtı.",
+        "{coin} robotik kodlama yarışması düzenliyor.",
+        "{coin} eğitim vakfı kurdu, prestiji arttı.",
+        "{coin} sanat dünyasına dev destek sağladı.",
+        "{coin} Formula 1 takımına sponsor oldu.",
+        "{coin} Super Bowl reklamıyla herkesi şaşırttı.",
+        "{coin} Ay'a roket gönderme projesine dahil oldu.",
+        "Kripto balinaları {coin} cüzdanlarına çekiyor.",
+        "{coin} merkeziyetsiz finansa (DeFi) entegre oldu."
+    ],
+    BAD: [
+        "{coin} CEO'su hakkında yolsuzluk soruşturması açıldı.",
+        "{coin} vergi kaçırma iddialarıyla gündemde.",
+        "{coin} fabrikasında büyük bir yangın çıktı.",
+        "{coin} üretim hatası nedeniyle milyonlarca ürününü geri çağırdı.",
+        "Hackerlar {coin} veritabanına sızdı, veriler çalındı.",
+        "{coin} dev bir rekabet cezası yedi.",
+        "Analistler {coin} için 'SAT' tavsiyesi verdi.",
+        "{coin} beklenmedik şekilde zarar açıkladı.",
+        "{coin} en büyük ortağını kaybetti.",
+        "{coin} hisseleri serbest düşüşte!",
+        "Hükümet {coin} faaliyetlerini geçici olarak durdurdu.",
+        "{coin} kripto borsalarından delist edilme riskiyle karşı karşıya.",
+        "{coin} CFO'su istifa etti, belirsizlik hakim.",
+        "{coin} hakkında toplu dava açıldı.",
+        "{coin} çevre kirliliğine neden olduğu için protesto ediliyor.",
+        "{coin} tedarik zincirinde büyük aksamalar yaşıyor.",
+        "{coin} yeni ürün lansmanı fiyaskoyla sonuçlandı.",
+        "{coin} borçlarını ödemekte zorlanıyor.",
+        "Kredi derecelendirme kuruluşları {coin} notunu düşürdü.",
+        "{coin} rakip firma tarafından dava edildi.",
+        "{coin} ofislerinde polis baskını düzenlendi.",
+        "{coin} çalışanları greve gitti.",
+        "{coin} teknik analizde 'Death Cross' formasyonu oluştu.",
+        "{coin} yatırımcı güvenini kaybetti.",
+        "{coin} büyük bir siber saldırı altında.",
+        "{coin} kara para aklama iddialarıyla çalkalanıyor.",
+        "{coin} üst düzey yöneticileri hisse satışı yapıyor.",
+        "{coin} pazar payını rakiplerine kaptırıyor.",
+        "{coin} inovasyon eksikliği nedeniyle eleştiriliyor.",
+        "{coin} iflas söylentileri dolaşıyor.",
+        "{coin} manipülasyon iddialarıyla inceleme altında.",
+        "{coin} sponsorluk anlaşmaları iptal edildi.",
+        "{coin} sosyal medyada boykot kampanyası başlatıldı.",
+        "{coin} reklamları yanıltıcı bulundu ve yasaklandı.",
+        "{coin} hammadde krizinden en çok etkilenen firma oldu.",
+        "{coin} enerji maliyetleri kârını eritti.",
+        "{coin} döviz kurundaki dalgalanmadan büyük darbe aldı.",
+        "{coin} jeopolitik riskler nedeniyle operasyonlarını durdurdu.",
+        "{coin} lisansı iptal edildi.",
+        "{coin} mağazalarını kapatma kararı aldı.",
+        "{coin} işten çıkarma yapacağını duyurdu.",
+        "{coin} temettü dağıtmayacağını açıkladı.",
+        "{coin} büyüme hedeflerini aşağı yönlü revize etti.",
+        "{coin} bilançosunda usulsüzlük tespit edildi.",
+        "{coin} CEO'su canlı yayında gaf yaptı, hisseler çakıldı.",
+        "{coin} ürünlerinde sağlığa zararlı madde bulundu.",
+        "{coin} veri gizliliği ihlali nedeniyle ceza aldı.",
+        "{coin} patent davasını kaybetti.",
+        "Balinalar {coin} satıp çıkıyor.",
+        "{coin} rug-pull şüphesiye panik yarattı.",
+        "{coin} ayı piyasasının en büyük kurbanı oldu."
+    ]
+};
+
+function getRandomStockNews(name, type) {
+    const list = NEWS_TEMPLATES[type] || NEWS_TEMPLATES.GOOD;
+    const template = list[Math.floor(Math.random() * list.length)];
+    return template.replace(/{coin}/g, name);
+}
+
+// ADMIN API: STOCKS RENAME CODE
+app.post('/admin-api/stocks/rename', authAdmin, hasPerm('stocks'), async (req, res) => {
+    const { oldCode, newCode, newName } = req.body;
+    if (!oldCode || !newCode) return res.json({ success: false, error: 'Eksik bilgi' });
+
+    const cleanOld = oldCode.toUpperCase().trim();
+    const cleanNew = newCode.toUpperCase().trim();
+
+    try {
+        const snap = await db.ref(`global_stocks/${cleanOld}`).once('value');
+        if (!snap.exists()) return res.json({ success: false, error: 'Hisse bulunamadı' });
+
+        const oldData = snap.val();
+
+        // Check if new code exists
+        const newSnap = await db.ref(`global_stocks/${cleanNew}`).once('value');
+        if (newSnap.exists()) return res.json({ success: false, error: 'Yeni kod zaten kullanımda!' });
+
+        // Create new entry
+        const newData = { ...oldData };
+        if (newName) newData.name = newName;
+        // Keep history and other critical data
+
+        await db.ref(`global_stocks/${cleanNew}`).set(newData);
+        await db.ref(`global_stocks/${cleanOld}`).remove();
+
+        addLog("Borsa İsim Değişikliği", `${cleanOld} -> ${cleanNew} olarak değiştirildi.`);
+        res.json({ success: true, message: "Kodu başarıyla değiştirildi." });
+
+    } catch (e) {
+        res.json({ success: false, error: e.message });
+    }
+});
+
 async function updateGlobalStocks() {
     if (isUpdatingStocks) return;
     isUpdatingStocks = true;
@@ -638,18 +789,21 @@ async function updateGlobalStocks() {
 
         const effects = cycleMultipliers[currentMarketCycle] || cycleMultipliers["NORMAL"];
 
-        // NEWS GENERATION LOGIC (Haber Etkisi)
-        if (Math.random() < 0.005) { // Her 200 döngüde bir (~6-7 dk)
+        // NEWS GENERATION LOGIC (Gelişmiş)
+        // Olasılığı biraz artıralım: 0.005 -> 0.02 (Her 50 döngüde bir ~1-2 dk)
+        // Ancak haber spamı olmaması için db'den son haber zamanına bakılabilir.
+        // Şimdilik rasgelelik ile ilerleyelim.
+        if (Math.random() < 0.02) {
             const codes = Object.keys(stocks);
             const target = codes[Math.floor(Math.random() * codes.length)];
             const newsType = Math.random() > 0.5 ? 'GOOD' : 'BAD';
-            const impact = newsType === 'GOOD' ? 1.05 : 0.90; // %5 - %10 anlık etki
+            // Etkiyi biraz daha dramatize edelim: %10 - %25 arası
+            const percent = (Math.random() * 0.15) + 0.10;
+            const impact = newsType === 'GOOD' ? (1 + percent) : (1 - percent);
 
             stocks[target].price = Math.round(stocks[target].price * impact);
 
-            const newsMsg = newsType === 'GOOD'
-                ? `🚀 ${stocks[target].name || target} hakkında olumlu gelişmeler! Hisse yükselişte.`
-                : `📉 ${stocks[target].name || target} kritik bir sorunla karşılaştı! Hisse değer kaybediyor.`;
+            const newsMsg = getRandomStockNews(stocks[target].name || target, newsType);
 
             await db.ref('global_news').push({
                 text: newsMsg,
@@ -6006,9 +6160,9 @@ const GANG_CREATE_COST = 1000000;
 // 1. CREATE GANG
 app.post('/api/gang/create', async (req, res) => {
     try {
-        const { username, name, tag } = req.body;
+        const { username, name, tag, baseCity } = req.body;
         // Validation
-        if (!username || !name || !tag) return res.json({ success: false, error: 'Eksik bilgi' });
+        if (!username || !name || !tag || !baseCity) return res.json({ success: false, error: 'Eksik bilgi: Şehir seçilmedi!' });
         if (tag.length < 3 || tag.length > 4) return res.json({ success: false, error: 'Etiket 3-4 harf olmalı' });
         if (name.length < 4 || name.length > 20) return res.json({ success: false, error: 'İsim 4-20 harf arasında olmalı' });
 
@@ -6034,6 +6188,7 @@ app.post('/api/gang/create', async (req, res) => {
             id: gangId,
             name: name,
             tag: tag.toUpperCase(),
+            baseCity: baseCity,
             leader: cleanUser,
             balance: 0,
             level: 1,
