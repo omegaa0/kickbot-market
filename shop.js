@@ -1497,12 +1497,21 @@ async function loadGangs() {
                     const row = document.createElement('div');
                     row.className = 'stat-mini';
                     row.style.background = 'rgba(255,255,255,0.05)';
-                    row.innerHTML = `
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span style="color: white; font-weight:600;">${icon} ${uname}</span>
-                            <span style="font-size:0.8rem; color:#aaa;">${isLeader ? 'Lider (Baba)' : 'Tetikçi'}</span>
-                        </div>
-                    `;
+
+                    const innerDiv = document.createElement('div');
+                    innerDiv.style = "display:flex; justify-content:space-between; align-items:center;";
+
+                    const leftSpan = document.createElement('span');
+                    leftSpan.style = "color: white; font-weight:600;";
+                    leftSpan.textContent = `${icon} ${uname}`;
+
+                    const rightSpan = document.createElement('span');
+                    rightSpan.style = "font-size:0.8rem; color:#aaa;";
+                    rightSpan.textContent = isLeader ? 'Lider (Baba)' : 'Tetikçi';
+
+                    innerDiv.appendChild(leftSpan);
+                    innerDiv.appendChild(rightSpan);
+                    row.appendChild(innerDiv);
                     list.appendChild(row);
                 });
             }

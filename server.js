@@ -6157,58 +6157,107 @@ app.post('/admin-api/assign-property', authAdmin, hasPerm('users'), async (req, 
 // --- GANG SYSTEM --- (Step 883: Initial Implementation)
 const GANG_CREATE_COST = 1000000;
 
+// VALID CITIES FOR GANG BASES (Server-Side Validation)
+const VALID_CITIES = new Set([
+    "ADANA", "ADIYAMAN", "AFYONKARAHISAR", "AGRI", "AMASYA", "ANKARA", "ANTALYA", "ARTVIN", "AYDIN", "BALIKESIR",
+    "BILECIK", "BINGOL", "BITLIS", "BOLU", "BURDUR", "BURSA", "CANAKKALE", "CANKIRI", "CORUM", "DENIZLI", "DIYARBAKIR",
+    "EDIRNE", "ELAZIG", "ERZINCAN", "ERZURUM", "ESKISEHIR", "GAZIANTEP", "GIRESUN", "GUMUSHANE", "HAKKARI", "HATAY",
+    "ISPARTA", "MERSIN", "ISTANBUL", "IZMIR", "KARS", "KASTAMONU", "KAYSERI", "KIRKLARELI", "KIRSEHIR", "KOCAELI",
+    "KONYA", "KUTAHYA", "MALATYA", "MANISA", "KAHRAMANMARAS", "MARDIN", "MUGLA", "MUS", "NEVSEHIR", "NIGDE", "ORDU",
+    "RIZE", "SAKARYA", "SAMSUN", "SIIRT", "SINOP", "SIVAS", "TEKIRDAG", "TOKAT", "TRABZON", "TUNCELI", "SANLIURFA",
+    "USAK", "VAN", "YOZGAT", "ZONGULDAK", "AKSARAY", "BAYBURT", "KARAMAN", "KIRIKKALE", "BATMAN", "SIRNAK", "BARTIN",
+    "ARDAHAN", "IGDIR", "YALOVA", "KARABUK", "KILIS", "OSMANIYE", "DUZCE"
+]);
+
 // 1. CREATE GANG
 app.post('/api/gang/create', async (req, res) => {
     try {
         const { username, name, tag, baseCity } = req.body;
         // Validation
-        if (!username || !name || !tag || !baseCity) return res.json({ success: false, error: 'Eksik bilgi: Şehir seçilmedi!' });
+        if (!username || !name || !tag || !baseCity) return res.json({ success: false, error: 'Eksik bilgi!' });
+
+        // --- SECURITY: CITY VALIDATION ---
+        if (!VALID_CITIES.has(baseCity)) return res.json({ success: false, error: 'Geçersiz veya desteklenmeyen şehir!' });
+
         if (tag.length < 3 || tag.length > 4) return res.json({ success: false, error: 'Etiket 3-4 harf olmalı' });
         if (name.length < 4 || name.length > 20) return res.json({ success: false, error: 'İsim 4-20 harf arasında olmalı' });
 
         const cleanUser = username.toLowerCase();
+
+        // --- SECURITY: USE TRANSACTION FOR CREATION TO PREVENT RACE CONDITIONS ---
+        // We need to check balance AND create gang atomically IF possible, or lock.
+        // For simplicity with Firebase and high-level logic, we will check balance carefully.
+
         const userRef = db.ref('users/' + cleanUser);
-        const userSnap = await userRef.once('value');
-        const userData = userSnap.val();
 
-        if (!userData) return res.json({ success: false, error: 'Kullanıcı bulunamadı' });
-        if (userData.gang) return res.json({ success: false, error: 'Zaten bir çetedesin!' });
-        if ((userData.balance || 0) < GANG_CREATE_COST) return res.json({ success: false, error: 'Yetersiz bakiye' });
+        // Transaction on User Balance to ensure they have funds and lock it
+        const transactionResult = await userRef.child('balance').transaction((currentBalance) => {
+            if (currentBalance === null) return currentBalance; // User doesn't exist handle later
+            if (currentBalance < GANG_CREATE_COST) return; // Abort
+            return currentBalance - GANG_CREATE_COST;
+        });
 
-        // Check if name/tag exists (Basic scan - for scaling, needs separate index)
-        const gangsSnap = await db.ref('gangs').once('value');
-        const gangs = gangsSnap.val() || {};
-        const exists = Object.values(gangs).some(g => g.name.toLowerCase() === name.toLowerCase() || g.tag.toLowerCase() === tag.toLowerCase());
+        if (!transactionResult.committed) {
+            return res.json({ success: false, error: 'Yetersiz bakiye veya işlem hatası.' });
+        }
 
-        if (exists) return res.json({ success: false, error: 'Bu isim veya etiket zaten kullanılıyor!' });
+        // Now user has paid, proceed to create gang. 
+        // Note: If server crashes here, user lost money. This is a risk in non-SQL DBs without multi-path transactions.
+        // We accept this risk for this game scale, or we could implement a refund logic on error.
 
-        const gangId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+        try {
+            const userSnap = await userRef.once('value');
+            const userData = userSnap.val();
 
-        const newGang = {
-            id: gangId,
-            name: name,
-            tag: tag.toUpperCase(),
-            baseCity: baseCity,
-            leader: cleanUser,
-            balance: 0,
-            level: 1,
-            members: {
-                [cleanUser]: { rank: 'leader', joinedAt: Date.now() }
-            },
-            createdAt: Date.now()
-        };
+            if (userData.gang) {
+                // User already in gang! REFUND and Abort
+                await userRef.child('balance').transaction(val => (val || 0) + GANG_CREATE_COST);
+                return res.json({ success: false, error: 'Zaten bir çetedesin!' });
+            }
 
-        // Atomic Updates
-        const updates = {};
-        updates[`gangs/${gangId}`] = newGang;
-        updates[`users/${cleanUser}/balance`] = userData.balance - GANG_CREATE_COST;
-        updates[`users/${cleanUser}/gang`] = gangId;
-        updates[`users/${cleanUser}/gang_rank`] = 'leader'; // Cache rank on user for easy access
+            // Check name uniqueness
+            const gangsSnap = await db.ref('gangs').once('value');
+            const gangs = gangsSnap.val() || {};
+            const exists = Object.values(gangs).some(g => g.name.toLowerCase() === name.toLowerCase() || g.tag.toLowerCase() === tag.toLowerCase());
 
-        await db.ref().update(updates);
-        addLog("Çete Kuruldu", `${cleanUser} tarafından [${tag}] ${name} kuruldu.`, "GLOBAL");
+            if (exists) {
+                // Refund
+                await userRef.child('balance').transaction(val => (val || 0) + GANG_CREATE_COST);
+                return res.json({ success: false, error: 'Bu isim veya etiket zaten kullanılıyor!' });
+            }
 
-        res.json({ success: true, gang: newGang });
+            const gangId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+
+            const newGang = {
+                id: gangId,
+                name: name,
+                tag: tag.toUpperCase(),
+                baseCity: baseCity,
+                leader: cleanUser,
+                balance: 0,
+                level: 1,
+                members: {
+                    [cleanUser]: { rank: 'leader', joinedAt: Date.now() }
+                },
+                createdAt: Date.now()
+            };
+
+            const updates = {};
+            updates[`gangs/${gangId}`] = newGang;
+            updates[`users/${cleanUser}/gang`] = gangId;
+            updates[`users/${cleanUser}/gang_rank`] = 'leader';
+
+            await db.ref().update(updates);
+            addLog("Çete Kuruldu", `${cleanUser} tarafından [${tag}] ${name} kuruldu.`, "GLOBAL");
+
+            res.json({ success: true, gang: newGang });
+
+        } catch (innerError) {
+            // Fatal Error -> Try Refund
+            await userRef.child('balance').transaction(val => (val || 0) + GANG_CREATE_COST);
+            throw innerError;
+        }
+
     } catch (e) {
         console.error("Gang Create Error:", e);
         res.json({ success: false, error: 'Sunucu hatası' });
@@ -6239,22 +6288,35 @@ app.post('/api/gang/donate', async (req, res) => {
         if (isNaN(amt) || amt <= 0) return res.json({ success: false, error: 'Geçersiz miktar' });
 
         const cleanUser = username.toLowerCase();
+
+        // --- SECURITY & RACE CONDITION FIX ---
         const userRef = db.ref(`users/${cleanUser}`);
+
+        // 1. First, verify user is in a gang (Snapshot read)
         const userSnap = await userRef.once('value');
         const u = userSnap.val();
-
         if (!u || !u.gang) return res.json({ success: false, error: 'Bir çeteye üye değilsin.' });
-        if ((u.balance || 0) < amt) return res.json({ success: false, error: 'Yetersiz bakiye.' });
 
         const gangRef = db.ref(`gangs/${u.gang}`);
 
-        // Transaction to ensure safety
-        await userRef.update({ balance: u.balance - amt });
-        await gangRef.child('balance').transaction(val => (val || 0) + amt);
+        // 2. Transaction on User Balance (DEDUCT)
+        const tx = await userRef.child('balance').transaction((current) => {
+            if (current === null) return current;
+            if (current < amt) return; // Abort if insufficient
+            return current - amt;
+        });
 
-        // Add log to gang history (optional feature for later)
+        if (tx.committed) {
+            // 3. If successful, add to Gang Balance (ADD)
+            // Even if this fails (rare), the money is burned (economy sink), which is safer than infinite money glich.
+            await gangRef.child('balance').transaction((val) => (val || 0) + amt);
 
-        res.json({ success: true, newBalance: u.balance - amt });
+            const newBalance = tx.snapshot.val();
+            res.json({ success: true, newBalance: newBalance });
+        } else {
+            return res.json({ success: false, error: 'Yetersiz bakiye veya işlem çakışması.' });
+        }
+
     } catch (e) {
         res.json({ success: false, error: e.message });
     }

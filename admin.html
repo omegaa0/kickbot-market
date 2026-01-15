@@ -534,10 +534,18 @@
                         </select>
                         <button class="btn" style="width: 120px; height:45px;" onclick="loadUsers()">🔄 Yenile</button>
                     </div>
-                    <div style="display:flex; gap:15px; align-items:center;">
+                    <div style="display:flex; gap:15px; align-items:center; flex-wrap:wrap;">
                         <label
                             style="font-size:0.8rem; display:flex; align-items:center; gap:5px; cursor:pointer; color:var(--muted);">
-                            <input type="checkbox" id="filterInfinite" onchange="filterUsers()"> Sadece Sınırsızlar (♾️)
+                            <input type="checkbox" id="filterInfinite" onchange="filterUsers()"> ♾️ Sınırsız
+                        </label>
+                        <label
+                            style="font-size:0.8rem; display:flex; align-items:center; gap:5px; cursor:pointer; color:var(--muted);">
+                            <input type="checkbox" id="filterProperty" onchange="filterUsers()"> 🏠 Mülkü Olanlar
+                        </label>
+                        <label
+                            style="font-size:0.8rem; display:flex; align-items:center; gap:5px; cursor:pointer; color:var(--muted);">
+                            <input type="checkbox" id="filterStock" onchange="filterUsers()"> 📈 Hissesi Olanlar
                         </label>
                         <select id="filterJob" class="inp"
                             style="width:150px; height:30px; margin:0; font-size:0.75rem;" onchange="filterUsers()">
@@ -547,17 +555,18 @@
                 </div>
             </div>
             <div class="table-container">
-                <table>
+                <table style="width:100%; table-layout:fixed;">
                     <thead>
                         <tr>
-                            <th>Kullanıcı</th>
-                            <th>Bakiye (💰)</th>
-                            <th>İzleme (🕒)</th>
-                            <th>Mesaj (💬)</th>
-                            <th>Meslek</th>
-                            <th>Son Aktiflik</th>
-                            <th>Ban (🚨)</th>
-                            <th style="text-align:right">İşlemler</th>
+                            <th style="width:15%">Kullanıcı</th>
+                            <th style="width:12%">Bakiye (💰)</th>
+                            <th style="width:12%">İzleme (🕒)</th>
+                            <th style="width:10%">Mesaj (💬)</th>
+                            <th style="width:12%">Meslek</th>
+                            <th style="width:14%">Varlık Durumu</th>
+                            <th style="width:10%">Son Aktiflik</th>
+                            <th style="width:5%">Ban</th>
+                            <th style="width:10%; text-align:right">İşlemler</th>
                         </tr>
                     </thead>
                     <tbody id="user-list"></tbody>
@@ -1534,6 +1543,8 @@
                 const q = document.getElementById('usersearch').value.toLowerCase();
                 const sort = document.getElementById('userSort').value;
                 const onlyInf = document.getElementById('filterInfinite').checked;
+                const onlyProp = document.getElementById('filterProperty').checked;
+                const onlyStock = document.getElementById('filterStock').checked;
                 const jobFilter = document.getElementById('filterJob').value;
 
                 let filtered = Object.entries(rawUsers);
@@ -1543,6 +1554,12 @@
 
                 // FİLTRE: SINIRSIZ
                 if (onlyInf) filtered = filtered.filter(([_, d]) => d.is_infinite);
+
+                // FİLTRE: MÜLK
+                if (onlyProp) filtered = filtered.filter(([_, d]) => d.properties && Object.keys(d.properties).length > 0);
+
+                // FİLTRE: HİSSE
+                if (onlyStock) filtered = filtered.filter(([_, d]) => d.stocks && Object.keys(d.stocks).length > 0);
 
                 // FİLTRE: MESLEK
                 if (jobFilter !== 'all') filtered = filtered.filter(([_, d]) => (d.job || "İşsiz") === jobFilter);
@@ -1721,13 +1738,19 @@
                         <div style="flex:1; background:#000; padding:10px; border-radius:8px;">
                             <h4 style="color:var(--secondary); border-bottom:1px solid #333; padding-bottom:5px; margin-bottom:10px;">🏢 Emlak (${Object.keys(user.real_estate || {}).length})</h4>
                             <ul style="list-style:none; max-height:200px; overflow-y:auto; padding-right:5px;">
-                                ${Object.keys(user.real_estate || {}).length ?
-                        Object.values(user.real_estate).map(p => `
-                                        <li style="font-size:0.8rem; border-bottom:1px solid #222; padding:5px 0;">
-                                            <b>${p.name}</b> <span style="color:#666">(${p.city})</span><br>
-                                            <small style="color:var(--primary)">Kira: ${p.rent_price} 💰</small>
+                                ${(() => {
+                        const props = user.properties ? (Array.isArray(user.properties) ? user.properties : Object.values(user.properties)) : [];
+                        if (props.length === 0) return '<li style="color:#666; font-size:0.8rem;">Hiç emlak yok.</li>';
+                        return props.map((p, index) => `
+                                        <li style="font-size:0.8rem; border-bottom:1px solid #222; padding:5px 0; display:flex; justify-content:space-between; align-items:center;">
+                                            <div>
+                                                <b>${p.name}</b> <span style="color:#666">(${p.city})</span><br>
+                                                <small style="color:var(--primary)">Kira: ${p.rent_price} 💰</small>
+                                            </div>
+                                            <button onclick="removeUserProperty('${username}', ${index})" style="background:#ff4444; color:white; border:none; border-radius:4px; cursor:pointer; padding:2px 6px;">✖</button>
                                         </li>
-                                    `).join('') : '<li style="color:#666; font-size:0.8rem;">Hiç emlak yok.</li>'}
+                                    `).join('');
+                    })()}
                             </ul>
                         </div>
                         <div style="flex:1; background:#000; padding:10px; border-radius:8px;">
@@ -1747,6 +1770,25 @@
 
                 content.innerHTML = html;
                 document.getElementById('assetModal').style.display = 'flex';
+            }
+
+            // New Function to handle deletion
+            async function removeUserProperty(user, index) {
+                if (!confirm("Bu mülkü silmek istediğine emin misin?")) return;
+
+                const res = await fetch('/admin-api/remove-property', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: sessionKey, user, index })
+                });
+
+                if (res.ok) {
+                    alert('Mülk silindi');
+                    closeModal('assetModal');
+                    loadUsers();
+                } else {
+                    alert('Hata oluştu');
+                }
             }
 
             let assignUserTarget = null;
