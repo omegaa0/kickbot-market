@@ -92,6 +92,10 @@ let serviceAccount;
 try {
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
         serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        // Fix for escaped newlines in private_key (common in Render/Heroku)
+        if (serviceAccount.private_key) {
+            serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+        }
     } else {
         serviceAccount = require("./firebase-admin-key.json");
     }
@@ -102,13 +106,12 @@ try {
             databaseURL: process.env.FIREBASE_DB_URL
         });
     }
+    console.log("✅ Firebase Admin başarıyla başlatıldı.");
 } catch (e) {
     console.error("❌ Firebase Admin başlatılamadı:", e.message);
 }
 
-const instance = admin.database();
-global.db = instance;
-const db = instance; // For existing code references
+const db = admin.database();
 
 const KICK_CLIENT_ID = process.env.KICK_CLIENT_ID || "01KDQNP2M930Y7YYNM62TVWJCP";
 const KICK_CLIENT_SECRET = process.env.KICK_CLIENT_SECRET;
