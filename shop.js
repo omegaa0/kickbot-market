@@ -1417,18 +1417,28 @@ async function loadProfile() {
                     <h3 style="margin-bottom:15px; font-size:1rem; opacity:0.8;">🏠 Emlak Portföyüm</h3>
                     <div id="user-emlak" style="display:grid; grid-template-columns: 1fr; gap:10px;">
                         ${u.properties && u.properties.length > 0 ?
-            u.properties.map(p => `
-                                <div class="stat-mini" style="border:1px solid var(--primary); background:rgba(102, 252, 241, 0.05); display:flex; justify-content:space-between; align-items:center;">
-                                    <div>
-                                        <label>${p.city}</label>
-                                        <div class="v" style="font-size:0.9rem;">${p.name}</div>
+            u.properties.map(p => {
+                const catIcons = { residence: 'house', shop: 'shop', land: 'seedling' };
+                const icon = catIcons[p.category] || 'building';
+                const hourly = Math.floor(p.income / 24);
+                return `
+                                <div class="stat-mini" style="border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.03); display:flex; justify-content:space-between; align-items:center;">
+                                    <div style="display:flex; gap:10px; align-items:center;">
+                                        <div style="width:35px; height:35px; background:rgba(255,255,255,0.05); border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--primary);">
+                                            <i class="fas fa-${icon}"></i>
+                                        </div>
+                                        <div>
+                                            <label>${p.city || 'Emlak'}</label>
+                                            <div class="v" style="font-size:0.85rem;">${p.name}</div>
+                                        </div>
                                     </div>
                                     <div style="text-align:right;">
-                                        <div style="color:var(--primary); font-weight:800; font-size:0.8rem;">+${Math.floor(p.income / 24)} 💰 / Saat</div>
-                                        <div style="font-size:0.7rem; color:#666;">Günlük: ${p.income}</div>
+                                        <div style="color:var(--primary); font-weight:800; font-size:0.8rem;">+${hourly.toLocaleString()} 💰/sa</div>
+                                        <div style="font-size:0.65rem; color:#666;">Günlük: ${p.income.toLocaleString()}</div>
                                     </div>
                                 </div>
-                            `).join('') : '<p style="font-size: 0.8rem; color:#666;">Henüz mülk sahibi değilsin.</p>'
+                            `;
+            }).join('') : '<p style="font-size: 0.8rem; color:#666;">Henüz mülk sahibi değilsin.</p>'
         }
                 </div>
 
@@ -2075,9 +2085,26 @@ async function loadCityProperties(cityId, cityName) {
             item.style.transform = "translateY(20px)";
             item.style.animation = `fadeInUp 0.5s forwards ${index * 0.1}s`;
 
-            const typeIcons = { low: 'shop', med: 'building', high: 'landmark' };
-            let icon = typeIcons[p.type] || 'house';
-            if (p.name.includes("Havalimanı")) icon = "plane-arrival";
+            const catMap = {
+                residence: { name: 'Konut', color: '#00f2ff', icon: p.icon || 'house' },
+                shop: { name: 'Dükkan', color: '#ffcc00', icon: p.icon || 'shop' },
+                land: { name: 'Arazi', color: '#05ea6a', icon: p.icon || 'tree' }
+            };
+            const cat = catMap[p.category] || { name: 'Mülk', color: '#fff', icon: 'building' };
+
+            let infoText = "";
+            let infoValue = `+${(p.income).toLocaleString()} 💰`;
+            let infoSub = "/ Gün";
+
+            if (p.category === 'residence') {
+                infoText = "Kira Geliri";
+            } else if (p.category === 'shop') {
+                infoText = "Ticari Kira";
+            } else {
+                infoText = "Üretim Potansiyeli";
+                infoValue = "Gelecek Özellik";
+                infoSub = "";
+            }
 
             const btnHtml = p.owner
                 ? `<div style="color:#ff4d4d; font-weight:900; font-size:0.75rem; background:rgba(255,77,77,0.1); padding:5px 12px; border-radius:10px; border:1px solid rgba(255,77,77,0.2);">💸 SAHİBİ: @${p.owner}</div>`
@@ -2085,17 +2112,23 @@ async function loadCityProperties(cityId, cityName) {
 
             item.innerHTML = `
                 <div style="display:flex; align-items:flex-start; gap:15px; margin-bottom:15px;">
-                    <div style="width:50px; height:50px; background:rgba(255,255,255,0.05); border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:1.5rem; color:var(--primary);">
-                        <i class="fas fa-${icon}"></i>
+                    <div style="width:50px; height:50px; background:rgba(255,255,255,0.05); border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:1.5rem; color:${cat.color};">
+                        <i class="fas fa-${cat.icon}"></i>
                     </div>
                     <div style="flex:1;">
-                        <div style="font-weight:900; color:white; font-size:1.1rem; margin-bottom:2px;">${p.name}</div>
-                        <div style="color:var(--primary); font-size:1rem; font-weight:900;">+${p.income.toLocaleString()} 💰 <span style="font-weight:400; font-size:0.7rem; color:#888;">/ Gün</span></div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                            <div style="font-weight:900; color:white; font-size:1rem;">${p.name}</div>
+                            <span style="font-size:0.6rem; background:${cat.color}22; color:${cat.color}; padding:3px 8px; border-radius:6px; font-weight:800; text-transform:uppercase;">${cat.name}</span>
+                        </div>
+                        <div style="color:var(--primary); font-size:0.9rem; font-weight:900;">
+                            <span style="color:#666; font-size:0.7rem; font-weight:400; margin-right:5px;">${infoText}:</span>
+                            ${infoValue} <span style="font-weight:400; font-size:0.7rem; color:#888;">${infoSub}</span>
+                        </div>
                     </div>
                 </div>
                 <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:10px; border-radius:14px;">
                     <div style="display:flex; flex-direction:column;">
-                        <span style="color:#666; font-size:0.65rem; text-transform:uppercase; letter-spacing:1px; font-weight:700;">MALİYET</span>
+                        <span style="color:#666; font-size:0.65rem; text-transform:uppercase; letter-spacing:1px; font-weight:700;">SATIŞ FİYATI</span>
                         <span style="color:#fff; font-size:0.95rem; font-weight:800;">${p.price.toLocaleString()} 💰</span>
                     </div>
                     ${btnHtml}

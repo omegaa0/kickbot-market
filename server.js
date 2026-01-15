@@ -1177,14 +1177,21 @@ const EMLAK_CITIES = [
 ];
 
 const REAL_ESTATE_TYPES = [
-    { name: "Küçük Esnaf Dükkanı", minPrice: 500000, maxPrice: 1200000, minInc: 500, maxInc: 1500, type: "low" },
-    { name: "Pide Salonu", minPrice: 1000000, maxPrice: 2000000, minInc: 1200, maxInc: 2500, type: "low" },
-    { name: "Lüks Rezidans Katı", minPrice: 2000000, maxPrice: 4000000, minInc: 2500, maxInc: 4500, type: "med" },
-    { name: "İş Merkezi", minPrice: 3500000, maxPrice: 6000000, minInc: 4000, maxInc: 7000, type: "med" },
-    { name: "Butik Otel", minPrice: 5000000, maxPrice: 7500000, minInc: 6000, maxInc: 9000, type: "med" },
-    { name: "Gece Kulübü", minPrice: 6000000, maxPrice: 8500000, minInc: 7500, maxInc: 10000, type: "high" },
-    { name: "Alışveriş Merkezi", minPrice: 7500000, maxPrice: 9500000, minInc: 9000, maxInc: 12000, type: "high" },
-    { name: "Havalimanı Terminali", minPrice: 9000000, maxPrice: 10000000, minInc: 11000, maxInc: 13500, type: "high" }
+    // KONUTLAR (Kira Geliri)
+    { name: "1+1 Daire", minPrice: 400000, maxPrice: 750000, minInc: 500, maxInc: 1100, category: "residence", icon: "house-user" },
+    { name: "2+1 Daire", minPrice: 900000, maxPrice: 1500000, minInc: 1300, maxInc: 2500, category: "residence", icon: "building" },
+    { name: "Penthouses", minPrice: 3000000, maxPrice: 6000000, minInc: 5000, maxInc: 10000, category: "residence", icon: "building-user" },
+    { name: "Lüks Villa", minPrice: 7500000, maxPrice: 18000000, minInc: 15000, maxInc: 35000, category: "residence", icon: "house-chimney-window" },
+
+    // DÜKKANLAR (Kira veya İş)
+    { name: "Küçük Esnaf Dükkanı", minPrice: 600000, maxPrice: 1300000, minInc: 1000, maxInc: 2000, category: "shop", icon: "shop" },
+    { name: "Büyük Mağaza", minPrice: 2500000, maxPrice: 5500000, minInc: 4500, maxInc: 9500, category: "shop", icon: "store" },
+    { name: "İş Merkezi Ofisi", minPrice: 4500000, maxPrice: 10000000, minInc: 8000, maxInc: 18000, category: "shop", icon: "building-columns" },
+
+    // ARAZİLER (İleride İş Kurma)
+    { name: "Tarım Arazisi", minPrice: 300000, maxPrice: 1500000, minInc: 0, maxInc: 0, category: "land", icon: "seedling" },
+    { name: "Sanayi Bölgesi", minPrice: 5000000, maxPrice: 15000000, minInc: 0, maxInc: 0, category: "land", icon: "industry" },
+    { name: "Maden Sahası", minPrice: 12000000, maxPrice: 35000000, minInc: 0, maxInc: 0, category: "land", icon: "mountain-city" }
 ];
 
 // --- RPG ITEMS (SİLAHLAR VE ZIRHLAR) ---
@@ -1227,11 +1234,12 @@ async function getCityMarket(cityId) {
 
                 data.push({
                     id: `${cityId.toLowerCase()}_${i}`,
-                    name: `${cityId} ${tpl.name} #${i}`,
+                    name: `${cityId} ${tpl.name}`,
                     price: price,
                     income: Math.floor(tpl.minInc + Math.random() * (tpl.maxInc - tpl.minInc)),
                     owner: null,
-                    type: tpl.type
+                    category: tpl.category,
+                    icon: tpl.icon
                 });
             }
             await marketRef.set(data);
@@ -1666,6 +1674,80 @@ async function distributeRealEstateIncome() {
         console.error("Emlak Gelir Hatası:", e.message);
     }
 }
+// --- VERGİ SİSTEMİ (Günlük) ---
+async function collectDailyTaxes() {
+    try {
+        console.log("🏛️ [Vergi] Günlük vergi tahsilatı başlıyor...");
+        const usersSnap = await db.ref('users').once('value');
+        const users = usersSnap.val() || {};
+
+        const stocksSnap = await db.ref('global_stocks').once('value');
+        const globalStocks = stocksSnap.val() || {};
+
+        let totalTaxCollected = 0;
+        let taxedUserCount = 0;
+
+        for (const [username, userData] of Object.entries(users)) {
+            let propertyTax = 0;
+            let stockTax = 0;
+
+            // 1. Mülk Vergisi (Günlük Gelirin %10'u)
+            if (userData.properties && Array.isArray(userData.properties)) {
+                userData.properties.forEach(p => {
+                    propertyTax += Math.floor((p.income || 0) * 0.10);
+                });
+            }
+
+            // 2. Borsa Vergisi (Portföy Değerinin %0.2'si)
+            if (userData.stocks) {
+                for (const [code, amount] of Object.entries(userData.stocks)) {
+                    if (amount > 0) {
+                        const price = globalStocks[code]?.price || 0;
+                        stockTax += Math.floor((price * amount) * 0.002);
+                    }
+                }
+            }
+
+            const totalTax = propertyTax + stockTax;
+
+            if (totalTax > 0) {
+                // Master Admin muaf (Opsiyonel)
+                if (username.toLowerCase() === 'omegacyr') continue;
+
+                await db.ref(`users/${username}`).transaction(u => {
+                    if (u) {
+                        u.balance = (u.balance || 0) - totalTax;
+                    }
+                    return u;
+                });
+                totalTaxCollected += totalTax;
+                taxedUserCount++;
+            }
+        }
+
+        console.log(`🏛️ [Vergi] Tahsilat tamamlandı. ${taxedUserCount} kullanıcıdan toplam ${totalTaxCollected.toLocaleString()} 💰 toplandı.`);
+        addLog("Vergi Tahsilatı", `${taxedUserCount} kullanıcıdan toplam ${totalTaxCollected.toLocaleString()} 💰 günlük vergi toplandı.`, "SİSTEM");
+    } catch (e) {
+        console.error("Vergi Tahsilat Hatası:", e.message);
+    }
+}
+
+// Vergi Kontrol Döngüsü (Her 5 dakikada bir kontrol eder)
+setInterval(async () => {
+    try {
+        const metaRef = db.ref('market_meta/lastTaxCollection');
+        const snap = await metaRef.once('value');
+        const last = snap.val() || 0;
+        const now = Date.now();
+
+        // 24 saat = 86,400,000 ms
+        if (now - last > 86400000) {
+            await metaRef.set(now);
+            await collectDailyTaxes();
+        }
+    } catch (e) { }
+}, 300000);
+
 setInterval(distributeRealEstateIncome, 3600000);
 
 // PKCE & HELPERS
