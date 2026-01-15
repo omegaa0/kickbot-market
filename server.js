@@ -638,7 +638,16 @@ const NEWS_TEMPLATES = {
         "{coin} Super Bowl reklamıyla herkesi şaşırttı.",
         "{coin} Ay'a roket gönderme projesine dahil oldu.",
         "Kripto balinaları {coin} cüzdanlarına çekiyor.",
-        "{coin} merkeziyetsiz finansa (DeFi) entegre oldu."
+        "{coin} merkeziyetsiz finansa (DeFi) entegre oldu.",
+        "{coin} yeni bir kıta üzerinde operasyon başlattı.",
+        "{coin} sürdürülebilir enerji projeleri için fon topladı.",
+        "Dünyaca ünlü bir milyarder {coin} hissesi aldığını doğruladı.",
+        "{coin} yapay zeka entegrasyonu sayesinde verimliliği %200 artırdı.",
+        "Analistlerin favorisi {coin}, yıl sonu hedeflerini ikiye katladı.",
+        "{coin} kendi mikroçip üretim tesisini açtı.",
+        "{coin} yeni yazılım güncellemesiyle hızı %500 artırdı.",
+        "Devlet fonları {coin} için devasa bir yatırım paketi açıkladı.",
+        "{coin} dijital ödeme sistemlerinde küresel standart haline geldi."
     ],
     BAD: [
         "{coin} CEO'su hakkında yolsuzluk soruşturması açıldı.",
@@ -696,7 +705,16 @@ const NEWS_TEMPLATES = {
         "{coin} yatırımcılarını yanılttığı gerekçesiyle dava açıldı.",
         "{coin} merkez ofisine baskın düzenlendi.",
         "{coin} hisselerinde manipülasyon yapıldığı tespit edildi.",
-        "{coin} küresel ekonomik durgunluktan en çok etkilenen şirket oldu."
+        "{coin} küresel ekonomik durgunluktan en çok etkilenen şirket oldu.",
+        "{coin} sunucuları global bir kesinti yaşadı, erişim yok.",
+        "Yatırımcılar {coin} ofisinin önünde protesto düzenliyor.",
+        "{coin} CEO'sunun gizli ses kayıtları sızdırıldı!",
+        "{coin} veritabanı şifreleri Dark Web'de satışa çıktı.",
+        "Merkez bankası {coin} işlemlerine kısıtlama getirdi.",
+        "{coin} yeni genel müdürü görevi kabul etmedi, belirsizlik hakim.",
+        "Gümrük kısıtlamaları {coin} ihracatını durma noktasına getirdi.",
+        "{coin} hisselerinde gece vakti %40'lık bir ani çöküş yaşandı.",
+        "{coin} projesinden sorumlu ekip topluca istifa etti!"
     ]
 };
 
@@ -1072,6 +1090,91 @@ app.post('/admin-api/add-news', authAdmin, hasPerm('stocks'), async (req, res) =
 });
 
 // ... (rest of the file)
+
+// EMLAK ŞEHİRLERİ (Source of Truth with Coords)
+const EMLAK_CITIES = [
+    { "id": "ADANA", "name": "Adana", "x": 50, "y": 81 },
+    { "id": "ADIYAMAN", "name": "Adıyaman", "x": 66, "y": 72 },
+    { "id": "AFYONKARAHISAR", "name": "Afyon", "x": 25, "y": 53 },
+    { "id": "AGRI", "name": "Ağrı", "x": 91, "y": 38 },
+    { "id": "AMASYA", "name": "Amasya", "x": 53, "y": 23 },
+    { "id": "ANKARA", "name": "Ankara", "x": 38, "y": 34 },
+    { "id": "ANTALYA", "name": "Antalya", "x": 26, "y": 83 },
+    { "id": "ARTVIN", "name": "Artvin", "x": 84, "y": 15 },
+    { "id": "AYDIN", "name": "Aydın", "x": 11, "y": 68 },
+    { "id": "BALIKESIR", "name": "Balıkesir", "x": 12, "y": 39 },
+    { "id": "BILECIK", "name": "Bilecik", "x": 23, "y": 31 },
+    { "id": "BINGOL", "name": "Bingöl", "x": 77, "y": 51 },
+    { "id": "BITLIS", "name": "Bitlis", "x": 86, "y": 59 },
+    { "id": "BOLU", "name": "Bolu", "x": 31, "y": 22 },
+    { "id": "BURDUR", "name": "Burdur", "x": 24, "y": 70 },
+    { "id": "BURSA", "name": "Bursa", "x": 18, "y": 30 },
+    { "id": "CANAKKALE", "name": "Çanakkale", "x": 4, "y": 31 },
+    { "id": "CANKIRI", "name": "Çankırı", "x": 42, "y": 24 },
+    { "id": "CORUM", "name": "Çorum", "x": 49, "y": 25 },
+    { "id": "DENIZLI", "name": "Denizli", "x": 18, "y": 69 },
+    { "id": "DIYARBAKIR", "name": "Diyarbakır", "x": 76, "y": 66 },
+    { "id": "EDIRNE", "name": "Edirne", "x": 5, "y": 7 },
+    { "id": "ELAZIG", "name": "Elazığ", "x": 71, "y": 54 },
+    { "id": "ERZINCAN", "name": "Erzincan", "x": 72, "y": 37 },
+    { "id": "ERZURUM", "name": "Erzurum", "x": 81, "y": 35 },
+    { "id": "ESKISEHIR", "name": "Eskişehir", "x": 25, "y": 37 },
+    { "id": "GAZIANTEP", "name": "Gaziantep", "x": 61, "y": 80 },
+    { "id": "GIRESUN", "name": "Giresun", "x": 66, "y": 19 },
+    { "id": "GUMUSHANE", "name": "Gümüşhane", "x": 72, "y": 26 },
+    { "id": "HAKKARI", "name": "Hakkari", "x": 94, "y": 72 },
+    { "id": "HATAY", "name": "Hatay", "x": 55, "y": 94 },
+    { "id": "ISPARTA", "name": "Isparta", "x": 26, "y": 69 },
+    { "id": "MERSIN", "name": "Mersin", "x": 47, "y": 84 },
+    { "id": "ISTANBUL", "name": "İstanbul", "x": 17, "y": 17 },
+    { "id": "IZMIR", "name": "İzmir", "x": 8, "y": 58 },
+    { "id": "KARS", "name": "Kars", "x": 91, "y": 24 },
+    { "id": "KASTAMONU", "name": "Kastamonu", "x": 42, "y": 12 },
+    { "id": "KAYSERI", "name": "Kayseri", "x": 52, "y": 48 },
+    { "id": "KIRKLARELI", "name": "Kırklareli", "x": 8, "y": 6 },
+    { "id": "KIRSEHIR", "name": "Kırşehir", "x": 44, "y": 47 },
+    { "id": "KOCAELI", "name": "Kocaeli", "x": 22, "y": 21 },
+    { "id": "KONYA", "name": "Konya", "x": 36, "y": 67 },
+    { "id": "KUTAHYA", "name": "Kütahya", "x": 23, "y": 43 },
+    { "id": "MALATYA", "name": "Malatya", "x": 66, "y": 60 },
+    { "id": "MANISA", "name": "Manisa", "x": 9, "y": 55 },
+    { "id": "KAHRAMANMARAS", "name": "Kahramanmaraş", "x": 59, "y": 72 },
+    { "id": "MARDIN", "name": "Mardin", "x": 79, "y": 76 },
+    { "id": "MUGLA", "name": "Muğla", "x": 14, "y": 78 },
+    { "id": "MUS", "name": "Muş", "x": 83, "y": 54 },
+    { "id": "NEVSEHIR", "name": "Nevşehir", "x": 47, "y": 55 },
+    { "id": "NIGDE", "name": "Niğde", "x": 47, "y": 66 },
+    { "id": "ORDU", "name": "Ordu", "x": 64, "y": 18 },
+    { "id": "RIZE", "name": "Rize", "x": 78, "y": 17 },
+    { "id": "SAKARYA", "name": "Sakarya", "x": 25, "y": 21 },
+    { "id": "SAMSUN", "name": "Samsun", "x": 56, "y": 13 },
+    { "id": "SIIRT", "name": "Siirt", "x": 85, "y": 66 },
+    { "id": "SINOP", "name": "Sinop", "x": 50, "y": 1 },
+    { "id": "SIVAS", "name": "Sivas", "x": 59, "y": 37 },
+    { "id": "TEKIRDAG", "name": "Tekirdağ", "x": 10, "y": 18 },
+    { "id": "TOKAT", "name": "Tokat", "x": 57, "y": 28 },
+    { "id": "TRABZON", "name": "Trabzon", "x": 73, "y": 17 },
+    { "id": "TUNCELI", "name": "Tunceli", "x": 72, "y": 48 },
+    { "id": "SANLIURFA", "name": "Şanlıurfa", "x": 69, "y": 78 },
+    { "id": "USAK", "name": "Uşak", "x": 20, "y": 54 },
+    { "id": "VAN", "name": "Van", "x": 92, "y": 57 },
+    { "id": "YOZGAT", "name": "Yozgat", "x": 48, "y": 36 },
+    { "id": "ZONGULDAK", "name": "Zonguldak", "x": 32, "y": 10 },
+    { "id": "AKSARAY", "name": "Aksaray", "x": 44, "y": 59 },
+    { "id": "BAYBURT", "name": "Bayburt", "x": 76, "y": 29 },
+    { "id": "KARAMAN", "name": "Karaman", "x": 39, "y": 78 },
+    { "id": "KIRIKKALE", "name": "Kırıkkale", "x": 41, "y": 36 },
+    { "id": "BATMAN", "name": "Batman", "x": 81, "y": 67 },
+    { "id": "SIRNAK", "name": "Şırnak", "x": 88, "y": 73 },
+    { "id": "BARTIN", "name": "Bartın", "x": 35, "y": 7 },
+    { "id": "ARDAHAN", "name": "Ardahan", "x": 89, "y": 16 },
+    { "id": "IGDIR", "name": "Iğdır", "x": 96, "y": 35 },
+    { "id": "YALOVA", "name": "Yalova", "x": 19, "y": 23 },
+    { "id": "KARABUK", "name": "Karabük", "x": 36, "y": 14 },
+    { "id": "KILIS", "name": "Kilis", "x": 60, "y": 86 },
+    { "id": "OSMANIYE", "name": "Osmaniye", "x": 55, "y": 80 },
+    { "id": "DUZCE", "name": "Düzce", "x": 29, "y": 20 }
+];
 
 const REAL_ESTATE_TYPES = [
     { name: "Küçük Esnaf Dükkanı", minPrice: 500000, maxPrice: 1200000, minInc: 500, maxInc: 1500, type: "low" },
@@ -6316,39 +6419,50 @@ app.post('/admin-api/get-jobs', authAdmin, hasPerm('users'), (req, res) => {
 // 2. ASSIGN REAL ESTATE (Admin)
 // City Indexes: 0:IST, 1:ANK, 2:IZM, 3:ANT
 // Prop Types (Custom): 0-12 matching indices in shop.js logic
-const ADMIN_PROP_TYPES = [
-    { n: "Gecekondu", p: 15 }, { n: "Apartman Dairesi", p: 35 },
-    { n: "Lüks Daire", p: 75 }, { n: "Residence", p: 150 },
-    { n: "Villa", p: 300 }, { n: "Yalı", p: 750 },
-    { n: "Gökdelen", p: 2000 }, { n: "Ada", p: 5000 },
-    { n: "Küçük Dükkan", p: 50 }, { n: "Mağaza", p: 120 },
-    { n: "Süpermarket", p: 300 }, { n: "AVM", p: 1000 },
-    { n: "Holding", p: 3000 }
-];
-const ADMIN_CITIES = ['İstanbul', 'Ankara', 'İzmir', 'Antalya'];
+// Emlak Şehir Listesi API (Admin Panel İçin)
+app.get('/api/real-estate/cities', (req, res) => {
+    res.json(EMLAK_CITIES);
+});
 
+// Admin Panel Mülk Atama (Gerçek Piyasayla Senkron)
 app.post('/admin-api/assign-property', authAdmin, hasPerm('users'), async (req, res) => {
-    const { user, cityId, propertyIndex } = req.body;
+    const { user, cityId, propertyId } = req.body;
 
-    if (!user || cityId === undefined || propertyIndex === undefined) return res.json({ success: false, error: 'Eksik veri' });
-
-    const cityName = ADMIN_CITIES[cityId] || 'Bilinmeyen';
-    const propInfo = ADMIN_PROP_TYPES[propertyIndex];
-
-    if (!propInfo) return res.json({ success: false, error: 'Geçersiz mülk tipi' });
-
-    const newProp = {
-        id: Date.now() + Math.random().toString(36).substr(2, 5),
-        name: propInfo.n,
-        city: cityName,
-        rent_price: propInfo.p,
-        bought_at: Date.now()
-    };
+    if (!user || !cityId || !propertyId) return res.json({ success: false, error: 'Eksik veri' });
 
     try {
-        await db.ref(`users/${user.toLowerCase()}/properties`).push(newProp);
-        addLog("Emlak Atama", `${user} kullanıcısına ${cityName} şehrinde ${propInfo.n} atandı.`);
-        res.json({ success: true });
+        const cityName = EMLAK_CITIES.find(c => c.id === cityId.toUpperCase())?.name || cityId;
+
+        // Piyasayı oku
+        const marketRef = db.ref(`real_estate_market/${cityId.toUpperCase()}`);
+        const snap = await marketRef.once('value');
+        let market = snap.val();
+
+        // Pazar yoksa oluştur
+        if (!market) market = await getCityMarket(cityId.toUpperCase());
+
+        const propIndex = market.findIndex(p => p.id === propertyId);
+        if (propIndex === -1) return res.json({ success: false, error: 'Mülk bulunamadı' });
+
+        const prop = market[propIndex];
+        if (prop.owner) return res.json({ success: false, error: `Bu mülk zaten @${prop.owner} kullanıcısında!` });
+
+        // 1. Pazarda sahipliği güncelle
+        market[propIndex].owner = user.toLowerCase();
+        await marketRef.set(market);
+
+        // 2. Kullanıcıya ekle
+        const userRef = db.ref(`users/${user.toLowerCase()}`);
+        await userRef.transaction(u => {
+            if (u) {
+                if (!u.properties) u.properties = [];
+                u.properties.push({ ...prop, city: cityId.toUpperCase(), boughtAt: Date.now() });
+            }
+            return u;
+        });
+
+        addLog("Emlak Atama", `${user} kullanıcısına ${cityName} şehrinde ${prop.name} atandı.`);
+        res.json({ success: true, message: 'Mülk başarıyla atandı!' });
     } catch (e) {
         res.json({ success: false, error: e.message });
     }
