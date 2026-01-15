@@ -911,10 +911,11 @@ header {
     transition: all 0.3s ease;
 }
 
+/* Hover effect removed per user request */
 .gang-card:hover {
-    border-color: var(--primary);
-    transform: translateY(-5px);
-    box-shadow: 0 10px 30px rgba(5, 234, 106, 0.1);
+    transform: none !important;
+    border-color: var(--glass-border) !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
 }
 
 .gang-header {

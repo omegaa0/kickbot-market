@@ -377,7 +377,7 @@
                 </div>
 
                 <!-- CAREER TAB -->
-                <div id="tab-career" class="tab-content">
+                <div id="tab-career" class="tab-content hidden">
                     <h2 style="margin-bottom:10px;">💼 Kariyer & Meslekler</h2>
                     <p style="color:var(--text-dim); margin-bottom:20px; font-size:0.9rem;">
                         İşe başlamak için diploman (eğitim seviyen) yetmeli ve gerekli meslek eşyasını satın almalısın.
@@ -498,70 +498,92 @@
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- STATS TAB -->
-            <div id="tab-stats" class="tab-content hidden">
-                <h2 style="margin-bottom:20px;">📊 Canlı Topluluk İstatistikleri</h2>
-                <div id="stats-container" class="market-grid"
-                    style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
-                    <!-- JS fills -->
+                <!-- STATS TAB -->
+                <div id="tab-stats" class="tab-content hidden">
+                    <h2 style="margin-bottom:20px;">📊 Canlı Topluluk İstatistikleri</h2>
+                    <div id="stats-container" class="market-grid"
+                        style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+                        <!-- JS fills -->
+                    </div>
                 </div>
-            </div>
 
-            <!-- PROFILE TAB -->
-            <div id="tab-profile" class="tab-content hidden">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                    <h2 style="margin:0;">👤 Oyuncu Profili</h2>
-                    <button class="primary-btn" onclick="showCustomizationMarket()"
-                        style="width:auto; padding:10px 20px; background:linear-gradient(45deg, #ff00ff, #00ffff); color:white; border:none;">✨
-                        Profili Özelleştir</button>
-                </div>
-                <div id="profile-card" class="glass-panel"
-                    style="position:static; transform:none; width:100%; text-align:left; transition: all 0.5s ease;">
-                    <!-- JS fills -->
+                <!-- PROFILE TAB -->
+                <div id="tab-profile" class="tab-content hidden">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                        <h2 style="margin:0;">👤 Oyuncu Profili</h2>
+                        <button class="primary-btn" onclick="showCustomizationMarket()"
+                            style="width:auto; padding:10px 20px; background:linear-gradient(45deg, #ff00ff, #00ffff); color:white; border:none;">✨
+                            Profili Özelleştir</button>
+                    </div>
+                    <div id="profile-card" class="glass-panel"
+                        style="position:static; transform:none; width:100%; text-align:left; transition: all 0.5s ease;">
+                        <!-- JS fills -->
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
-    </div>
 
-    <!-- TTS MODAL -->
-    <div id="tts-modal" class="hidden"
-        style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:10000; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(10px);">
-        <div class="glass-panel" style="width:100%; max-width:500px; padding:30px; position:relative;">
-            <button onclick="closeTTSModal()"
-                style="position:absolute; top:20px; right:20px; background:none; border:none; color:#666; cursor:pointer; font-size:1.5rem;">&times;</button>
-            <h2 style="margin-bottom:20px; color:var(--primary);">🎙️ TTS Mesajı Gönder</h2>
+        <!-- TTS MODAL -->
+        <div id="tts-modal" class="hidden"
+            style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:10000; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(10px);">
+            <div class="glass-panel" style="width:100%; max-width:500px; padding:30px; position:relative;">
+                <button onclick="closeTTSModal()"
+                    style="position:absolute; top:20px; right:20px; background:none; border:none; color:#666; cursor:pointer; font-size:1.5rem;">&times;</button>
+                <h2 style="margin-bottom:20px; color:var(--primary);">🎙️ TTS Mesajı Gönder</h2>
 
-            <label style="display:block; margin-bottom:10px; font-weight:600; font-size:0.9rem; color:#aaa;">Mesajınız
-                (Maks 500 Karakter)</label>
-            <textarea id="tts-input" maxlength="500" placeholder="Yayında okunacak mesajı yazın..."
-                style="width:100%; height:120px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:12px; padding:15px; color:white; font-family:inherit; resize:none; font-size:1rem; margin-bottom:20px;"></textarea>
+                <label
+                    style="display:block; margin-bottom:10px; font-weight:600; font-size:0.9rem; color:#aaa;">Mesajınız
+                    (Maks 500 Karakter)</label>
+                <textarea id="tts-input" maxlength="500" placeholder="Yayında okunacak mesajı yazın..."
+                    style="width:100%; height:120px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:12px; padding:15px; color:white; font-family:inherit; resize:none; font-size:1rem; margin-bottom:20px;"></textarea>
 
-            <label style="display:block; margin-bottom:10px; font-weight:600; font-size:0.9rem; color:#aaa;">Ses
-                Seçimi</label>
-            <select id="tts-voice-select"
-                style="width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:12px; padding:12px; color:white; font-size:1rem; margin-bottom:30px; cursor:pointer;">
-                <option value="standart">Standart (Normal)</option>
-                <option value="karadeniz">Karadeniz (Hızlı & Hareketli) 🌊</option>
-                <option value="kalin">Kalın (Derin Ses)</option>
-                <option value="ince">İnce (Tiz Ses)</option>
-                <option value="cocuk">Çocuk (Sevimli)</option>
-                <option value="robot">Robotik (Mekanik)</option>
-            </select>
+                <label style="display:block; margin-bottom:10px; font-weight:600; font-size:0.9rem; color:#aaa;">Ses
+                    Seçimi</label>
+                <select id="tts-voice-select"
+                    style="width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:12px; padding:12px; color:white; font-size:1rem; margin-bottom:30px; cursor:pointer;">
+                    <option value="standart">Standart (Normal)</option>
+                    <option value="karadeniz">Karadeniz (Hızlı & Hareketli) 🌊</option>
+                    <option value="kalin">Kalın (Derin Ses)</option>
+                    <option value="ince">İnce (Tiz Ses)</option>
+                    <option value="cocuk">Çocuk (Sevimli)</option>
+                    <option value="robot">Robotik (Mekanik)</option>
+                </select>
 
-            <div style="display:flex; gap:15px;">
-                <button onclick="closeTTSModal()" class="secondary-btn" style="flex:1;">İptal</button>
-                <button id="confirm-tts-buy" class="primary-btn" style="flex:2;">Bakiye Harca & Gönder</button>
+                <div style="display:flex; gap:15px;">
+                    <button onclick="closeTTSModal()" class="secondary-btn" style="flex:1;">İptal</button>
+                    <button id="confirm-tts-buy" class="primary-btn" style="flex:2;">Bakiye Harca & Gönder</button>
+                </div>
             </div>
         </div>
-    </div>
 
-    <div id="toast" class="toast hidden"></div>
-    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
-    <script src="shop.js"></script>
+        <!-- GANG DONATE MODAL -->
+        <div id="gang-donate-modal" class="hidden"
+            style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:10001; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(10px);">
+            <div class="glass-panel" style="width:100%; max-width:400px; padding:30px; position:relative;">
+                <button onclick="closeGangDonateModal()"
+                    style="position:absolute; top:20px; right:20px; background:none; border:none; color:#666; cursor:pointer; font-size:1.5rem;">&times;</button>
+                <h2 style="margin-bottom:20px; color:var(--primary);">💰 Kasaya Bağış Yap</h2>
+
+                <p style="margin-bottom:15px; font-size:0.9rem; color:#aaa;">Çete kasasına bağışlayacağınız tutarı
+                    girin. Bu para geri alınamaz.</p>
+
+                <label style="display:block; margin-bottom:10px; font-weight:600; font-size:0.8rem; color:#ccc;">BAĞIŞ
+                    MİKTARI</label>
+                <input type="number" id="gang-donate-input" placeholder="Miktar girin..."
+                    style="width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:12px; padding:15px; color:white; font-size:1.1rem; margin-bottom:25px;">
+
+                <div style="display:flex; gap:15px;">
+                    <button onclick="closeGangDonateModal()" class="secondary-btn" style="flex:1;">İptal</button>
+                    <button onclick="confirmGangDonate()" class="primary-btn" style="flex:2;">💰 Bağışla</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="toast" class="toast hidden"></div>
+        <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+        <script src="shop.js"></script>
 </body>
 
 </html>

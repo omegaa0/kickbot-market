@@ -6779,16 +6779,40 @@ app.post('/api/gang/promote', async (req, res) => {
 });
 
 app.post('/api/gang/kick', async (req, res) => {
-    const { requester, target } = req.body; // requester=username, target=username
-    // Implement logic: 
-    // 1. Get Requester Rank -> Check if Leader or Co-Leader
-    // 2. Get Target Rank -> Cannot kick same or higher rank
-    // 3. Remove target from gang.members
-    // 4. Remove gang from target user profile
-    // Simplification for now: Only Leader can kick
+    try {
+        const { requester, target, gangId } = req.body;
+        if (!requester || !target || !gangId) return res.json({ success: false, error: "Eksik veri" });
 
-    // ... (Pending detailed implementation based on specific rank rules if requested)
-    res.json({ success: false, error: "Henüz aktif değil" });
+        const gangRef = db.ref('gangs/' + gangId);
+        const snap = await gangRef.once('value');
+        const gang = snap.val();
+
+        if (!gang) return res.json({ success: false, error: "Çete bulunamadı" });
+
+        const cleanReq = requester.toLowerCase();
+        const cleanTarget = target.toLowerCase();
+
+        const reqMemberData = gang.members[cleanReq];
+        const targetMemberData = gang.members[cleanTarget];
+
+        if (!reqMemberData) return res.json({ success: false, error: "Yetkisiz işlem" });
+        if (!targetMemberData) return res.json({ success: false, error: "Kullanıcı çetede değil" });
+
+        // Rank Check
+        let canKick = false;
+        if (reqMemberData.rank === 'leader' && cleanReq !== cleanTarget) canKick = true;
+        if (reqMemberData.rank === 'officer' && targetMemberData.rank === 'member') canKick = true;
+
+        if (!canKick) return res.json({ success: false, error: "Bu kullanıcıyı atmaya yetkin yok!" });
+
+        // Kick Process
+        await gangRef.child('members').child(cleanTarget).remove();
+        await db.ref('users/' + cleanTarget).child('gang').remove();
+
+        res.json({ success: true, message: "Kullanıcı çeteden atıldı." });
+    } catch (e) {
+        res.json({ success: false, error: e.message });
+    }
 });
 
 app.post('/admin-api/remove-property', authAdmin, hasPerm('users'), async (req, res) => {

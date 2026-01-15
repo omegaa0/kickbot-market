@@ -1457,13 +1457,22 @@ async function loadProfile() {
 // --- GANG SYSTEM --- (Step 883 Client Logic)
 
 async function loadGangs() {
-    // 1. Check if user is in a gang
-    if (!currentUser) return;
-    await ensureCities();
+    const lobby = document.getElementById('gang-lobby');
+    const dashboard = document.getElementById('gang-dashboard');
 
+    // 1. Check if user is logged in
+    if (!currentUser) {
+        lobby.classList.remove('hidden');
+        dashboard.classList.add('hidden');
+        document.getElementById('public-gang-list').innerHTML = '<div style="color:var(--primary); text-align:center; padding:20px;">Çeteleri görmek ve katılmak için giriş yapmalısın.</div>';
+        return;
+    }
+
+    await ensureCities();
     let userData = lastUserData;
-    if (!userData || !userData.gang) {
-        // Fetch to confirm (in case lastUserData is stale)
+
+    // If we don't have fresh data, try to fetch it once
+    if (!userData || userData.username !== currentUser) {
         try {
             const userRes = await fetch('/api/user/' + currentUser);
             userData = await userRes.json();
@@ -1475,8 +1484,8 @@ async function loadGangs() {
 
     if (!gangId) {
         // Not in a gang -> Show Lobby
-        document.getElementById('gang-lobby').style.display = 'block';
-        document.getElementById('gang-dashboard').classList.add('hidden');
+        lobby.classList.remove('hidden');
+        dashboard.classList.add('hidden');
 
         // Populate City Select if empty
         const citySelect = document.getElementById('gang-city-input');
@@ -1527,7 +1536,7 @@ async function loadGangs() {
 
     } else {
         // In a gang -> Fetch Gang Info & Show Dashboard
-        document.getElementById('gang-lobby').style.display = 'none';
+        document.getElementById('gang-lobby').classList.add('hidden');
         document.getElementById('gang-dashboard').classList.remove('hidden');
 
         try {
@@ -1613,12 +1622,21 @@ async function loadGangs() {
                     const row = document.createElement('div');
                     row.className = 'member-row';
 
-                    let actionsHtml = '';
+                    let actionsHtml = '<div style="display:flex; gap:8px;">';
                     if (myRank === 'leader' && uname.toLowerCase() !== cleanCurrent) {
                         const nextRank = isOfficer ? 'member' : 'officer';
                         const btnText = isOfficer ? 'Rütbe İndir' : 'Sağ Kol Yap';
-                        actionsHtml = `<button onclick="promoteMember('${uname}', '${nextRank}', '${gangId}')" class="primary-btn" style="width:auto; padding:3px 8px; font-size:0.65rem; background:rgba(255,255,255,0.1); color:white; border:1px solid rgba(255,255,255,0.2);">${btnText}</button>`;
+                        actionsHtml += `<button onclick="promoteMember('${uname}', '${nextRank}', '${gangId}')" class="primary-btn" style="width:auto; padding:3px 8px; font-size:0.65rem; background:rgba(255,255,255,0.1); color:white; border:1px solid rgba(255,255,255,0.2);">${btnText}</button>`;
                     }
+
+                    // Kick Button
+                    const canIKick = (myRank === 'leader' && uname.toLowerCase() !== cleanCurrent) ||
+                        (myRank === 'officer' && !isLeader && !isOfficer);
+
+                    if (canIKick) {
+                        actionsHtml += `<button onclick="kickMember('${uname}', '${gangId}')" class="logout-btn" style="width:auto; padding:3px 8px; font-size:0.65rem; border:1px solid rgba(255,50,50,0.3);">AT</button>`;
+                    }
+                    actionsHtml += '</div>';
 
                     row.innerHTML = `
                         <div style="display:flex; align-items:center; gap:10px;">
@@ -1745,7 +1763,57 @@ async function promoteMember(targetUser, newRank, gangId) {
     } catch (e) { showToast("Bağlantı hatası!", "error"); }
 }
 
-async function openDonateModal() {
+async function kickMember(target, gangId) {
+    if (!confirm(`${target} kullanıcısını çeteden atmak istediğine emin misin?`)) return;
+    try {
+        const res = await fetch('/api/gang/kick', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requester: currentUser, target, gangId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message, "success");
+            loadGangs();
+        } else {
+            showToast(data.error || "Hata!", "error");
+        }
+    } catch (e) { showToast("Bağlantı hatası!", "error"); }
+}
+
+function openDonateModal() {
+    document.getElementById('gang-donate-modal').classList.remove('hidden');
+    document.getElementById('gang-donate-input').value = '';
+}
+
+function closeGangDonateModal() {
+    document.getElementById('gang-donate-modal').classList.add('hidden');
+}
+
+async function confirmGangDonate() {
+    const amount = parseInt(document.getElementById('gang-donate-input').value);
+    if (!amount || amount <= 0) return showToast("Geçerli bir miktar girin!", "error");
+
+    closeGangDonateModal();
+    showToast("Bağış işleniyor...", "info");
+
+    try {
+        const res = await fetch('/api/gang/donate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser, amount })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`💎 Çete kasasına ${amount.toLocaleString()} 💰 bağışladın!`, "success");
+            loadGangs();
+        } else {
+            showToast(data.error || "Hata!", "error");
+        }
+    } catch (e) { showToast("Bağlantı hatası!", "error"); }
+}
+
+async function openDonateModal_OLD() {
     const amount = prompt("Ne kadar bağışlamak istersin?");
     if (!amount) return;
 
