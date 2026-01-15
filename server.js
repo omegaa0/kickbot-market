@@ -826,8 +826,23 @@ async function updateGlobalStocks() {
         }
 
         if (cycleDuration <= 0) {
-            const cycles = ["NORMAL", "BULLISH", "BEARISH", "VOLATILE", "STAGNANT"];
-            currentMarketCycle = cycles[Math.floor(Math.random() * cycles.length)];
+            // Ağırlıklı piyasa döngüsü seçimi - STAGNANT (Durgun/Yatay) %65 olasılıkla
+            const weightedCycles = [
+                { cycle: "STAGNANT", weight: 70 },  // %65 - Durgun piyasa (en sık)
+                { cycle: "NORMAL", weight: 15 },    // %20 - Normal piyasa
+                { cycle: "BULLISH", weight: 8 },    // %8  - Boğa piyasası
+                { cycle: "BEARISH", weight: 5 },    // %5  - Ayı piyasası
+                { cycle: "VOLATILE", weight: 2 }    // %2  - Volatil piyasa (nadir)
+            ];
+            const totalWeight = weightedCycles.reduce((sum, c) => sum + c.weight, 0);
+            let random = Math.random() * totalWeight;
+            for (const item of weightedCycles) {
+                if (random < item.weight) {
+                    currentMarketCycle = item.cycle;
+                    break;
+                }
+                random -= item.weight;
+            }
             cycleDuration = Math.floor(Math.random() * 300) + 300;
             console.log(`🔄 Yeni Piyasa Döngüsü: ${currentMarketCycle} (${cycleDuration} tik)`);
         }
@@ -864,16 +879,25 @@ async function updateGlobalStocks() {
         // Sadece hedef zaman geçtiyse haber üret
         if (now >= nextNewsTimeMemory) {
             const codes = Object.keys(stocks);
-            const target = codes[Math.floor(Math.random() * codes.length)];
+
+            // 1-3 hisse etkilensin (kümeleme etkisi)
+            const numTargets = Math.floor(Math.random() * 3) + 1;
+            const shuffled = codes.sort(() => 0.5 - Math.random());
+            const targets = shuffled.slice(0, Math.min(numTargets, codes.length));
+
             const newsType = Math.random() > 0.5 ? 'GOOD' : 'BAD';
-            const percent = (Math.random() * 0.15) + 0.10;
-            const impact = newsType === 'GOOD' ? (1 + percent) : (1 - percent);
 
-            stocks[target].price = Math.round(stocks[target].price * impact);
+            // Her hedef hisse için farklı etki (daha büyük: %15-30)
+            for (const target of targets) {
+                const percent = (Math.random() * 0.15) + 0.15; // %15-%30 arası etki
+                const impact = newsType === 'GOOD' ? (1 + percent) : (1 - percent);
+                stocks[target].price = Math.round(stocks[target].price * impact);
+            }
 
-            const newsMsg = getRandomStockNews(stocks[target].name || target, newsType);
+            const mainTarget = targets[0];
+            const newsMsg = getRandomStockNews(stocks[mainTarget].name || mainTarget, newsType);
 
-            // Sonraki haber zamanını ÖNCE hesapla ve belleğe yaz (race condition önlemi)
+            // Sonraki haber zamanı: 30-60 dakikada bir
             const minWait = 30 * 60 * 1000; // 30 dakika
             const maxWait = 60 * 60 * 1000; // 60 dakika
             const waitTime = minWait + Math.random() * (maxWait - minWait);
@@ -1024,17 +1048,24 @@ app.post('/admin-api/stocks/add', authAdmin, hasPerm('stocks'), async (req, res)
 
     // Initialize with history array to ensure graph works immediately
     const startHistory = [];
-    for (let i = 0; i < 48; i++) startHistory.push(parseInt(price));
+    const basePrice = parseInt(price);
+    for (let i = 0; i < 48; i++) startHistory.push(basePrice);
+
+    // Volatility ve drift değerleri - yeni hisseler dinamik hareket etsin
+    const volatility = 0.15; // %15 volatilite (yüksek hareket)
+    const drift = 0.0005;    // Hafif yukarı eğilim
 
     await db.ref(`global_stocks/${cleanCode}`).set({
         name: name || cleanCode,
-        price: parseInt(price),
-        oldPrice: parseInt(price),
+        price: basePrice,
+        oldPrice: basePrice,
         trend: 1,
         lastUpdate: Date.now(),
-        history: startHistory
+        history: startHistory,
+        volatility: volatility,  // YENİ: Volatilite eklendi
+        drift: drift             // YENİ: Drift eklendi
     });
-    addLog("Borsa Yeni Hisse", `${cleanCode} eklendi: ${price} 💰`);
+    addLog("Borsa Yeni Hisse", `${cleanCode} eklendi: ${price} 💰 (vol: ${volatility}, drift: ${drift})`);
     res.json({ success: true });
 });
 
