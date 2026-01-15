@@ -662,8 +662,7 @@ async function executePurchase(type, trigger, price) {
             alert("Lütfen geçerli bir YouTube linki girin!");
             return;
         }
-    } else {
-        if (!confirm(`"${trigger}" sesi çalınsın mı?`)) return;
+        // No confirm, direct play 
     }
 
     // --- SECURE API CALL ---
@@ -1149,7 +1148,7 @@ async function executeBorsaSell(code, price) {
     // The user strictly said "Borsada alım yaparken Alınsın mı? alertini kaldır". 
     // I will keep it for sell to avoid accidental dumps.
 
-    if (!confirm(`${amount} adet ${code} satılacak. Onaylıyor musun?`)) return;
+    // No confirm, direct sell
 
     try {
         const res = await fetch('/api/borsa/sell', {
@@ -1490,6 +1489,42 @@ async function loadGangs() {
             });
         }
 
+        // --- FETCH PUBLIC GANGS ---
+        try {
+            const res = await fetch('/api/gang/list');
+            const data = await res.json();
+            const publicList = document.getElementById('public-gang-list');
+            if (publicList && data.success) {
+                publicList.innerHTML = '';
+                const gangs = Object.values(data.gangs || {});
+                if (gangs.length === 0) {
+                    publicList.innerHTML = '<div style="color:#666; text-align:center; padding:20px;">Henüz kurulmuş çete yok.</div>';
+                } else {
+                    gangs.forEach(g => {
+                        const card = document.createElement('div');
+                        card.className = 'glass-panel';
+                        card.style = "margin-bottom:10px; padding:15px; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03);";
+
+                        const cityName = EMLAK_CITIES.find(c => c.id === g.baseCity)?.name || g.baseCity;
+
+                        card.innerHTML = `
+                            <div style="text-align:left;">
+                                <div style="font-weight:800; color:white;">
+                                    <span style="background:var(--primary); color:black; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-right:5px;">${g.tag}</span>
+                                    ${g.name}
+                                </div>
+                                <div style="font-size:0.75rem; color:#888; margin-top:4px;">📍 ${cityName} | 👑 ${g.leader}</div>
+                            </div>
+                            <button onclick="joinGang('${g.id}')" class="primary-btn" style="width:auto; padding:5px 15px; font-size:0.8rem;">İSTEK GÖNDER</button>
+                        `;
+                        publicList.appendChild(card);
+                    });
+                }
+            }
+        } catch (e) {
+            console.error("Public Gang List Error", e);
+        }
+
     } else {
         // In a gang -> Fetch Gang Info & Show Dashboard
         document.getElementById('gang-lobby').style.display = 'none';
@@ -1509,6 +1544,36 @@ async function loadGangs() {
                 document.getElementById('my-gang-tag').innerText = g.tag;
                 document.getElementById('my-gang-leader').innerText = g.leader;
                 document.getElementById('my-gang-balance').innerText = (g.balance || 0).toLocaleString() + ' 💰';
+
+                // --- PENDING REQUESTS ---
+                const reqSection = document.getElementById('gang-requests-section');
+                const reqList = document.getElementById('gang-requests-list');
+                const cleanCurrent = currentUser.toLowerCase();
+                const myRank = g.members[cleanCurrent]?.rank;
+
+                if (myRank === 'leader' || myRank === 'officer') {
+                    reqSection.classList.remove('hidden');
+                    reqList.innerHTML = '';
+                    const requests = Object.keys(g.requests || {});
+                    if (requests.length === 0) {
+                        reqList.innerHTML = '<div style="color:#666; font-size:0.8rem;">Bekleyen istek yok.</div>';
+                    } else {
+                        requests.forEach(uname => {
+                            const row = document.createElement('div');
+                            row.className = 'member-row';
+                            row.innerHTML = `
+                                <span><i class="fas fa-user-clock"></i> @${uname}</span>
+                                <div style="display:flex; gap:5px;">
+                                    <button onclick="processGangRequest('${uname}', 'approve', '${gangId}')" class="primary-btn" style="width:auto; padding:5px 10px; font-size:0.7rem; background:#05ea6a; color:black;">ONAYLA</button>
+                                    <button onclick="processGangRequest('${uname}', 'reject', '${gangId}')" class="logout-btn" style="width:auto; padding:5px 10px; font-size:0.7rem;">REDDET</button>
+                                </div>
+                            `;
+                            reqList.appendChild(row);
+                        });
+                    }
+                } else {
+                    reqSection.classList.add('hidden');
+                }
 
                 // Display Base City if exists
                 if (g.baseCity) {
@@ -1538,25 +1603,33 @@ async function loadGangs() {
 
                 members.forEach(([uname, data]) => {
                     const isLeader = data.rank === 'leader';
-                    const icon = isLeader ? '👑' : '🔫';
+                    const isOfficer = data.rank === 'officer';
+                    let rankTitle = 'Tetikçi (Üye)';
+                    let icon = '🔫';
+
+                    if (isLeader) { rankTitle = 'Lider (Baba)'; icon = '👑'; }
+                    else if (isOfficer) { rankTitle = 'Sağ Kol (Officer)'; icon = '⚔️'; }
+
                     const row = document.createElement('div');
-                    row.className = 'stat-mini';
-                    row.style.background = 'rgba(255,255,255,0.05)';
+                    row.className = 'member-row';
 
-                    const innerDiv = document.createElement('div');
-                    innerDiv.style = "display:flex; justify-content:space-between; align-items:center;";
+                    let actionsHtml = '';
+                    if (myRank === 'leader' && uname.toLowerCase() !== cleanCurrent) {
+                        const nextRank = isOfficer ? 'member' : 'officer';
+                        const btnText = isOfficer ? 'Rütbe İndir' : 'Sağ Kol Yap';
+                        actionsHtml = `<button onclick="promoteMember('${uname}', '${nextRank}', '${gangId}')" class="primary-btn" style="width:auto; padding:3px 8px; font-size:0.65rem; background:rgba(255,255,255,0.1); color:white; border:1px solid rgba(255,255,255,0.2);">${btnText}</button>`;
+                    }
 
-                    const leftSpan = document.createElement('span');
-                    leftSpan.style = "color: white; font-weight:600;";
-                    leftSpan.textContent = `${icon} ${uname}`;
-
-                    const rightSpan = document.createElement('span');
-                    rightSpan.style = "font-size:0.8rem; color:#aaa;";
-                    rightSpan.textContent = isLeader ? 'Lider (Baba)' : 'Tetikçi';
-
-                    innerDiv.appendChild(leftSpan);
-                    innerDiv.appendChild(rightSpan);
-                    row.appendChild(innerDiv);
+                    row.innerHTML = `
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span style="font-size:1.2rem;">${icon}</span>
+                            <div style="text-align:left;">
+                                <div style="font-weight:700; color:white;">@${uname}</div>
+                                <div style="font-size:0.7rem; color:#888;">${rankTitle}</div>
+                            </div>
+                        </div>
+                        ${actionsHtml}
+                    `;
                     list.appendChild(row);
                 });
             }
@@ -1578,7 +1651,7 @@ async function createGang() {
         ? `${name} [${tag.toUpperCase()}] çetesini Omega'nın Kartı ile ÜCRETSİZ kurmak istediğine emin misin?`
         : `${name} [${tag.toUpperCase()}] çetesini 1.000.000 💰 karşılığında kurmak istediğine emin misin?`;
 
-    if (!confirm(confirmMsg)) return;
+    // No confirm, direct create
 
     // Optimistic UI interaction
     showToast("Çete kuruluyor...", "info");
@@ -1611,6 +1684,67 @@ async function createGang() {
     }
 }
 
+async function joinGang(gangId) {
+    if (!currentUser) return showToast("Lütfen giriş yapın!", "error");
+
+    showToast("Çeteye katılınıyor...", "info");
+
+    try {
+        const res = await fetch('/api/gang/join', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser, gangId })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            showToast("🏴 Çeteye başarıyla katıldın!", "success");
+            // Reload user data
+            const userRes = await fetch('/api/user/' + currentUser);
+            lastUserData = await userRes.json();
+            loadGangs();
+        } else {
+            showToast(data.error || "Hata oluştu!", "error");
+        }
+    } catch (e) {
+        showToast("Bağlantı hatası!", "error");
+    }
+}
+
+async function processGangRequest(targetUser, action, gangId) {
+    try {
+        const res = await fetch('/api/gang/process-request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requester: currentUser, targetUser, action, gangId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message, "success");
+            loadGangs();
+        } else {
+            showToast(data.error || "Hata!", "error");
+        }
+    } catch (e) { showToast("İşlem hatası!", "error"); }
+}
+
+async function promoteMember(targetUser, newRank, gangId) {
+    try {
+        const res = await fetch('/api/gang/promote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requester: currentUser, targetUser, newRank, gangId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message, "success");
+            loadGangs();
+        } else {
+            showToast(data.error || "Hata!", "error");
+        }
+    } catch (e) { showToast("Bağlantı hatası!", "error"); }
+}
+
 async function openDonateModal() {
     const amount = prompt("Ne kadar bağışlamak istersin?");
     if (!amount) return;
@@ -1634,10 +1768,8 @@ async function openDonateModal() {
     } catch (e) { showToast("Bağış hatası", "error"); }
 }
 
-async function leaveGang() {
-    if (!confirm("Çeteden ayrılmak istediğine emin misin?")) return;
-    showToast("Bu özellik henüz aktif değil. Sadakat yeminin var!", "info");
-}
+// No confirm, direct leave (if implemented)
+showToast("Bu özellik henüz aktif değil. Sadakat yeminin var!", "info");
 let EMLAK_CITIES = [];
 
 async function ensureCities() {
@@ -1766,7 +1898,7 @@ async function applyForJob(jobName, price) {
             ? `${jobName} olabilmek için gerekli olan ${job.req_item} eşyasını Omega'nın Kartı ile ÜCRETSİZ almak istiyor musun?`
             : `${jobName} olabilmek için ${job.req_item} satın almalısın. Fiyat: ${price.toLocaleString()} 💰 Onaylıyor musun?`;
 
-        if (!confirm(confirmMsg)) return;
+        // No confirm, direct apply
     }
 
     try {
@@ -1925,7 +2057,7 @@ async function executePropertyBuy(cityId, propId, price, cityName) {
         ? `${cityName} - ${propId} mülkünü Omega'nın Kartı ile ÜCRETSİZ almak istediğine emin misin?`
         : `${price.toLocaleString()} 💰 karşılığında bu mülkü satın almak istediğine emin misin?`;
 
-    if (!confirm(confirmMsg)) return;
+    // No confirm, direct buy
 
     try {
         const res = await fetch('/api/real-estate/buy', {
@@ -2145,7 +2277,7 @@ async function buyRpgItem(code, type) {
         ? `${item.name} eşyasını Omega'nın Kartı ile ÜCRETSİZ almak/kuşanmak istiyor musun?`
         : `${item.name} - İşlem yapmak istiyor musun?`;
 
-    if (!confirm(confirmMsg)) return;
+    // No confirm, direct buy
 
     try {
         const res = await fetch('/api/rpg/buy', {
@@ -2249,7 +2381,7 @@ async function buyCustomization(type, id, price) {
         ? `Bu özelleştirmeyi Omega'nın Kartı ile ÜCRETSİZ almak istediğine emin misin?`
         : `Bu özelleştirmeyi ${price.toLocaleString()} 💰 karşılığında almak istediğine emin misin?`;
 
-    if (!confirm(confirmMsg)) return;
+    // No confirm, direct buy
 
     try {
         const res = await fetch('/api/customization/buy', {

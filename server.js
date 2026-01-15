@@ -6601,7 +6601,7 @@ app.get('/api/gang/list', async (req, res) => {
     }
 });
 
-// 5. JOIN GANG
+// 5. JOIN REQUEST GANG (Request Basis)
 app.post('/api/gang/join', async (req, res) => {
     try {
         const { username, gangId } = req.body;
@@ -6619,10 +6619,72 @@ app.post('/api/gang/join', async (req, res) => {
         const gangSnap = await gangRef.once('value');
         if (!gangSnap.exists()) return res.json({ success: false, error: "Çete bulunamadı" });
 
-        await gangRef.child('members').child(cleanUser).set({ role: 'member', joinedAt: Date.now() });
-        await userRef.child('gang').set(gangId);
+        // Check if already requested
+        const reqSnap = await gangRef.child('requests').child(cleanUser).once('value');
+        if (reqSnap.exists()) return res.json({ success: false, error: "Zaten katılım isteği göndermişsin. Onaylanması bekleniyor." });
 
-        res.json({ success: true, message: "Çeteye katıldın!" });
+        // Add to requests
+        await gangRef.child('requests').child(cleanUser).set({
+            requestedAt: Date.now()
+        });
+
+        res.json({ success: true, message: "Katılım isteği gönderildi! Lider veya Sağ Kol onayladığında katılacaksın." });
+    } catch (e) {
+        res.json({ success: false, error: e.message });
+    }
+});
+
+// 5b. PROCESS GANG REQUEST (Approve/Reject)
+app.post('/api/gang/process-request', async (req, res) => {
+    try {
+        const { requester, targetUser, action, gangId } = req.body; // action: 'approve' or 'reject'
+        if (!requester || !targetUser || !action || !gangId) return res.json({ success: false, error: "Eksik veri" });
+
+        const gangRef = db.ref('gangs/' + gangId);
+        const gangSnap = await gangRef.once('value');
+        const gang = gangSnap.val();
+        if (!gang) return res.json({ success: false, error: "Çete bulunamadı" });
+
+        // 1. Check permission (Leader or Right Hand)
+        const cleanRequester = requester.toLowerCase();
+        const staff = gang.members[cleanRequester];
+        if (!staff || (staff.rank !== 'leader' && staff.rank !== 'officer')) {
+            return res.json({ success: false, error: "Bu işlem için yetkin yok! (Sadece Lider veya Sağ Kol)" });
+        }
+
+        const cleanTarget = targetUser.toLowerCase();
+
+        if (action === 'approve') {
+            // Check if target still exists and is not in another gang
+            const targetUserRef = db.ref('users/' + cleanTarget);
+            const targetUserSnap = await targetUserRef.once('value');
+            const targetUserData = targetUserSnap.val();
+
+            if (!targetUserData) return res.json({ success: false, error: "Kullanıcı bulunamadı" });
+            if (targetUserData.gang) {
+                // If they joined another gang while waiting, remove request
+                await gangRef.child('requests').child(cleanTarget).remove();
+                return res.json({ success: false, error: "Bu kullanıcı zaten başka bir çeteye katılmış." });
+            }
+
+            // JOIN LOGIC
+            // A. Remove from requests
+            await gangRef.child('requests').child(cleanTarget).remove();
+            // B. Add to members
+            await gangRef.child('members').child(cleanTarget).set({
+                rank: 'member',
+                joinedAt: Date.now()
+            });
+            // C. Update user profile
+            await targetUserRef.child('gang').set(gangId);
+
+            res.json({ success: true, message: `${targetUser} çeteye dahil edildi!` });
+        } else {
+            // Reject logic
+            await gangRef.child('requests').child(cleanTarget).remove();
+            res.json({ success: true, message: "Katılım isteği reddedildi." });
+        }
+
     } catch (e) {
         res.json({ success: false, error: e.message });
     }
@@ -6687,6 +6749,35 @@ app.post('/api/gang/donate', async (req, res) => {
 });
 
 // 4. GANG ACTION: KICK MEMBER
+// 5c. PROMOTE/DEMOTE MEMBER
+app.post('/api/gang/promote', async (req, res) => {
+    try {
+        const { requester, targetUser, newRank, gangId } = req.body;
+        if (!requester || !targetUser || !newRank || !gangId) return res.json({ success: false, error: "Eksik veri" });
+
+        const gangRef = db.ref('gangs/' + gangId);
+        const gangSnap = await gangRef.once('value');
+        const gang = gangSnap.val();
+        if (!gang) return res.json({ success: false, error: "Çete bulunamadı" });
+
+        // Only Leader can promote/demote
+        if (gang.leader.toLowerCase() !== requester.toLowerCase()) {
+            return res.json({ success: false, error: "Sadece çete lideri rütbe değiştirebilir!" });
+        }
+
+        const cleanTarget = targetUser.toLowerCase();
+        if (!gang.members[cleanTarget]) return res.json({ success: false, error: "Kullanıcı bu çetede değil" });
+        if (cleanTarget === requester.toLowerCase()) return res.json({ success: false, error: "Kendi rütbeni değiştiremezsin" });
+
+        // Update rank
+        await gangRef.child('members').child(cleanTarget).child('rank').set(newRank);
+
+        res.json({ success: true, message: `${targetUser} yeni rütbesi: ${newRank === 'officer' ? 'Sağ Kol' : 'Üye'}` });
+    } catch (e) {
+        res.json({ success: false, error: e.message });
+    }
+});
+
 app.post('/api/gang/kick', async (req, res) => {
     const { requester, target } = req.body; // requester=username, target=username
     // Implement logic: 
