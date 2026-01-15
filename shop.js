@@ -447,6 +447,9 @@ function login(user) {
             if (data && !data.error) updateUserUI(data);
         })
         .catch(e => console.log("User API fetch failed:", e));
+
+    // Default tab
+    setTimeout(() => switchTab('market'), 100);
 }
 
 let lastUserData = null;
@@ -1712,6 +1715,35 @@ async function createGang() {
     }
 }
 
+async function leaveGang() {
+    const isLeader = lastUserData?.gangRank === 'leader';
+    const msg = isLeader
+        ? "Çete Liderisin! Ayrılırsan çete tamamen feshedilecek (disband). Emin misin?"
+        : "Çeteden ayrılmak istediğine emin misin?";
+
+    if (!confirm(msg)) return;
+
+    try {
+        const res = await fetch('/api/gang/leave', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message, "success");
+            // Reload user data
+            const userRes = await fetch('/api/user/' + currentUser);
+            lastUserData = await userRes.json();
+            loadGangs();
+        } else {
+            showToast(data.error || "Hata!", "error");
+        }
+    } catch (e) {
+        showToast("Bağlantı hatası!", "error");
+    }
+}
+
 async function joinGang(gangId) {
     if (!currentUser) return showToast("Lütfen giriş yapın!", "error");
 
@@ -1846,8 +1878,7 @@ async function openDonateModal_OLD() {
     } catch (e) { showToast("Bağış hatası", "error"); }
 }
 
-// No confirm, direct leave (if implemented)
-showToast("Bu özellik henüz aktif değil. Sadakat yeminin var!", "info");
+// --- EMLAK SYSTEM ---
 let EMLAK_CITIES = [];
 
 async function ensureCities() {

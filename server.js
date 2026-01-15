@@ -4482,6 +4482,53 @@ EK TALİMAT: ${aiInst}`;
             }
         }
 
+        // --- VERGİ SORGULAMA ---
+        else if (lowMsg === '!vergi') {
+            try {
+                const uSnap = await db.ref('users/' + user.toLowerCase()).once('value');
+                const userData = uSnap.val();
+                if (!userData) return await reply(`❌ @${user}, kaydın bulunamadı.`);
+
+                const stocksSnap = await db.ref('global_stocks').once('value');
+                const globalStocks = stocksSnap.val() || {};
+
+                let propertyTax = 0;
+                let stockTax = 0;
+
+                // 1. Mülk Vergisi (%10)
+                if (userData.properties && Array.isArray(userData.properties)) {
+                    userData.properties.forEach(p => {
+                        propertyTax += Math.floor((p.income || 0) * 0.10);
+                    });
+                }
+
+                // 2. Borsa Vergisi (%0.2)
+                if (userData.stocks) {
+                    for (const [code, amount] of Object.entries(userData.stocks)) {
+                        if (amount > 0) {
+                            const price = globalStocks[code]?.price || 0;
+                            stockTax += Math.floor((price * amount) * 0.002);
+                        }
+                    }
+                }
+
+                const totalTax = propertyTax + stockTax;
+
+                if (totalTax <= 0) {
+                    await reply(`🏛️ @${user}, şu an ödemen gereken bir vergi bulunmuyor. Yatırımların arttıkça vergin de artacaktır!`);
+                } else {
+                    let resMsg = `🏛️ @${user} GÜNLÜK VERGİ BİLGİSİ:\n`;
+                    if (propertyTax > 0) resMsg += `🏠 Emlak Vergisi: ${propertyTax.toLocaleString()} 💰\n`;
+                    if (stockTax > 0) resMsg += `📈 Borsa Vergisi: ${stockTax.toLocaleString()} 💰\n`;
+                    resMsg += `📝 TOPLAM: ${totalTax.toLocaleString()} 💰`;
+                    await reply(resMsg);
+                }
+            } catch (e) {
+                console.error("Vergi Komut Hatası:", e.message);
+                await reply(`⚠️ @${user}, vergi bilgileri şu an hesaplanamıyor.`);
+            }
+        }
+
         // --- AI CHAT ÖZETİ (Pollinations AI - Ücretsiz) ---
         else if (isEnabled('ai') && (lowMsg === '!ozet' || lowMsg === '!özet')) {
             // Cooldown kontrol (1 dakika)
@@ -5743,12 +5790,19 @@ app.get('/api/user/:username', async (req, res) => {
 
         if (!data) return res.status(404).json({ error: "Kullanıcı bulunamadı" });
 
-        // If asking for someone else, filter sensitive data if needed (optional)
-        // For now, we return full data to keep app working, but we could hide session_token
         const safeData = { ...data };
         if (!isSelf) {
             delete safeData.session_token; // Never expose token to others
             delete safeData.email; // If exists
+        }
+
+        // --- GANG RANK INJECTION ---
+        if (data.gang) {
+            const gangSnap = await db.ref(`gangs/${data.gang}`).once('value');
+            const gang = gangSnap.val();
+            if (gang && gang.members && gang.members[username]) {
+                safeData.gangRank = gang.members[username].rank;
+            }
         }
 
         return res.json(safeData);
@@ -6892,6 +6946,57 @@ app.post('/api/gang/kick', async (req, res) => {
         await db.ref('users/' + cleanTarget).child('gang').remove();
 
         res.json({ success: true, message: "Kullanıcı çeteden atıldı." });
+    } catch (e) {
+        res.json({ success: false, error: e.message });
+    }
+});
+
+app.post('/api/gang/leave', async (req, res) => {
+    try {
+        const { username } = req.body;
+        if (!username) return res.json({ success: false, error: "Eksik veri" });
+
+        const cleanUser = username.toLowerCase();
+        const userRef = db.ref('users/' + cleanUser);
+        const userSnap = await userRef.once('value');
+        const userData = userSnap.val();
+
+        if (!userData || !userData.gang) return res.json({ success: false, error: "Zaten bir çetede değilsin" });
+
+        const gangId = userData.gang;
+        const gangRef = db.ref('gangs/' + gangId);
+        const gangSnap = await gangRef.once('value');
+        const gang = gangSnap.val();
+
+        if (!gang) {
+            // Clean up stale gang reference
+            await userRef.child('gang').remove();
+            return res.json({ success: true, message: "Geçersiz çete referansı temizlendi." });
+        }
+
+        const myMemberData = gang.members?.[cleanUser];
+        if (!myMemberData) {
+            await userRef.child('gang').remove();
+            return res.json({ success: true, message: "Çete kaydı zaten silinmiş." });
+        }
+
+        if (myMemberData.rank === 'leader') {
+            // DISBAND GANG (If leader leaves, gang is gone)
+            const members = Object.keys(gang.members || {});
+            const updates = {};
+            members.forEach(m => {
+                updates[`users/${m}/gang`] = null;
+            });
+            updates[`gangs/${gangId}`] = null;
+            await db.ref().update(updates);
+            return res.json({ success: true, message: "Çete lideri ayrıldığı için çete feshedildi." });
+        } else {
+            // REGULAR LEAVE
+            await gangRef.child('members').child(cleanUser).remove();
+            await userRef.child('gang').remove();
+            return res.json({ success: true, message: "Çeteden ayrıldın." });
+        }
+
     } catch (e) {
         res.json({ success: false, error: e.message });
     }
