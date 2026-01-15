@@ -89,15 +89,27 @@ const admin = require('firebase-admin');
 
 // Firebase Admin initialization (File or Env Variable)
 let serviceAccount;
+let isFirebaseReady = false;
+
 try {
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        console.log("ℹ️ Firebase SERVICE_ACCOUNT Environment Variable üzerinden okunuyor...");
         serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-        // Fix for escaped newlines in private_key (common in Render/Heroku)
-        if (serviceAccount.private_key) {
-            serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
-        }
     } else {
+        console.log("ℹ️ Firebase anahtarı yerel dosyadan okunuyor...");
         serviceAccount = require("./firebase-admin-key.json");
+    }
+
+    // KRİTİK: Private Key düzeltme (Render/Heroku/Vercel vb. için)
+    if (serviceAccount && serviceAccount.private_key) {
+        // Eğer anahtarda gerçek newline yoksa ve \\n şeklinde kaçmışsa düzelt
+        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+
+        // Anahtarın başında/sonunda tırnak veya boşluk kalmışsa temizle
+        serviceAccount.private_key = serviceAccount.private_key.trim();
+        if (serviceAccount.private_key.startsWith('"') && serviceAccount.private_key.endsWith('"')) {
+            serviceAccount.private_key = serviceAccount.private_key.substring(1, serviceAccount.private_key.length - 1);
+        }
     }
 
     if (!admin.apps.length) {
@@ -106,12 +118,25 @@ try {
             databaseURL: process.env.FIREBASE_DB_URL
         });
     }
-    console.log("✅ Firebase Admin başarıyla başlatıldı.");
+    isFirebaseReady = true;
+    console.log("✅ Firebase Admin başarıyla başlatıldı ve yetkilendirildi.");
 } catch (e) {
-    console.error("❌ Firebase Admin başlatılamadı:", e.message);
+    console.error("❌ Firebase Admin başlatılamadı!");
+    console.error("⚠️ Hata Detayı:", e.message);
+    console.log("💡 İpucu: Render panelindeki FIREBASE_SERVICE_ACCOUNT değişkeninin tam ve doğru olduğundan emin ol.");
 }
 
-const db = admin.database();
+// Global DB instance (Eğer başlatılamazsa hata vermemesi için korumalı obje)
+const db = isFirebaseReady ? admin.database() : {
+    ref: () => ({
+        once: () => Promise.resolve({ val: () => null, numChildren: () => 0 }),
+        set: () => Promise.resolve(),
+        update: () => Promise.resolve(),
+        push: () => ({ key: 'error' }),
+        remove: () => Promise.resolve(),
+        transaction: () => Promise.resolve()
+    })
+};
 
 const KICK_CLIENT_ID = process.env.KICK_CLIENT_ID || "01KDQNP2M930Y7YYNM62TVWJCP";
 const KICK_CLIENT_SECRET = process.env.KICK_CLIENT_SECRET;
