@@ -2397,26 +2397,35 @@
         <script>
             // --- MODERN ASSET MODAL & ASSIGNMENT ---
 
-            // Constants mimicking shop.js for consistency
-            const EMLAK_CITIES = [
-                "Adana", "Adıyaman", "Afyonkarahisar", "Ağrı", "Amasya", "Ankara", "Antalya", "Artvin", "Aydın", "Balıkesir",
-                "Bilecik", "Bingöl", "Bitlis", "Bolu", "Burdur", "Bursa", "Çanakkale", "Çankırı", "Çorum", "Denizli",
-                "Diyarbakır", "Edirne", "Elazığ", "Erzincan", "Erzurum", "Eskişehir", "Gaziantep", "Giresun", "Gümüşhane",
-                "Hakkari", "Hatay", "Isparta", "Mersin", "İstanbul", "İzmir", "Kars", "Kastamonu", "Kayseri", "Kırklareli",
-                "Kırşehir", "Kocaeli", "Konya", "Kütahya", "Malatya", "Manisa", "Kahramanmaraş", "Mardin", "Muğla", "Muş",
-                "Nevşehir", "Niğde", "Ordu", "Rize", "Sakarya", "Samsun", "Siirt", "Sinop", "Sivas", "Tekirdağ", "Tokat",
-                "Trabzon", "Tunceli", "Şanlıurfa", "Uşak", "Van", "Yozgat", "Zonguldak", "Aksaray", "Bayburt", "Karaman",
-                "Kırıkkale", "Batman", "Şırnak", "Bartın", "Ardahan", "Iğdır", "Yalova", "Karabük", "Kilis", "Osmaniye", "Düzce"
-            ];
-            const EMLAK_TYPES = [
-                { n: "Gecekondu", p: 15 }, { n: "Apartman Dairesi", p: 35 },
-                { n: "Lüks Daire", p: 75 }, { n: "Residence", p: 150 },
-                { n: "Villa", p: 300 }, { n: "Yalı", p: 750 },
-                { n: "Gökdelen", p: 2000 }, { n: "Ada", p: 5000 },
-                { n: "Küçük Dükkan", p: 50 }, { n: "Mağaza", p: 120 },
-                { n: "Süpermarket", p: 300 }, { n: "AVM", p: 1000 },
-                { n: "Holding", p: 3000 }
-            ];
+            let EMLAK_CITIES = []; // Will be fetched
+            let currentCityProperties = []; // Will be fetched
+
+            async function fetchEmlakCities() {
+                try {
+                    const res = await fetch('/api/real-estate/cities');
+                    EMLAK_CITIES = await res.json();
+                } catch (e) { console.error("Cities Fetch Error", e); }
+            }
+
+            async function fetchCityProperties(cityId) {
+                try {
+                    const res = await fetch(`/api/real-estate/properties/${cityId}`);
+                    currentCityProperties = await res.json();
+
+                    const typeSelect = document.getElementById('assignPropType');
+                    // Sadece boş (owner: null) olanları göster
+                    const available = currentCityProperties.filter(p => !p.owner);
+
+                    if (available.length === 0) {
+                        typeSelect.innerHTML = '<option value="">Bu şehirde boş mülk kalmadı!</option>';
+                    } else {
+                        typeSelect.innerHTML = available.map(p => `<option value="${p.id}">${p.name} (${p.price.toLocaleString()} 💰)</option>`).join('');
+                    }
+                } catch (e) {
+                    console.error("Props Fetch Error", e);
+                    document.getElementById('assignPropType').innerHTML = '<option value="">Mülkler yüklenemedi!</option>';
+                }
+            }
 
             function closeModal(modalId) {
                 document.getElementById(modalId).style.display = 'none';
@@ -2502,18 +2511,21 @@
             }
 
             // Re-render Assign Modal with full city list
-            function openAssetAssignModal(username) {
+            async function openAssetAssignModal(username) {
                 assignUserTarget = username;
                 document.getElementById('assign-modal-title').innerHTML = `Emlak Ata -> <span
                     style="color:var(--primary);">@${username}</span>`;
 
+                if (EMLAK_CITIES.length === 0) await fetchEmlakCities();
+
                 // Populate Cities
                 const citySelect = document.getElementById('assignCity');
-                citySelect.innerHTML = EMLAK_CITIES.map((c, i) => `<option value="${i}">${c}</option>`).join('');
+                citySelect.innerHTML = EMLAK_CITIES.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
 
-                // Populate Types
-                const typeSelect = document.getElementById('assignPropType');
-                typeSelect.innerHTML = EMLAK_TYPES.map((t, i) => `<option value="${i}">${t.n} (Kira: ${t.p})</option>`).join('');
+                citySelect.onchange = (e) => fetchCityProperties(e.target.value);
+
+                // Initial fetch for first city
+                if (EMLAK_CITIES.length > 0) fetchCityProperties(EMLAK_CITIES[0].id);
 
                 document.getElementById('assignModal').style.display = 'flex';
             }
@@ -2536,13 +2548,10 @@
             }
 
             async function submitPropertyAssignment() {
-                const cityIdx = document.getElementById('assignCity').value;
-                const typeIdx = document.getElementById('assignPropType').value;
+                const cityId = document.getElementById('assignCity').value;
+                const propertyId = document.getElementById('assignPropType').value;
 
-                if (!assignUserTarget) return;
-
-                const cityName = EMLAK_CITIES[cityIdx];
-                const propInfo = EMLAK_TYPES[typeIdx];
+                if (!assignUserTarget || !propertyId) return;
 
                 const res = await fetch('/admin-api/assign-property', {
                     method: 'POST',
@@ -2550,14 +2559,14 @@
                     body: JSON.stringify({
                         key: sessionKey,
                         user: assignUserTarget,
-                        cityName: cityName,
-                        propInfo: propInfo
+                        cityId: cityId,
+                        propertyId: propertyId
                     })
                 });
 
                 const d = await res.json();
                 if (d.success) {
-                    alert('Mülk atandı!');
+                    alert('Mülk başarıyla atandı ve pazardan kaldırıldı!');
                     closeModal('assignModal');
                     loadUsers();
                 } else {
