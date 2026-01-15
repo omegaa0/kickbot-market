@@ -130,6 +130,8 @@ try {
 const db = isFirebaseReady ? admin.database() : {
     ref: () => ({
         once: () => Promise.resolve({ val: () => null, numChildren: () => 0 }),
+        on: () => { },
+        off: () => { },
         set: () => Promise.resolve(),
         update: () => Promise.resolve(),
         push: () => ({ key: 'error' }),
