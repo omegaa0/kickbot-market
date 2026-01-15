@@ -1460,6 +1460,7 @@ async function loadProfile() {
 async function loadGangs() {
     // 1. Check if user is in a gang
     if (!currentUser) return;
+    await ensureCities();
 
     let userData = lastUserData;
     if (!userData || !userData.gang) {
@@ -1632,15 +1633,22 @@ async function leaveGang() {
 }
 let EMLAK_CITIES = [];
 
+async function ensureCities() {
+    if (EMLAK_CITIES.length > 0) return;
+    try {
+        const res = await fetch('/api/real-estate/cities');
+        EMLAK_CITIES = await res.json();
+    } catch (e) {
+        console.error("Cities load error", e);
+    }
+}
+
 let emlakActive = false;
 async function loadEmlak() {
     if (emlakActive) return;
     emlakActive = true;
 
-    try {
-        const res = await fetch('/api/real-estate/cities');
-        EMLAK_CITIES = await res.json();
-    } catch (e) { console.error("Cities load error", e); }
+    await ensureCities();
 
     // Admin Reset Butonu (Emlak için)
     if (currentUser === 'omegacyr') {
