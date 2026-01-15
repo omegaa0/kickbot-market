@@ -2171,9 +2171,63 @@ app.post('/api/market/buy', verifySession, async (req, res) => {
             if (text.length > 500) return res.json({ success: false, error: "Mesaj çok uzun!" });
 
             eventPath = "tts";
+
+            // ELEVENLABS VOICE MAPPING
+            const elevenVoices = {
+                'aleyna': 'EXAVITQu4vr4xnSDxMaL', // Bella (Sample)
+                'riza': 'ErXwobaYiN019PkySvjV', // Antoni (Sample)
+                'czn': 'TxGEqnHWrfWFTfGW9XjX', // Josh (Sample)
+                'polat': 'ODq5zmih8GrVes37Dizd', // Patrick (Sample)
+                'ezel': 'VR6AewGX3KQ9Gs3uJ1G5',  // Adam (Sample)
+                'azeri': 'AZNZlk1XjnGjx8xLd4qD'   // Domi (AZE Placeholder)
+            };
+
+            let audioUrl = null;
+            let isEleven = false;
+
+            if (elevenVoices[voice]) {
+                isEleven = true;
+                try {
+                    // ElevenLabs API Call
+                    const elevenKey = process.env.ELEVENLABS_API_KEY || "sk_73928..."; // Fallback placeholder
+                    const voiceId = elevenVoices[voice];
+
+                    if (process.env.ELEVENLABS_API_KEY) {
+                        const ttsResp = await axios.post(
+                            `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+                            {
+                                text: text,
+                                model_id: "eleven_multilingual_v2",
+                                voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+                            },
+                            {
+                                headers: {
+                                    'xi-api-key': elevenKey,
+                                    'Content-Type': 'application/json'
+                                },
+                                responseType: 'arraybuffer' // Binary data
+                            }
+                        );
+
+                        // Convert to Base64 to serve directly via Firebase (Not ideal for large files but OK for short TTS)
+                        const base64Audio = Buffer.from(ttsResp.data).toString('base64');
+                        audioUrl = `data:audio/mpeg;base64,${base64Audio}`;
+                    } else {
+                        console.log("ElevenLabs API Key Missing - Skipping generation");
+                    }
+
+                } catch (err) {
+                    console.error("ElevenLabs Error:", err.message);
+                    // Fallback to standard if error
+                    isEleven = false;
+                }
+            }
+
             eventPayload = {
                 text: `@${username} diyor ki: ${text}`,
-                voice: voice || "Tr-TR-Emel-Neural",
+                voice: voice || "standart",
+                audioUrl: audioUrl, // New field for ElevenLabs
+                isEleven: isEleven,
                 played: false, notified: false, source: "market", timestamp: Date.now(), broadcasterId: channelId
             };
         }
