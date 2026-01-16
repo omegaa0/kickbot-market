@@ -1768,10 +1768,10 @@ async function collectDailyTaxes() {
                 }
             }
 
-            // 3. Bakiye Vergisi (Nakit Paranın %10'u)
+            // 3. Bakiye Vergisi (Nakit Paranın %5'i)
             const currentBalance = userData.balance || 0;
             if (currentBalance > 1000) { // İlk 1000 💰 vergiden muaf
-                balanceTax = Math.floor((currentBalance - 1000) * 0.10);
+                balanceTax = Math.floor((currentBalance - 1000) * 0.05);
             }
 
             const totalTax = propertyTax + stockTax + balanceTax;
@@ -1815,11 +1815,14 @@ setInterval(async () => {
 
         // 24 saat = 86,400,000 ms
         if (now - last > 86400000) {
+            // Önce zamanı güncelle ki loop'a girmesin
             await metaRef.set(now);
             await collectDailyTaxes();
         }
-    } catch (e) { }
-}, 300000);
+    } catch (e) {
+        console.error("Vergi Zamanlayıcı Hatası:", e);
+    }
+}, 300000); // 5 dakikada bir kontrol
 
 setInterval(distributeRealEstateIncome, 3600000);
 
@@ -4658,10 +4661,10 @@ EK TALİMAT: ${aiInst}`;
                     }
                 }
 
-                // 3. Bakiye Vergisi (%10)
+                // 3. Bakiye Vergisi (%5)
                 const currentBalance = userData.balance || 0;
                 if (currentBalance > 1000) {
-                    balanceTax = Math.floor((currentBalance - 1000) * 0.10);
+                    balanceTax = Math.floor((currentBalance - 1000) * 0.05);
                 }
 
                 const totalTax = propertyTax + stockTax + balanceTax;
