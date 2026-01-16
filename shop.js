@@ -3852,203 +3852,101 @@ function getQualityName(quality) {
     return 'Çok Düşük';
 }
 
- 
- / /   = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
- 
- / /   x �   G A N G   C H A T   S Y S T E M 
- 
- / /   = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
- 
- 
- 
- l e t   g a n g C h a t I n t e r v a l   =   n u l l ; 
- 
- l e t   l a s t G a n g I d   =   n u l l ; 
- 
- 
- 
- f u n c t i o n   i n i t G a n g C h a t ( g a n g I d )   { 
- 
-         i f   ( g a n g C h a t I n t e r v a l )   c l e a r I n t e r v a l ( g a n g C h a t I n t e r v a l ) ; 
- 
-         l a s t G a n g I d   =   g a n g I d ; 
- 
-         
- 
-         / /   I n i t i a l   l o a d 
- 
-         r e f r e s h G a n g C h a t ( ) ; 
- 
-         
- 
-         / /   R e f r e s h   e v e r y   5   s e c o n d s 
- 
-         g a n g C h a t I n t e r v a l   =   s e t I n t e r v a l ( r e f r e s h G a n g C h a t ,   5 0 0 0 ) ; 
- 
- } 
- 
- 
- 
- a s y n c   f u n c t i o n   r e f r e s h G a n g C h a t ( )   { 
- 
-         i f   ( ! l a s t G a n g I d   | |   d o c u m e n t . g e t E l e m e n t B y I d ( ' g a n g - d a s h b o a r d ' ) . c l a s s L i s t . c o n t a i n s ( ' h i d d e n ' ) )   r e t u r n ; 
- 
-         
- 
-         t r y   { 
- 
-                 c o n s t   r e s   =   a w a i t   f e t c h ( ` / a p i / g a n g / c h a t / l i s t ? g a n g I d = $ { l a s t G a n g I d } & l i m i t = 5 0 ` ) ; 
- 
-                 c o n s t   d a t a   =   a w a i t   r e s . j s o n ( ) ; 
- 
-                 
- 
-                 c o n s t   c o n t a i n e r   =   d o c u m e n t . g e t E l e m e n t B y I d ( ' g a n g - c h a t - m e s s a g e s ' ) ; 
- 
-                 i f   ( ! c o n t a i n e r )   r e t u r n ; 
- 
-                 
- 
-                 i f   ( d a t a . s u c c e s s )   { 
- 
-                         c o n s t   m e s s a g e s   =   O b j e c t . v a l u e s ( d a t a . m e s s a g e s   | |   { } ) ; 
- 
-                         
- 
-                         / /   E � xe r   m e s a j   s a y � � s � �   d e � xi � xm e d i y s e   v e y a   s o n   m e s a j   a y n � � y s a   r e n d e r   e t m e   ( o p t i m i z a s y o n   e k l e n e b i l i r ) 
- 
-                         / /   � � i m d i l i k   h e r   s e f e r i n d e   r e n d e r   e d i y o r u z   b a s i t l i k   i � � i n 
- 
-                         
- 
-                         i f   ( m e s s a g e s . l e n g t h   = = =   0 )   { 
- 
-                                 c o n t a i n e r . i n n e r H T M L   =   ' < d i v   s t y l e = " t e x t - a l i g n : c e n t e r ;   c o l o r : # 6 6 6 ;   f o n t - s i z e : 0 . 8 r e m ;   m a r g i n - t o p : 2 0 p x ; " > H e n � � z   m e s a j   y o k .   � � l k   m e s a j � �   s e n   y a z ! < / d i v > ' ; 
- 
-                                 r e t u r n ; 
- 
-                         } 
- 
-                         
- 
-                         c o n t a i n e r . i n n e r H T M L   =   m e s s a g e s . m a p ( m s g   = >   { 
- 
-                                 c o n s t   i s M e   =   m s g . s e n d e r . t o L o w e r C a s e ( )   = = =   c u r r e n t U s e r . t o L o w e r C a s e ( ) ; 
- 
-                                 c o n s t   t i m e   =   n e w   D a t e ( m s g . t i m e s t a m p ) . t o L o c a l e T i m e S t r i n g ( [ ] ,   { h o u r :   ' 2 - d i g i t ' ,   m i n u t e : ' 2 - d i g i t ' } ) ; 
- 
-                                 c o n s t   r a n k B a d g e   =   m s g . r a n k   = = =   ' l e a d e r '   ?   ' x  '   :   ( m s g . r a n k   = = =   ' o f f i c e r '   ?   ' � a � � � '   :   ' ' ) ; 
- 
-                                 
- 
-                                 r e t u r n   ` 
- 
-                                         < d i v   s t y l e = " d i s p l a y : f l e x ;   f l e x - d i r e c t i o n : c o l u m n ;   a l i g n - i t e m s : $ { i s M e   ?   ' f l e x - e n d '   :   ' f l e x - s t a r t ' } ; " > 
- 
-                                                 < d i v   s t y l e = " d i s p l a y : f l e x ;   a l i g n - i t e m s : c e n t e r ;   g a p : 5 p x ;   m a r g i n - b o t t o m : 2 p x ; " > 
- 
-                                                         < s p a n   s t y l e = " f o n t - s i z e : 0 . 7 r e m ;   c o l o r : $ { i s M e   ?   ' # 0 0 f f 8 8 '   :   ' # a a a ' } ;   f o n t - w e i g h t : 7 0 0 ; " > 
- 
-                                                                 $ { r a n k B a d g e }   $ { m s g . s e n d e r } 
- 
-                                                         < / s p a n > 
- 
-                                                         < s p a n   s t y l e = " f o n t - s i z e : 0 . 6 r e m ;   c o l o r : # 6 6 6 ; " > $ { t i m e } < / s p a n > 
- 
-                                                 < / d i v > 
- 
-                                                 < d i v   s t y l e = " 
- 
-                                                         b a c k g r o u n d : $ { i s M e   ?   ' r g b a ( 0 ,   2 5 5 ,   1 3 6 ,   0 . 1 ) '   :   ' r g b a ( 2 5 5 ,   2 5 5 ,   2 5 5 ,   0 . 0 5 ) ' } ;   
- 
-                                                         b o r d e r : 1 p x   s o l i d   $ { i s M e   ?   ' r g b a ( 0 ,   2 5 5 ,   1 3 6 ,   0 . 2 ) '   :   ' r g b a ( 2 5 5 ,   2 5 5 ,   2 5 5 ,   0 . 1 ) ' } ; 
- 
-                                                         p a d d i n g : 8 p x   1 2 p x ;   
- 
-                                                         b o r d e r - r a d i u s : 1 2 p x ;   
- 
-                                                         b o r d e r - $ { i s M e   ?   ' t o p - r i g h t '   :   ' t o p - l e f t ' } - r a d i u s : 0 ; 
- 
-                                                         c o l o r : # d d d ;   
- 
-                                                         f o n t - s i z e : 0 . 9 r e m ; 
- 
-                                                         m a x - w i d t h : 8 5 % ; 
- 
-                                                         w o r d - w r a p : b r e a k - w o r d ; 
- 
-                                                 " > 
- 
-                                                         $ { m s g . t e x t } 
- 
-                                                 < / d i v > 
- 
-                                         < / d i v > 
- 
-                                 ` ; 
- 
-                         } ) . j o i n ( ' ' ) ; 
- 
-                         
- 
-                         / /   A u t o   s c r o l l   t o   b o t t o m 
- 
-                         c o n t a i n e r . s c r o l l T o p   =   c o n t a i n e r . s c r o l l H e i g h t ; 
- 
-                 } 
- 
-         }   c a t c h   ( e )   {   c o n s o l e . e r r o r ( " C h a t   r e f r e s h   e r r o r " ,   e ) ;   } 
- 
- } 
- 
- 
- 
- a s y n c   f u n c t i o n   s e n d G a n g C h a t ( )   { 
- 
-         c o n s t   i n p u t   =   d o c u m e n t . g e t E l e m e n t B y I d ( ' g a n g - c h a t - i n p u t ' ) ; 
- 
-         c o n s t   m s g   =   i n p u t . v a l u e . t r i m ( ) ; 
- 
-         i f   ( ! m s g   | |   ! l a s t G a n g I d )   r e t u r n ; 
- 
-         
- 
-         i n p u t . v a l u e   =   ' ' ;   / /   C l e a r   i m m e d i a t e l y 
- 
-         
- 
-         t r y   { 
- 
-                 c o n s t   r e s   =   a w a i t   f e t c h ( ' / a p i / g a n g / c h a t / s e n d ' ,   { 
- 
-                         m e t h o d :   ' P O S T ' , 
- 
-                         h e a d e r s :   {   ' C o n t e n t - T y p e ' :   ' a p p l i c a t i o n / j s o n '   } , 
- 
-                         b o d y :   J S O N . s t r i n g i f y ( {   u s e r n a m e :   c u r r e n t U s e r ,   g a n g I d :   l a s t G a n g I d ,   m e s s a g e :   m s g   } ) 
- 
-                 } ) ; 
- 
-                 c o n s t   d a t a   =   a w a i t   r e s . j s o n ( ) ; 
- 
-                 
- 
-                 i f   ( d a t a . s u c c e s s )   { 
- 
-                         r e f r e s h G a n g C h a t ( ) ;   / /   R e f r e s h   i m m e d i a t e l y 
- 
-                 }   e l s e   { 
- 
-                         s h o w T o a s t ( " M e s a j   g � � n d e r i l e m e d i :   "   +   d a t a . e r r o r ,   " e r r o r " ) ; 
- 
-                 } 
- 
-         }   c a t c h   ( e )   { 
- 
-                 s h o w T o a s t ( " H a t a   o l u � xt u ! " ,   " e r r o r " ) ; 
- 
-         } 
- 
- } 
- 
- 
+
+// =============================================================================
+
+// =============================================================================
+// 💬 GANG CHAT SYSTEM
+// =============================================================================
+
+let gangChatInterval = null;
+let lastGangId = null;
+
+function initGangChat(gangId) {
+    if (gangChatInterval) clearInterval(gangChatInterval);
+    lastGangId = gangId;
+
+    // Initial load
+    refreshGangChat();
+
+    // Refresh every 5 seconds
+    gangChatInterval = setInterval(refreshGangChat, 5000);
+}
+
+async function refreshGangChat() {
+    if (!lastGangId || document.getElementById('gang-dashboard').classList.contains('hidden')) return;
+
+    try {
+        const res = await fetch(`/api/gang/chat/list?gangId=${lastGangId}&limit=50`);
+        const data = await res.json();
+
+        const container = document.getElementById('gang-chat-messages');
+        if (!container) return;
+
+        if (data.success) {
+            const messages = Object.values(data.messages || {});
+
+            if (messages.length === 0) {
+                container.innerHTML = '<div style="text-align:center; color:#666; font-size:0.8rem; margin-top:20px;">Henüz mesaj yok. İlk mesajı sen yaz!</div>';
+                return;
+            }
+
+            container.innerHTML = messages.map(msg => {
+                const isMe = msg.sender.toLowerCase() === currentUser.toLowerCase();
+                const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const rankBadge = msg.rank === 'leader' ? '👑' : (msg.rank === 'officer' ? '⚔️' : '');
+
+                return `
+                    <div style="display:flex; flex-direction:column; align-items:${isMe ? 'flex-end' : 'flex-start'};">
+                        <div style="display:flex; align-items:center; gap:5px; margin-bottom:2px;">
+                            <span style="font-size:0.7rem; color:${isMe ? '#00ff88' : '#aaa'}; font-weight:700;">
+                                ${rankBadge} ${msg.sender}
+                            </span>
+                            <span style="font-size:0.6rem; color:#666;">${time}</span>
+                        </div>
+                        <div style="
+                            background:${isMe ? 'rgba(0, 255, 136, 0.1)' : 'rgba(255, 255, 255, 0.05)'}; 
+                            border:1px solid ${isMe ? 'rgba(0, 255, 136, 0.2)' : 'rgba(255, 255, 255, 0.1)'};
+                            padding:8px 12px; 
+                            border-radius:12px; 
+                            border-${isMe ? 'top-right' : 'top-left'}-radius:0;
+                            color:#ddd; 
+                            font-size:0.9rem;
+                            max-width:85%;
+                            word-wrap:break-word;
+                        ">
+                            ${msg.text}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.scrollTop = container.scrollHeight;
+        }
+    } catch (e) { console.error("Chat refresh error", e); }
+}
+
+async function sendGangChat() {
+    const input = document.getElementById('gang-chat-input');
+    const msg = input.value.trim();
+    if (!msg || !lastGangId) return;
+
+    input.value = ''; // Clear immediately
+
+    try {
+        const res = await fetch('/api/gang/chat/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser, gangId: lastGangId, message: msg })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            refreshGangChat(); // Refresh immediately
+        } else {
+            showToast("Mesaj gönderilemedi: " + data.error, "error");
+        }
+    } catch (e) {
+        showToast("Hata oluştu!", "error");
+    }
+}

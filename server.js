@@ -8,6 +8,7 @@ const fs = require('fs');
 const multer = require('multer');
 const firebase = require('firebase/compat/app');
 require('firebase/compat/database');
+require('firebase/compat/auth'); // Auth modülü eklendi
 
 // ===== GÜVENLİK PAKETLERİ =====
 const bcrypt = require('bcryptjs');
@@ -50,6 +51,7 @@ function generateSecureToken(length = 64) {
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 const app = express();
+app.set('trust proxy', 1); // Proxy arkasında çalıştığı için (Render/Heroku) IP tespiti için gerekli
 
 // ===== CORS YAPILANDIRMASI =====
 const allowedOrigins = [
@@ -188,6 +190,29 @@ const firebaseConfig = {
 };
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+const auth = firebase.auth();
+
+// SERVER BOT LOGIN
+const SERVER_EMAIL = process.env.SERVER_BOT_EMAIL;
+const SERVER_PASS = process.env.SERVER_BOT_PASSWORD;
+
+if (SERVER_EMAIL && SERVER_PASS) {
+    auth.signInWithEmailAndPassword(SERVER_EMAIL, SERVER_PASS)
+        .then((userCredential) => {
+            console.log("✅ Sunucu Botu Giriş Yaptı:", userCredential.user.email);
+        })
+        .catch((error) => {
+            console.error("⚠️ Sunucu Botu Giriş Hatası:", error.code);
+            if (error.code === 'auth/user-not-found') {
+                console.log("ℹ️ Sunucu Botu oluşturuluyor...");
+                auth.createUserWithEmailAndPassword(SERVER_EMAIL, SERVER_PASS)
+                    .then((user) => console.log("✅ Sunucu Botu Oluşturuldu:", user.user.email))
+                    .catch((e) => console.error("❌ Sunucu Botu Oluşturma Hatası:", e.message));
+            }
+        });
+} else {
+    console.warn("⚠️ SERVER_BOT_EMAIL veya SERVER_BOT_PASSWORD eksik! Veritabanı yazma işlemleri başarısız olabilir.");
+}
 
 const KICK_CLIENT_ID = process.env.KICK_CLIENT_ID || "01KDQNP2M930Y7YYNM62TVWJCP";
 const KICK_CLIENT_SECRET = process.env.KICK_CLIENT_SECRET;
