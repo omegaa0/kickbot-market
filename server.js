@@ -229,6 +229,9 @@ function initializeBackgroundTasks() {
     setInterval(collectDailyTaxes, 3600000);
     setTimeout(collectDailyTaxes, 30000);
 
+    // Stok limitlerini kontrol et
+    enforceStockLimitsNow();
+
     console.log("✅ Tüm arka plan görevleri kuyruğa alındı.");
 }
 
@@ -4011,12 +4014,16 @@ async function timeoutUser(broadcasterId, targetUsername, duration) {
     try {
         let targetUserId = null;
 
-        // YÃ–NTEM 0: VeritabanÄ±ndan bak (En garantisi)
-        if (targetUsername) {
-            const dbIdSnap = await db.ref('kick_ids/' + targetUsername.toLowerCase()).once('value');
-            if (dbIdSnap.exists()) {
-                targetUserId = dbIdSnap.val();
-                console.log(`✅ ID Veritabanından bulundu: ${targetUsername} -> ${targetUserId}`);
+        // YÖNTEM 0: Veritabanından bak (En garantisi)
+        if (targetUsername && isDbReady) {
+            try {
+                const dbIdSnap = await db.ref('kick_ids/' + targetUsername.toLowerCase()).once('value');
+                if (dbIdSnap.exists()) {
+                    targetUserId = dbIdSnap.val();
+                    console.log(`✅ ID Veritabanından bulundu: ${targetUsername} -> ${targetUserId}`);
+                }
+            } catch (e) {
+                console.error(`[KickID DB Error] ${targetUsername}:`, e.message);
             }
         }
 
@@ -8366,7 +8373,8 @@ app.post('/api/gang/upgrade', async (req, res) => {
 });
 
 // --- IMMEDIATE STOCK FIX (One-time run on server restart/update) ---
-(async function enforceStockLimitsNow() {
+async function enforceStockLimitsNow() {
+    if (!isDbReady) return;
     try {
         console.log("🔧 Stock Limits Enforcement Started...");
         const stockRef = db.ref('global_stocks');
@@ -8405,10 +8413,11 @@ app.post('/api/gang/upgrade', async (req, res) => {
             console.log("✅ All stocks clamped to daily limits.");
         }
     } catch (e) { console.error("Stock Fix Error:", e); }
-})();
+}
 
 // 6. GET GANG INFO
 app.post('/api/gang/info', async (req, res) => {
+    if (!isDbReady) return res.json({ success: false, error: 'Veritabanı hazır değil' });
     try {
         const { gangId } = req.body;
         if (!gangId) return res.json({ success: false });
