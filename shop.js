@@ -1569,7 +1569,6 @@ async function loadProfile() {
                 </div>
             </div>
         `;
-    // Callback closure removed
 
 }
 
@@ -1590,11 +1589,11 @@ async function loadGangs() {
     await ensureCities();
     let userData = lastUserData;
 
-    // If we don't have fresh data, try to fetch it once
+    // If we don't have fresh data, try to fetch it once (using Firebase instead of API)
     if (!userData) {
         try {
-            const userRes = await fetch('/api/user/' + currentUser);
-            userData = await userRes.json();
+            const snap = await db.ref('users/' + currentUser).once('value');
+            userData = snap.val();
             lastUserData = userData;
         } catch (e) {
             console.error("Gangs: User data fetch failed", e);
@@ -2053,16 +2052,93 @@ async function openDonateModal_OLD() {
 }
 
 // --- EMLAK SYSTEM ---
-let EMLAK_CITIES = [];
+const EMLAK_CITIES = [
+    { "id": "ADANA", "name": "Adana", "x": 50, "y": 81 },
+    { "id": "ADIYAMAN", "name": "Adıyaman", "x": 66, "y": 72 },
+    { "id": "AFYONKARAHISAR", "name": "Afyon", "x": 25, "y": 53 },
+    { "id": "AGRI", "name": "Ağrı", "x": 91, "y": 38 },
+    { "id": "AMASYA", "name": "Amasya", "x": 53, "y": 23 },
+    { "id": "ANKARA", "name": "Ankara", "x": 38, "y": 34 },
+    { "id": "ANTALYA", "name": "Antalya", "x": 26, "y": 83 },
+    { "id": "ARTVIN", "name": "Artvin", "x": 84, "y": 15 },
+    { "id": "AYDIN", "name": "Aydın", "x": 11, "y": 68 },
+    { "id": "BALIKESIR", "name": "Balıkesir", "x": 12, "y": 39 },
+    { "id": "BILECIK", "name": "Bilecik", "x": 23, "y": 31 },
+    { "id": "BINGOL", "name": "Bingöl", "x": 77, "y": 51 },
+    { "id": "BITLIS", "name": "Bitlis", "x": 86, "y": 59 },
+    { "id": "BOLU", "name": "Bolu", "x": 31, "y": 22 },
+    { "id": "BURDUR", "name": "Burdur", "x": 24, "y": 70 },
+    { "id": "BURSA", "name": "Bursa", "x": 18, "y": 30 },
+    { "id": "CANAKKALE", "name": "Çanakkale", "x": 4, "y": 31 },
+    { "id": "CANKIRI", "name": "Çankırı", "x": 42, "y": 24 },
+    { "id": "CORUM", "name": "Çorum", "x": 49, "y": 25 },
+    { "id": "DENIZLI", "name": "Denizli", "x": 18, "y": 69 },
+    { "id": "DIYARBAKIR", "name": "Diyarbakır", "x": 76, "y": 66 },
+    { "id": "EDIRNE", "name": "Edirne", "x": 5, "y": 7 },
+    { "id": "ELAZIG", "name": "Elazığ", "x": 71, "y": 54 },
+    { "id": "ERZINCAN", "name": "Erzincan", "x": 72, "y": 37 },
+    { "id": "ERZURUM", "name": "Erzurum", "x": 81, "y": 35 },
+    { "id": "ESKISEHIR", "name": "Eskişehir", "x": 25, "y": 37 },
+    { "id": "GAZIANTEP", "name": "Gaziantep", "x": 61, "y": 80 },
+    { "id": "GIRESUN", "name": "Giresun", "x": 66, "y": 19 },
+    { "id": "GUMUSHANE", "name": "Gümüşhane", "x": 72, "y": 26 },
+    { "id": "HAKKARI", "name": "Hakkari", "x": 94, "y": 72 },
+    { "id": "HATAY", "name": "Hatay", "x": 55, "y": 94 },
+    { "id": "ISPARTA", "name": "Isparta", "x": 26, "y": 69 },
+    { "id": "MERSIN", "name": "Mersin", "x": 47, "y": 84 },
+    { "id": "ISTANBUL", "name": "İstanbul", "x": 17, "y": 17 },
+    { "id": "IZMIR", "name": "İzmir", "x": 8, "y": 58 },
+    { "id": "KARS", "name": "Kars", "x": 91, "y": 24 },
+    { "id": "KASTAMONU", "name": "Kastamonu", "x": 42, "y": 12 },
+    { "id": "KAYSERI", "name": "Kayseri", "x": 52, "y": 48 },
+    { "id": "KIRKLARELI", "name": "Kırklareli", "x": 8, "y": 6 },
+    { "id": "KIRSEHIR", "name": "Kırşehir", "x": 44, "y": 47 },
+    { "id": "KOCAELI", "name": "Kocaeli", "x": 22, "y": 21 },
+    { "id": "KONYA", "name": "Konya", "x": 36, "y": 67 },
+    { "id": "KUTAHYA", "name": "Kütahya", "x": 23, "y": 43 },
+    { "id": "MALATYA", "name": "Malatya", "x": 66, "y": 60 },
+    { "id": "MANISA", "name": "Manisa", "x": 9, "y": 55 },
+    { "id": "KAHRAMANMARAS", "name": "Kahramanmaraş", "x": 59, "y": 72 },
+    { "id": "MARDIN", "name": "Mardin", "x": 79, "y": 76 },
+    { "id": "MUGLA", "name": "Muğla", "x": 14, "y": 78 },
+    { "id": "MUS", "name": "Muş", "x": 83, "y": 54 },
+    { "id": "NEVSEHIR", "name": "Nevşehir", "x": 47, "y": 55 },
+    { "id": "NIGDE", "name": "Niğde", "x": 47, "y": 66 },
+    { "id": "ORDU", "name": "Ordu", "x": 64, "y": 18 },
+    { "id": "RIZE", "name": "Rize", "x": 78, "y": 17 },
+    { "id": "SAKARYA", "name": "Sakarya", "x": 25, "y": 21 },
+    { "id": "SAMSUN", "name": "Samsun", "x": 56, "y": 13 },
+    { "id": "SIIRT", "name": "Siirt", "x": 85, "y": 66 },
+    { "id": "SINOP", "name": "Sinop", "x": 50, "y": 1 },
+    { "id": "SIVAS", "name": "Sivas", "x": 59, "y": 37 },
+    { "id": "TEKIRDAG", "name": "Tekirdağ", "x": 10, "y": 18 },
+    { "id": "TOKAT", "name": "Tokat", "x": 57, "y": 28 },
+    { "id": "TRABZON", "name": "Trabzon", "x": 73, "y": 17 },
+    { "id": "TUNCELI", "name": "Tunceli", "x": 72, "y": 48 },
+    { "id": "SANLIURFA", "name": "Şanlıurfa", "x": 69, "y": 78 },
+    { "id": "USAK", "name": "Uşak", "x": 20, "y": 54 },
+    { "id": "VAN", "name": "Van", "x": 92, "y": 57 },
+    { "id": "YOZGAT", "name": "Yozgat", "x": 48, "y": 36 },
+    { "id": "ZONGULDAK", "name": "Zonguldak", "x": 32, "y": 10 },
+    { "id": "AKSARAY", "name": "Aksaray", "x": 44, "y": 59 },
+    { "id": "BAYBURT", "name": "Bayburt", "x": 76, "y": 29 },
+    { "id": "KARAMAN", "name": "Karaman", "x": 39, "y": 78 },
+    { "id": "KIRIKKALE", "name": "Kırıkkale", "x": 41, "y": 36 },
+    { "id": "BATMAN", "name": "Batman", "x": 81, "y": 67 },
+    { "id": "SIRNAK", "name": "Şırnak", "x": 88, "y": 73 },
+    { "id": "BARTIN", "name": "Bartın", "x": 35, "y": 7 },
+    { "id": "ARDAHAN", "name": "Ardahan", "x": 89, "y": 16 },
+    { "id": "IGDIR", "name": "Iğdır", "x": 96, "y": 35 },
+    { "id": "YALOVA", "name": "Yalova", "x": 19, "y": 23 },
+    { "id": "KARABUK", "name": "Karabük", "x": 36, "y": 14 },
+    { "id": "KILIS", "name": "Kilis", "x": 60, "y": 86 },
+    { "id": "OSMANIYE", "name": "Osmaniye", "x": 55, "y": 80 },
+    { "id": "DUZCE", "name": "Düzce", "x": 29, "y": 20 }
+];
 
 async function ensureCities() {
-    if (EMLAK_CITIES.length > 0) return;
-    try {
-        const res = await fetch('/api/real-estate/cities');
-        EMLAK_CITIES = await res.json();
-    } catch (e) {
-        console.error("Cities load error", e);
-    }
+    // Static cities populated, no fetch needed
+    return true;
 }
 
 let emlakActive = false;
