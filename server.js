@@ -7282,6 +7282,7 @@ app.post('/api/gang/create', async (req, res) => {
                 members: {
                     [cleanUser]: { rank: 'leader', joinedAt: Date.now() }
                 },
+                memberCount: 1,
                 createdAt: Date.now()
             };
 

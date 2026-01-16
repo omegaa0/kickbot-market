@@ -835,7 +835,14 @@ function switchTab(id) {
     document.getElementById('tab-' + id).classList.remove('hidden');
 
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    if (event) event.currentTarget.classList.add('active');
+    // If called via event listener
+    if (typeof event !== 'undefined' && event && event.currentTarget) {
+        event.currentTarget.classList.add('active');
+    } else {
+        // Programmatic call (e.g. from login)
+        const targetBtn = document.querySelector(`.tab-btn[onclick*="switchTab('${id}')"]`);
+        if (targetBtn) targetBtn.classList.add('active');
+    }
 
     if (id === 'leaderboard') loadLeaderboard();
     if (id === 'borsa') loadBorsa();
@@ -1584,15 +1591,18 @@ async function loadGangs() {
     let userData = lastUserData;
 
     // If we don't have fresh data, try to fetch it once
-    if (!userData || userData.username !== currentUser) {
+    if (!userData) {
         try {
             const userRes = await fetch('/api/user/' + currentUser);
             userData = await userRes.json();
             lastUserData = userData;
-        } catch (e) { }
+        } catch (e) {
+            console.error("Gangs: User data fetch failed", e);
+        }
     }
 
     const gangId = userData?.gang;
+    console.log("Gangs Login Check:", { currentUser, gangId, hasUserData: !!userData });
 
     if (!gangId) {
         // Not in a gang -> Show Lobby
@@ -1752,59 +1762,76 @@ async function loadGangs() {
 
                 // Members List
                 const list = document.getElementById('gang-members-list');
+                if (!list) return;
                 list.innerHTML = '';
 
-                const members = Object.entries(g.members || {});
-                document.getElementById('my-gang-count').innerText = members.length;
-                if (g.memberCount && g.memberCount !== members.length) {
-                    document.getElementById('my-gang-count').innerText = g.memberCount;
+                let members = [];
+                try {
+                    members = Object.entries(g.members || {});
+                } catch (e) {
+                    console.error("Members parse error", e);
+                    members = [];
                 }
 
-                members.sort((a, b) => (b[1].rank === 'leader' ? 1 : 0) - (a[1].rank === 'leader' ? 1 : 0)); // Leader top
+                // Member Count - Always use members list length as source of truth
+                const memberCount = members.length;
+                const countEl = document.getElementById('my-gang-count');
+                if (countEl) countEl.innerText = memberCount;
 
-                members.forEach(([uname, data]) => {
-                    const isLeader = data.rank === 'leader';
-                    const isOfficer = data.rank === 'officer';
-                    let rankTitle = 'Tetikçi (Üye)';
-                    let icon = '🔫';
+                if (memberCount === 0) {
+                    list.innerHTML = '<div style="color:#666; font-size:0.8rem; text-align:center; padding:20px;">Kadro verisi yüklenemedi.</div>';
+                } else {
+                    // Sort: Leader first
+                    members.sort((a, b) => (b[1].rank === 'leader' ? 1 : 0) - (a[1].rank === 'leader' ? 1 : 0));
 
-                    if (isLeader) { rankTitle = 'Lider (Baba)'; icon = '👑'; }
-                    else if (isOfficer) { rankTitle = 'Sağ Kol (Officer)'; icon = '⚔️'; }
+                    members.forEach(([uname, data]) => {
+                        const isLeader = data.rank === 'leader';
+                        const isOfficer = data.rank === 'officer';
+                        let rankTitle = 'Tetikçi (Üye)';
+                        let icon = '🔫';
 
-                    const row = document.createElement('div');
-                    row.className = 'member-row';
+                        if (isLeader) { rankTitle = 'Lider (Baba)'; icon = '👑'; }
+                        else if (isOfficer) { rankTitle = 'Sağ Kol (Officer)'; icon = '⚔️'; }
 
-                    let actionsHtml = '<div style="display:flex; gap:8px;">';
-                    if (myRank === 'leader' && uname.toLowerCase() !== cleanCurrent) {
-                        const nextRank = isOfficer ? 'member' : 'officer';
-                        const btnText = isOfficer ? 'Rütbe İndir' : 'Sağ Kol Yap';
-                        actionsHtml += `<button onclick="promoteMember('${uname}', '${nextRank}', '${gangId}')" class="primary-btn" style="width:auto; padding:3px 8px; font-size:0.65rem; background:rgba(255,255,255,0.1); color:white; border:1px solid rgba(255,255,255,0.2);">${btnText}</button>`;
-                    }
+                        const row = document.createElement('div');
+                        row.className = 'member-row';
 
-                    // Kick Button
-                    const canIKick = (myRank === 'leader' && uname.toLowerCase() !== cleanCurrent) ||
-                        (myRank === 'officer' && !isLeader && !isOfficer);
+                        let actionsHtml = '<div style="display:flex; gap:8px;">';
+                        if (myRank === 'leader' && uname.toLowerCase() !== cleanCurrent) {
+                            const nextRank = isOfficer ? 'member' : 'officer';
+                            const btnText = isOfficer ? 'Rütbe İndir' : 'Sağ Kol Yap';
+                            actionsHtml += `<button onclick="promoteMember('${uname}', '${nextRank}', '${gangId}')" class="primary-btn" style="width:auto; padding:3px 8px; font-size:0.65rem; background:rgba(255,255,255,0.1); color:white; border:1px solid rgba(255,255,255,0.2);">${btnText}</button>`;
+                        }
 
-                    if (canIKick) {
-                        actionsHtml += `<button onclick="kickMember('${uname}', '${gangId}')" class="logout-btn" style="width:auto; padding:3px 8px; font-size:0.65rem; border:1px solid rgba(255,50,50,0.3);">AT</button>`;
-                    }
-                    actionsHtml += '</div>';
+                        // Kick Button
+                        const canIKick = (myRank === 'leader' && uname.toLowerCase() !== cleanCurrent) ||
+                            (myRank === 'officer' && !isLeader && !isOfficer);
 
-                    row.innerHTML = `
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <span style="font-size:1.2rem;">${icon}</span>
-                            <div style="text-align:left;">
-                                <div style="font-weight:700; color:white;">@${uname}</div>
-                                <div style="font-size:0.7rem; color:#888;">${rankTitle}</div>
+                        if (canIKick) {
+                            actionsHtml += `<button onclick="kickMember('${uname}', '${gangId}')" class="logout-btn" style="width:auto; padding:3px 8px; font-size:0.65rem; border:1px solid rgba(255,50,50,0.3);">AT</button>`;
+                        }
+                        actionsHtml += '</div>';
+
+                        row.innerHTML = `
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <span style="font-size:1.2rem;">${icon}</span>
+                                <div style="text-align:left;">
+                                    <div style="font-weight:700; color:white;">@${uname}</div>
+                                    <div style="font-size:0.7rem; color:#888;">${rankTitle}</div>
+                                </div>
                             </div>
-                        </div>
-                        ${actionsHtml}
-                    `;
-                    list.appendChild(row);
-                });
+                            ${actionsHtml}
+                        `;
+                        list.appendChild(row);
+                    });
+                }
+            } else {
+                console.error("Gang load failed:", d.error);
+                showToast("Çete bilgileri alınamadı!", "error");
             }
         } catch (e) {
-            console.error("Gang Load Error:", e);
+            console.error("Gang Info Fetch Error:", e);
+            showToast("Bağlantı hatası!", "error");
         }
     }
 }
