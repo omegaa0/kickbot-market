@@ -847,7 +847,7 @@ async function updateGlobalStocks() {
             console.log(`🔄 Yeni Piyasa Döngüsü: ${currentMarketCycle} (${cycleDuration} tik)`);
         }
         cycleDuration--;
-        await metaRef.set({ cycle: currentMarketCycle, duration: cycleDuration });
+        await metaRef.update({ cycle: currentMarketCycle, duration: cycleDuration });
 
         // VOLATILITY REDUCED (Daha sakin piyasa)
         const cycleMultipliers = {
@@ -1749,6 +1749,7 @@ async function collectDailyTaxes() {
         for (const [username, userData] of Object.entries(users)) {
             let propertyTax = 0;
             let stockTax = 0;
+            let balanceTax = 0;
 
             // 1. Mülk Vergisi (Günlük Gelirin %10'u)
             if (userData.properties && Array.isArray(userData.properties)) {
@@ -1767,7 +1768,13 @@ async function collectDailyTaxes() {
                 }
             }
 
-            const totalTax = propertyTax + stockTax;
+            // 3. Bakiye Vergisi (Nakit Paranın %10'u)
+            const currentBalance = userData.balance || 0;
+            if (currentBalance > 1000) { // İlk 1000 💰 vergiden muaf
+                balanceTax = Math.floor((currentBalance - 1000) * 0.10);
+            }
+
+            const totalTax = propertyTax + stockTax + balanceTax;
 
             if (totalTax > 0) {
                 // Master Admin muaf (Opsiyonel)
@@ -1798,6 +1805,13 @@ setInterval(async () => {
         const snap = await metaRef.once('value');
         const last = snap.val() || 0;
         const now = Date.now();
+
+        // Eğer daha önce hiç vergi toplanmadıysa, başlangıç zamanını şimdi yap (hemen kesme)
+        if (last === 0) {
+            await metaRef.set(now);
+            console.log("🏛️ [Vergi] İlk vergi zamanlayıcısı başlatıldı (24 saat sonra ilk tahsilat yapılacak).");
+            return;
+        }
 
         // 24 saat = 86,400,000 ms
         if (now - last > 86400000) {
@@ -4625,6 +4639,7 @@ EK TALİMAT: ${aiInst}`;
 
                 let propertyTax = 0;
                 let stockTax = 0;
+                let balanceTax = 0;
 
                 // 1. Mülk Vergisi (%10)
                 if (userData.properties && Array.isArray(userData.properties)) {
@@ -4643,7 +4658,13 @@ EK TALİMAT: ${aiInst}`;
                     }
                 }
 
-                const totalTax = propertyTax + stockTax;
+                // 3. Bakiye Vergisi (%10)
+                const currentBalance = userData.balance || 0;
+                if (currentBalance > 1000) {
+                    balanceTax = Math.floor((currentBalance - 1000) * 0.10);
+                }
+
+                const totalTax = propertyTax + stockTax + balanceTax;
 
                 if (totalTax <= 0) {
                     await reply(`🏛️ @${user}, şu an ödemen gereken bir vergi bulunmuyor. Yatırımların arttıkça vergin de artacaktır!`);
@@ -4651,6 +4672,7 @@ EK TALİMAT: ${aiInst}`;
                     let resMsg = `🏛️ @${user} GÜNLÜK VERGİ BİLGİSİ:\n`;
                     if (propertyTax > 0) resMsg += `🏠 Emlak Vergisi: ${propertyTax.toLocaleString()} 💰\n`;
                     if (stockTax > 0) resMsg += `📈 Borsa Vergisi: ${stockTax.toLocaleString()} 💰\n`;
+                    if (balanceTax > 0) resMsg += `💵 Bakiye Vergisi: ${balanceTax.toLocaleString()} 💰\n`;
                     resMsg += `📝 TOPLAM: ${totalTax.toLocaleString()} 💰`;
                     await reply(resMsg);
                 }
@@ -6905,16 +6927,26 @@ app.post('/api/gang/join', async (req, res) => {
 app.post('/api/gang/process-request', async (req, res) => {
     try {
         const { requester, targetUser, action, gangId } = req.body; // action: 'approve' or 'reject'
-        if (!requester || !targetUser || !action || !gangId) return res.json({ success: false, error: "Eksik veri" });
+        console.log(`🔄 Gang Request: ${action} for ${targetUser} by ${requester} in ${gangId}`);
+
+        if (!requester || !targetUser || !action || !gangId) {
+            console.log("❌ Eksik veri:", { requester, targetUser, action, gangId });
+            return res.json({ success: false, error: "Eksik veri" });
+        }
 
         const gangRef = db.ref('gangs/' + gangId);
         const gangSnap = await gangRef.once('value');
         const gang = gangSnap.val();
-        if (!gang) return res.json({ success: false, error: "Çete bulunamadı" });
+        if (!gang) {
+            console.log("❌ Çete bulunamadı:", gangId);
+            return res.json({ success: false, error: "Çete bulunamadı" });
+        }
 
         // 1. Check permission (Leader or Right Hand)
         const cleanRequester = requester.toLowerCase();
         const staff = gang.members[cleanRequester];
+        console.log(`📋 Yetki kontrolü: ${cleanRequester}, rank: ${staff?.rank}`);
+
         if (!staff || (staff.rank !== 'leader' && staff.rank !== 'officer')) {
             return res.json({ success: false, error: "Bu işlem için yetkin yok! (Sadece Lider veya Sağ Kol)" });
         }
@@ -6927,32 +6959,45 @@ app.post('/api/gang/process-request', async (req, res) => {
             const targetUserSnap = await targetUserRef.once('value');
             const targetUserData = targetUserSnap.val();
 
-            if (!targetUserData) return res.json({ success: false, error: "Kullanıcı bulunamadı" });
+            if (!targetUserData) {
+                console.log("❌ Kullanıcı bulunamadı:", cleanTarget);
+                return res.json({ success: false, error: "Kullanıcı bulunamadı" });
+            }
             if (targetUserData.gang) {
                 // If they joined another gang while waiting, remove request
                 await gangRef.child('requests').child(cleanTarget).remove();
+                console.log("❌ Kullanıcı zaten başka çetede:", targetUserData.gang);
                 return res.json({ success: false, error: "Bu kullanıcı zaten başka bir çeteye katılmış." });
             }
 
             // JOIN LOGIC
+            console.log(`✅ ${cleanTarget} çeteye ekleniyor...`);
+
             // A. Remove from requests
             await gangRef.child('requests').child(cleanTarget).remove();
+            console.log("   ➤ Request silindi");
+
             // B. Add to members
             await gangRef.child('members').child(cleanTarget).set({
                 rank: 'member',
                 joinedAt: Date.now()
             });
+            console.log("   ➤ Members'a eklendi");
+
             // C. Update user profile
             await targetUserRef.child('gang').set(gangId);
+            console.log("   ➤ Kullanıcı profili güncellendi");
 
             res.json({ success: true, message: `${targetUser} çeteye dahil edildi!` });
         } else {
             // Reject logic
             await gangRef.child('requests').child(cleanTarget).remove();
+            console.log(`🚫 ${cleanTarget} isteği reddedildi`);
             res.json({ success: true, message: "Katılım isteği reddedildi." });
         }
 
     } catch (e) {
+        console.error("❌ Gang Process Request Error:", e);
         res.json({ success: false, error: e.message });
     }
 });

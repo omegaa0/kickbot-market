@@ -1775,6 +1775,7 @@ async function joinGang(gangId) {
 }
 
 async function processGangRequest(targetUser, action, gangId) {
+    console.log(`🔄 Gang Request: ${action} for ${targetUser} in ${gangId} by ${currentUser}`);
     try {
         const res = await fetch('/api/gang/process-request', {
             method: 'POST',
@@ -1782,13 +1783,18 @@ async function processGangRequest(targetUser, action, gangId) {
             body: JSON.stringify({ requester: currentUser, targetUser, action, gangId })
         });
         const data = await res.json();
+        console.log("📩 Gang Request Response:", data);
         if (data.success) {
             showToast(data.message, "success");
-            loadGangs();
+            // Sayfayı yenile ve gang verilerini güncelle
+            setTimeout(() => loadGangs(), 500);
         } else {
             showToast(data.error || "Hata!", "error");
         }
-    } catch (e) { showToast("İşlem hatası!", "error"); }
+    } catch (e) {
+        console.error("❌ Gang Request Error:", e);
+        showToast("İşlem hatası: " + e.message, "error");
+    }
 }
 
 async function promoteMember(targetUser, newRank, gangId) {
