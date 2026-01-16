@@ -263,17 +263,14 @@ async function loadDevlogs() {
             const typeClass = `badge-${log.type || 'info'}`;
             const item = document.createElement('div');
             item.className = `announcement-item ${typeClass}`;
-            item.style.cssText = 'padding:12px; background:rgba(255,255,255,0.03); border-radius:10px; border-left:3px solid var(--primary); margin-bottom:8px;';
-
-            if (log.type === 'warning') item.style.borderLeftColor = "#ff9800";
-            if (log.type === 'breaking') item.style.borderLeftColor = "#f44336";
+            // Inline styles removed, handled by shop.css
 
             item.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                    <span style="font-weight:700; color:var(--primary); font-size:0.75rem;">${(log.type || 'info').toUpperCase()}</span>
-                    <span style="color:#666; font-size:0.7rem;">${dateStr}</span>
+                <div class="ann-header">
+                    <span class="ann-type">${(log.type || 'info')}</span>
+                    <span class="ann-date">${dateStr}</span>
                 </div>
-                <p style="margin:0; color:#ccc; font-size:0.85rem; line-height:1.4;">${log.text}</p>
+                <div class="ann-text">${log.text}</div>
             `;
             container.appendChild(item);
         });

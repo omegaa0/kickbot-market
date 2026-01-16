@@ -725,6 +725,18 @@ function getRandomStockNews(name, type) {
     return template.replace(/{coin}/g, name);
 }
 
+// HELPER: Günlük Limit Kontrolü (%25-50)
+function applyDailyLimit(code, newPrice, dailyStartPrice) {
+    if (!dailyStartPrice || dailyStartPrice <= 0) return newPrice;
+    const maxChangeLimit = 25 + (code.charCodeAt(0) % 26); // 25-50%
+    const maxPrice = Math.floor(dailyStartPrice * (1 + maxChangeLimit / 100));
+    const minPrice = Math.ceil(dailyStartPrice * (1 - maxChangeLimit / 100));
+
+    if (newPrice > maxPrice) return maxPrice;
+    if (newPrice < minPrice) return Math.max(1, minPrice);
+    return Math.max(1, newPrice);
+}
+
 // ADMIN API: STOCKS RENAME CODE
 app.post('/admin-api/stocks/rename', authAdmin, hasPerm('stocks'), async (req, res) => {
     const { oldCode, newCode, newName } = req.body;
@@ -772,8 +784,11 @@ app.post('/admin-api/trigger-news', authAdmin, hasPerm('stocks'), async (req, re
         const percent = (Math.random() * 0.15) + 0.10;
         const impact = newsType === 'GOOD' ? (1 + percent) : (1 - percent);
 
-        stocks[target].price = Math.round(stocks[target].price * impact);
-        const newsMsg = getRandomStockNews(stocks[target].name || target, newsType);
+        const currentDailyStart = stocks[target].daily_start_price || stocks[target].price;
+        const currentDailyDate = stocks[target].daily_start_date || new Date().toISOString().split('T')[0];
+
+        const rawNewPrice = Math.round(stocks[target].price * impact);
+        stocks[target].price = applyDailyLimit(target, rawNewPrice, currentDailyStart);
 
         await db.ref('global_news').push({
             text: newsMsg,
@@ -783,7 +798,9 @@ app.post('/admin-api/trigger-news', authAdmin, hasPerm('stocks'), async (req, re
 
         await stockRef.child(target).update({
             price: stocks[target].price,
-            trend: impact > 1 ? 1 : -1
+            trend: impact > 1 ? 1 : -1,
+            daily_start_price: currentDailyStart,
+            daily_start_date: currentDailyDate
         });
 
         addLog("Admin Haber Tetikleme", `Haber: ${newsMsg} (${target})`);
@@ -988,19 +1005,10 @@ async function updateGlobalStocks() {
                 dailyStartDate = today;
             }
 
-            // Günlük değişim yüzdesi
-            const currentDailyChange = ((newPrice - dailyStartPrice) / dailyStartPrice) * 100;
-
-            // Maksimum günlük değişim sınırı: %25 - %50 arası (her hisse için sabit)
-            const maxChangeLimit = 25 + (code.charCodeAt(0) % 26); // 25-50%
-
-            if (currentDailyChange > maxChangeLimit) {
-                // Tavan fiyata sabitle
-                newPrice = Math.floor(dailyStartPrice * (1 + maxChangeLimit / 100));
-            } else if (currentDailyChange < -maxChangeLimit) {
-                // Taban fiyata sabitle
-                newPrice = Math.ceil(dailyStartPrice * (1 - maxChangeLimit / 100));
-            }
+            // ---------------------------------------------------------
+            // GÜNLÜK ARTIŞ SINIRI (%25-50) - Helper ile
+            // ---------------------------------------------------------
+            newPrice = applyDailyLimit(code, newPrice, dailyStartPrice);
 
             if (!data.name && baseData.name) data.name = baseData.name;
             if (!data.history) data.history = [];
@@ -1122,13 +1130,21 @@ app.post('/admin-api/add-news', authAdmin, hasPerm('stocks'), async (req, res) =
             }
 
             const multiplier = 1 + (effectiveImpact / 100);
-            const newPrice = Math.round(s.price * multiplier);
+            const rawNewPrice = Math.round(s.price * multiplier);
+
+            // Limit on news
+            const dailyStart = s.daily_start_price || s.oldPrice || s.price;
+            const dailyDate = s.daily_start_date || new Date().toISOString().split('T')[0]; // Ensure date is set
+            const newPrice = applyDailyLimit(cleanCode, rawNewPrice, dailyStart);
+
             const trend = effectiveImpact > 0 ? 1 : -1;
 
             await stockRef.update({
                 price: newPrice,
                 trend: trend,
-                lastUpdate: Date.now()
+                lastUpdate: Date.now(),
+                daily_start_price: dailyStart,
+                daily_start_date: dailyDate
             });
 
             console.log(`📰 HABER ETKİSİ: ${cleanCode} fiyatı ${s.price} -> ${newPrice} (${effectiveImpact > 0 ? '+' : ''}${effectiveImpact.toFixed(1)}%)`);
@@ -1918,24 +1934,23 @@ function calculateBalanceTax(balance) {
     if (balance < 50000) return Math.floor(balance * 0.015);         // %1.5
     if (balance < 100000) return Math.floor(balance * 0.018);        // %1.8
 
-    // Orta bakiye kademeleri (250K+)
+    // Orta bakiye kademeleri (250K+) - Zengin Vergisi Artırıldı
     if (balance < 250000) return Math.floor(balance * 0.02);         // %2.0
-    if (balance < 500000) return Math.floor(balance * 0.03);         // %3.0
-    if (balance < 1000000) return Math.floor(balance * 0.04);        // %4.0 (1M altı)
+    if (balance < 500000) return Math.floor(balance * 0.05);         // %5.0 (Artırıldı)
+    if (balance < 1000000) return Math.floor(balance * 0.06);        // %6.0 (Artırıldı)
 
     // Yüksek bakiye kademeleri
-    if (balance < 2500000) return Math.floor(balance * 0.045);       // %4.5
-    if (balance < 5000000) return Math.floor(balance * 0.05);        // %5.0
-    if (balance < 10000000) return Math.floor(balance * 0.055);      // %5.5 (10M altı)
+    if (balance < 2500000) return Math.floor(balance * 0.07);        // %7.0 (Artırıldı)
+    if (balance < 5000000) return Math.floor(balance * 0.08);        // %8.0 (Artırıldı)
+    if (balance < 10000000) return Math.floor(balance * 0.09);       // %9.0 (Artırıldı)
 
     // Çok yüksek bakiye kademeleri (Zenginler)
-    if (balance < 25000000) return Math.floor(balance * 0.06);       // %6.0
-    if (balance < 50000000) return Math.floor(balance * 0.07);       // %7.0
-    if (balance < 100000000) return Math.floor(balance * 0.08);      // %8.0 (100M altı)
+    if (balance < 25000000) return Math.floor(balance * 0.10);       // %10.0 (Artırıldı)
+    if (balance < 100000000) return Math.floor(balance * 0.12);      // %12.0 (Artırıldı)
 
     // Ultra zenginler
-    if (balance < 250000000) return Math.floor(balance * 0.09);      // %9.0 (250M altı)
-    return Math.floor(balance * 0.10);                                // %10.0 (250M üstü)
+    if (balance < 250000000) return Math.floor(balance * 0.14);      // %14.0 (Artırıldı)
+    return Math.floor(balance * 0.15);                                // %15.0 (Maksimum)
 }
 
 function calculatePropertyTax(properties) {
@@ -5807,59 +5822,36 @@ EK TALİMAT: ${aiInst}`;
         }
 
         else if (lowMsg === '!vergi') {
-            // 1. Fetch User Data
+            // 1. Fetch User Data & Stocks
             const uSnap = await userRef.once('value');
-            const uData = uSnap.val() || {};
-
-            // 2. Fetch Global Stocks for real-time valuation
+            const uData = uSnap.val() || { balance: 0 };
             const sSnap = await db.ref('global_stocks').once('value');
             const stocks = sSnap.val() || {};
 
-            let totalTax = 0;
+            // 2. Use SHARED Calculation Logic
+            // Note: These functions must be defined in the scope (which they are, at root level)
+            const balanceTax = calculateBalanceTax(uData.balance || 0);
+            const propertyTax = calculatePropertyTax(uData.properties || []);
+            const stockTax = await calculateStockTax(uData.stocks || {}, stocks);
+
+            const totalTax = balanceTax + propertyTax + stockTax;
+
+            // 3. Safety Cap (%50)
+            const maxTax = Math.floor((uData.balance || 0) * 0.50);
+            const finalTax = Math.min(totalTax, maxTax);
+
             let details = [];
+            if (balanceTax > 0) details.push(`💰 Bakiye: ${balanceTax.toLocaleString()}`);
+            if (propertyTax > 0) details.push(`🏠 Emlak: ${propertyTax.toLocaleString()}`);
+            if (stockTax > 0) details.push(`📈 Borsa: ${stockTax.toLocaleString()}`);
 
-            // A. Property Tax (Emlak Vergisi)
-            // Rate: %0.5 Daily
-            let propTax = 0;
-            let propValue = 0;
-            if (uData.properties) {
-                // properties can be array or object
-                const props = Array.isArray(uData.properties) ? uData.properties : Object.values(uData.properties);
-                props.forEach(p => {
-                    const val = p.price || p.cost || 1000000; // Fallback 1M if price lost
-                    propValue += val;
-                });
-                propTax = propValue * 0.005;
-                if (propTax > 0) details.push(`🏠 Emlak: ${Math.floor(propTax).toLocaleString()} 💰`);
-            }
-
-            // B. Stock/Asset Tax (Varlık Vergisi)
-            // Rate: %0.1 Daily
-            let stockTax = 0;
-            let stockValue = 0;
-            if (uData.stocks) {
-                Object.entries(uData.stocks).forEach(([code, amount]) => {
-                    const price = stocks[code] ? stocks[code].price : 0;
-                    stockValue += price * amount;
-                });
-                stockTax = stockValue * 0.001;
-                if (stockTax > 0) details.push(`📈 Borsa: ${Math.floor(stockTax).toLocaleString()} 💰`);
-            }
-
-            // C. Wealth Tax (Servet Vergisi) - Only if cash > 10M
-            // Rate: %0.2 on cash
-            let wealthTax = 0;
-            if ((uData.balance || 0) > 10000000) {
-                wealthTax = (uData.balance || 0) * 0.002;
-                if (wealthTax > 0) details.push(`💼 Servet: ${Math.floor(wealthTax).toLocaleString()} 💰`);
-            }
-
-            totalTax = propTax + stockTax + wealthTax;
-
-            if (totalTax > 0) {
-                await reply(`💸 @${user}, Günlük Tahmini Vergi Borcun: ${Math.floor(totalTax).toLocaleString()} 💰\n(${details.join(' + ')})`);
+            if (finalTax > 0) {
+                let msg = `💸 @${user}, Günlük Vergi Borcun: ${finalTax.toLocaleString()} 💰`;
+                if (details.length > 0) msg += `\n📊 Detay: ${details.join(' + ')}`;
+                if (totalTax > finalTax) msg += `\n(⚠️ Vergi koruması aktif: %50 sınır)`;
+                await reply(msg);
             } else {
-                await reply(`💸 @${user}, Şu an vergiye tabi bir varlığın yok. Şanslısın!`);
+                await reply(`💸 @${user}, Şu an vergi borcun yok. Temizsin!`);
             }
         }
 
