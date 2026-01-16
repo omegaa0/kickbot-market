@@ -1,16 +1,23 @@
 // shop.js - Dynamic Channel Market Implementation
-const firebaseConfig = {
-    apiKey: "AIzaSyCfAiqV9H8I8pyusMyDyxSbjJ6a3unQaR8",
-    authDomain: "kickbot-market.firebaseapp.com",
-    databaseURL: "https://kickbot-market-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "kickbot-market",
-    storageBucket: "kickbot-market.firebasestorage.app",
-    messagingSenderId: "301464297024",
-    appId: "1:301464297024:web:7cdf849aa950b8ba0649a5"
-};
+let db = null;
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+// Firebase config'i güvenli şekilde sunucudan al
+(async function initFirebase() {
+    try {
+        const response = await fetch('/api/firebase-config');
+        const firebaseConfig = await response.json();
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        db = firebase.database();
+        console.log('Firebase initialized successfully');
+    } catch (error) {
+        console.error('Firebase initialization failed:', error);
+        // Fallback: Sayfa yenilenmesini öner
+        setTimeout(() => window.location.reload(), 3000);
+    }
+})();
 
 // ===== XSS KORUMA - HTML SANITIZER =====
 function sanitizeHTML(str) {
@@ -893,6 +900,7 @@ function switchTab(id) {
     if (id === 'career') loadCareer();
     if (id === 'stats') loadLiveStats();
     if (id === 'gangs') loadGangs();
+    if (id === 'business') onBusinessTabOpen();
 }
 
 let borsaActive = false;
@@ -1685,6 +1693,8 @@ async function loadGangs() {
                         const memberCount = Object.keys(g.members || {}).length;
                         const cityName = EMLAK_CITIES.find(c => c.id === g.baseCity)?.name || g.baseCity;
                         const lvl = g.level || 1;
+                        const memberLimits = { 1: 10, 2: 20, 3: 40, 4: 75, 5: 150 };
+                        const memberLimit = memberLimits[lvl] || 10;
 
                         card.innerHTML = `
                             <div style="position:absolute; top:-10px; right:-10px; font-size:4rem; opacity:0.03; font-weight:900; pointer-events:none; font-style:italic;">${g.tag}</div>
@@ -1697,7 +1707,7 @@ async function loadGangs() {
                                     <span title="Üs Şehri"><i class="fas fa-map-marker-alt" style="color:var(--primary);"></i> ${cityName}</span>
                                     <span title="Lider"><i class="fas fa-crown" style="color:#ffd700;"></i> ${g.leader}</span>
                                     <span title="Seviye"><i class="fas fa-star" style="color:#5dade2;"></i> Seviye ${lvl}</span>
-                                    <span title="Üye Sayısı"><i class="fas fa-users" style="color:#aaa;"></i> ${memberCount} Üye</span>
+                                    <span title="Üye Sayısı"><i class="fas fa-users" style="color:#aaa;"></i> ${memberCount}/${memberLimit} Üye</span>
                                 </div>
                             </div>
                             <button onclick="joinGang('${g.id}')" class="primary-btn" style="width:auto; padding:10px 25px; font-size:0.85rem; border-radius:30px; position:relative; z-index:1; border:none; box-shadow: 0 4px 15px rgba(5,234,106,0.3);">
@@ -1836,8 +1846,11 @@ async function loadGangs() {
 
                 // Member Count - Always use members list length as source of truth
                 const memberCount = members.length;
+                const lvl = g.level || 1;
+                const memberLimits = { 1: 10, 2: 20, 3: 40, 4: 75, 5: 150 };
+                const memberLimit = memberLimits[lvl] || 10;
                 const countEl = document.getElementById('my-gang-count');
-                if (countEl) countEl.innerText = memberCount;
+                if (countEl) countEl.innerText = `${memberCount}/${memberLimit}`;
 
                 if (memberCount === 0) {
                     list.innerHTML = '<div style="color:#666; font-size:0.8rem; text-align:center; padding:20px;">Kadro verisi yüklenemedi.</div>';
@@ -1945,6 +1958,8 @@ async function loadGangs() {
                     const oldExtras = list.parentNode.querySelectorAll('.gang-extras');
                     oldExtras.forEach(e => e.remove());
 
+                    // Load Gang Chat
+                    loadGangChat(gangId, myRank);
                 }
             } else {
                 console.error("Gang load failed:", d.error);
@@ -3193,25 +3208,8 @@ function showConfirm(title, message) {
 // --- GANG HELPERS (Global) ---
 
 async function depositGang(gangId) {
-    const amountStr = await showInput("Kasaya Para Yatır", "Yatırmak istediğiniz miktarı girin:", "1000");
-    if (!amountStr) return;
-    const amount = parseInt(amountStr);
-    if (isNaN(amount) || amount <= 0) return showToast("Geçersiz miktar", "error");
-
-    try {
-        const res = await fetch('/api/gang/deposit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: currentUser, gangId, amount })
-        });
-        const data = await res.json();
-        if (data.success) {
-            showToast(data.message, "success");
-            loadGangs(); // Refresh
-        } else {
-            showToast(data.error, "error");
-        }
-    } catch (e) { showToast("Hata oluştu", "error"); }
+    // Open the donate modal
+    openDonateModal();
 }
 
 async function upgradeGang(gangId, cost, nextLvl) {
@@ -3234,7 +3232,126 @@ async function upgradeGang(gangId, cost, nextLvl) {
     } catch (e) { showToast("Hata oluştu", "error"); }
 }
 
+// ===== ÇETE SOHBET SİSTEMİ =====
+let gangChatListener = null;
 
+function loadGangChat(gangId, userRank) {
+    // Önce eski listener'ı temizle
+    if (gangChatListener) {
+        gangChatListener.off();
+        gangChatListener = null;
+    }
+
+    const messagesDiv = document.getElementById('gang-chat-messages');
+    const inputSection = document.getElementById('gang-chat-input-section');
+    const readonlyNotice = document.getElementById('gang-chat-readonly-notice');
+    const chatInput = document.getElementById('gang-chat-input');
+
+    if (!messagesDiv) return;
+
+    // Yetki kontrolü - Sadece lider ve officer mesaj gönderebilir
+    const canSendMessage = userRank === 'leader' || userRank === 'officer';
+
+    if (canSendMessage) {
+        inputSection.classList.remove('hidden');
+        readonlyNotice.classList.add('hidden');
+
+        // Enter tuşu ile gönderme
+        chatInput.onkeydown = (e) => {
+            if (e.key === 'Enter') sendGangMessage();
+        };
+    } else {
+        inputSection.classList.add('hidden');
+        readonlyNotice.classList.remove('hidden');
+    }
+
+    // Firebase'den mesajları dinle
+    gangChatListener = db.ref(`gangs/${gangId}/chat`).orderByChild('timestamp').limitToLast(50);
+
+    gangChatListener.on('value', (snapshot) => {
+        messagesDiv.innerHTML = '';
+        const messages = [];
+
+        snapshot.forEach((childSnap) => {
+            messages.push({ id: childSnap.key, ...childSnap.val() });
+        });
+
+        if (messages.length === 0) {
+            messagesDiv.innerHTML = '<div style="color:#666; font-size:0.85rem; text-align:center; padding:20px;">Mesaj yok. İlk mesajı sen gönder!</div>';
+        } else {
+            messages.forEach(msg => {
+                const msgDiv = document.createElement('div');
+                msgDiv.style = "background:rgba(255,255,255,0.03); border-left:3px solid var(--primary); padding:10px; border-radius:8px;";
+
+                const timeStr = new Date(msg.timestamp).toLocaleString('tr-TR', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    day: '2-digit',
+                    month: '2-digit'
+                });
+
+                let rankIcon = '👤';
+                if (msg.rank === 'leader') rankIcon = '👑';
+                else if (msg.rank === 'officer') rankIcon = '⚔️';
+
+                msgDiv.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                        <span style="font-weight:700; color:var(--primary); font-size:0.9rem;">
+                            ${rankIcon} @${msg.username}
+                        </span>
+                        <span style="font-size:0.7rem; color:#666;">${timeStr}</span>
+                    </div>
+                    <div style="color:#ddd; font-size:0.9rem; word-wrap:break-word;">${escapeHtml(msg.message)}</div>
+                `;
+                messagesDiv.appendChild(msgDiv);
+            });
+
+            // Scroll to bottom
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+    });
+}
+
+async function sendGangMessage() {
+    const input = document.getElementById('gang-chat-input');
+    const message = input.value.trim();
+
+    if (!message) return;
+    if (!currentUser || !lastUserData?.gang) {
+        showToast("Çete bilgisi bulunamadı!", "error");
+        return;
+    }
+
+    const gangId = lastUserData.gang;
+
+    try {
+        const res = await fetch('/api/gang/sendMessage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: currentUser,
+                gangId: gangId,
+                message: message
+            })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            input.value = '';
+            showToast("Mesaj gönderildi!", "success");
+        } else {
+            showToast(data.error || "Mesaj gönderilemedi!", "error");
+        }
+    } catch (e) {
+        showToast("Bağlantı hatası!", "error");
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 
 function calculateShopStock() {
     const codeInput = document.getElementById('shopCalcCode');
@@ -3264,3 +3381,674 @@ function calculateShopStock() {
     buyEl.innerText = Math.floor(buyCost).toLocaleString() + " 💰";
     sellEl.innerText = Math.floor(netSell).toLocaleString() + " 💰";
 }
+
+// =============================================================================
+// 🏪 İŞLETME SİSTEMİ
+// =============================================================================
+
+let businessTypes = {};
+let productData = {};
+let licenseData = {};
+let levelData = {};
+let advertisingData = {};
+let marketPrices = {};
+let marketEvents = [];
+let userLicenses = [];
+
+// İşletme verilerini yükle
+async function loadBusinessData() {
+    try {
+        const res = await fetch('/api/business/types');
+        const data = await res.json();
+        if (data.success) {
+            businessTypes = data.types || {};
+            productData = data.products || {};
+            licenseData = data.licenses || {};
+            levelData = data.levels || {};
+            advertisingData = data.advertising || {};
+        }
+
+        // Piyasa verilerini de al
+        const marketRes = await fetch('/api/business/market');
+        const marketData = await marketRes.json();
+        if (marketData.success) {
+            marketPrices = marketData.prices || {};
+            marketEvents = marketData.events || [];
+            renderMarketEvents();
+        }
+    } catch (e) {
+        console.error('Business data load error:', e);
+    }
+}
+
+// Piyasa olaylarını göster
+function renderMarketEvents() {
+    const container = document.getElementById('market-events-list');
+    if (!container) return;
+
+    if (marketEvents.length === 0) {
+        container.innerHTML = '<span style="opacity:0.7">Şu an aktif olay yok.</span>';
+        return;
+    }
+
+    container.innerHTML = marketEvents.slice(0, 3).map(e => `<div>${e.name}</div>`).join('');
+}
+
+// Alt sekme değiştir
+function switchBusinessTab(tabName) {
+    document.querySelectorAll('.business-sub-content').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('.sub-tab-btn').forEach(btn => btn.classList.remove('active'));
+
+    const targetTab = document.getElementById('business-sub-' + tabName);
+    if (targetTab) targetTab.classList.remove('hidden');
+
+    event.target.classList.add('active');
+
+    // Tab açıldığında içeriği yükle
+    if (tabName === 'my-businesses') loadMyBusinesses();
+    else if (tabName === 'new-business') renderBusinessTypes();
+    else if (tabName === 'licenses') renderLicenses();
+    else if (tabName === 'market-prices') renderMarketPrices();
+}
+
+// Kullanıcının işletmelerini yükle
+async function loadMyBusinesses() {
+    if (!currentUser) return;
+
+    const container = document.getElementById('my-businesses-list');
+    container.innerHTML = '<div style="text-align:center; padding:40px;"><div class="loader"></div></div>';
+
+    try {
+        const res = await fetch(`/api/business/my-businesses?username=${encodeURIComponent(currentUser)}`);
+        const data = await res.json();
+
+        if (!data.success || !data.businesses || data.businesses.length === 0) {
+            container.innerHTML = `
+                <div style="grid-column: 1/-1; text-align:center; padding:60px; opacity:0.5;">
+                    <i class="fas fa-store-slash" style="font-size:4rem; margin-bottom:20px;"></i>
+                    <p>Henüz işletmen yok. Yeni bir işletme kurmak için "➕ Yeni İşletme" sekmesine git.</p>
+                </div>`;
+            return;
+        }
+
+        userLicenses = data.licenses || [];
+        container.innerHTML = '';
+
+        for (const biz of data.businesses) {
+            const card = document.createElement('div');
+            card.className = 'glass-panel';
+            card.style.cssText = 'padding:20px; border-radius:16px;';
+
+            const healthColor = biz.health > 70 ? '#00ff88' : biz.health > 30 ? '#ffaa00' : '#ff4444';
+            const typeInfo = biz.typeData || {};
+            const lvlInfo = biz.levelData || {};
+
+            // Stok özeti
+            const inventoryItems = Object.entries(biz.inventory || {})
+                .filter(([k, v]) => v > 0)
+                .map(([k, v]) => `${productData[k]?.icon || ''} ${v}`)
+                .slice(0, 5).join(' ');
+
+            card.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:15px;">
+                    <div>
+                        <div style="font-size:2rem; margin-bottom:5px;">${typeInfo.icon || '🏪'}</div>
+                        <h3 style="margin:0; font-size:1.2rem;">${sanitizeHTML(biz.name)}</h3>
+                        <div style="font-size:0.8rem; color:#888;">${typeInfo.name} • ${biz.city}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:0.75rem; color:#888;">SEVİYE</div>
+                        <div style="font-size:1.5rem; font-weight:900; color:var(--primary);">${biz.level}</div>
+                    </div>
+                </div>
+                
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px;">
+                    <div style="background:rgba(0,0,0,0.3); padding:10px; border-radius:8px;">
+                        <div style="font-size:0.7rem; color:#888;">🔧 SAĞLIK</div>
+                        <div style="height:6px; background:#333; border-radius:3px; margin-top:5px; overflow:hidden;">
+                            <div style="height:100%; width:${biz.health}%; background:${healthColor}; border-radius:3px;"></div>
+                        </div>
+                        <div style="font-size:0.75rem; color:${healthColor}; margin-top:3px;">${Math.floor(biz.health)}%</div>
+                    </div>
+                    <div style="background:rgba(0,0,0,0.3); padding:10px; border-radius:8px;">
+                        <div style="font-size:0.7rem; color:#888;">📦 DEPO</div>
+                        <div style="font-size:0.85rem; margin-top:5px;">${inventoryItems || 'Boş'}</div>
+                    </div>
+                </div>
+                
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    ${typeInfo.produces ? `<button onclick="businessProduce('${biz.id}')" class="btn-sm" style="background:linear-gradient(135deg, #00ff88, #00cc66);">⚙️ Üret</button>` : ''}
+                    <button onclick="showBusinessSellModal('${biz.id}')" class="btn-sm" style="background:linear-gradient(135deg, #4488ff, #2266cc);">💰 Sat</button>
+                    <button onclick="businessMaintain('${biz.id}')" class="btn-sm" style="background:linear-gradient(135deg, #ff8800, #cc6600);">🔧 Bakım</button>
+                    <button onclick="businessUpgrade('${biz.id}')" class="btn-sm" style="background:linear-gradient(135deg, #aa44ff, #8822cc);">⬆️ Yükselt</button>
+                </div>
+                
+                <div style="margin-top:15px; padding-top:15px; border-top:1px solid rgba(255,255,255,0.1); font-size:0.75rem; color:#666;">
+                    Toplam Satış: ${(biz.total_sales || 0).toLocaleString()} adet • Gelir: ${(biz.total_revenue || 0).toLocaleString()} 💰
+                </div>
+            `;
+
+            container.appendChild(card);
+        }
+    } catch (e) {
+        container.innerHTML = '<div style="text-align:center; padding:40px; color:#ff4444;">İşletmeler yüklenemedi.</div>';
+    }
+}
+
+// İşletme türlerini göster
+function renderBusinessTypes() {
+    const container = document.getElementById('business-types-grid');
+    if (!container) return;
+
+    const categories = {
+        'retail': { name: '🛒 Perakende', items: [] },
+        'production': { name: '🏭 Üretim', items: [] },
+        'farming': { name: '🌾 Tarım', items: [] },
+        'livestock': { name: '🐄 Hayvancılık', items: [] },
+        'special': { name: '⚡ Özel İşletmeler', items: [] }
+    };
+
+    for (const [code, type] of Object.entries(businessTypes)) {
+        if (categories[type.category]) {
+            categories[type.category].items.push({ code, ...type });
+        }
+    }
+
+    let html = '';
+    for (const [catKey, cat] of Object.entries(categories)) {
+        if (cat.items.length === 0) continue;
+
+        html += `<div style="grid-column: 1/-1; margin-top:20px; margin-bottom:10px;">
+            <h3 style="margin:0; font-size:1.2rem;">${cat.name}</h3>
+        </div>`;
+
+        for (const type of cat.items) {
+            const needsLicense = type.requiredLicense && !userLicenses.includes(type.requiredLicense);
+            const licenseInfo = type.requiredLicense ? licenseData[type.requiredLicense] : null;
+
+            html += `
+                <div class="glass-panel" style="padding:20px; border-radius:16px; ${needsLicense ? 'opacity:0.6;' : ''}">
+                    <div style="font-size:2.5rem; text-align:center; margin-bottom:10px;">${type.icon}</div>
+                    <h4 style="margin:0 0 5px 0; text-align:center;">${type.name}</h4>
+                    <div style="text-align:center; font-size:0.85rem; color:var(--primary); font-weight:bold; margin-bottom:10px;">
+                        ${type.setupCost.toLocaleString()} 💰
+                    </div>
+                    
+                    <div style="font-size:0.75rem; color:#888; margin-bottom:10px;">
+                        ${type.produces ? `Üretim: ${type.produces.map(p => productData[p]?.icon || p).join(' ')}` : `Satış: ${type.products?.map(p => productData[p]?.icon || p).join(' ') || ''}`}
+                    </div>
+                    
+                    ${needsLicense ? `<div style="font-size:0.75rem; color:#ff8800; margin-bottom:10px;">🔒 ${licenseInfo?.name || 'Lisans'} gerekli</div>` : ''}
+                    
+                    <button onclick="showCreateBusinessModal('${type.code}')" class="buy-btn" style="width:100%; ${needsLicense ? 'opacity:0.5; pointer-events:none;' : ''}">
+                        ${needsLicense ? '🔒 Lisans Gerekli' : '🏗️ Kur'}
+                    </button>
+                </div>
+            `;
+        }
+    }
+
+    container.innerHTML = html;
+}
+
+// Lisansları göster
+function renderLicenses() {
+    const container = document.getElementById('licenses-grid');
+    if (!container) return;
+
+    let html = '';
+    for (const [code, lic] of Object.entries(licenseData)) {
+        const owned = userLicenses.includes(code);
+
+        html += `
+            <div class="glass-panel" style="padding:20px; border-radius:16px; ${owned ? 'border: 2px solid var(--primary);' : ''}">
+                <div style="font-size:2rem; margin-bottom:10px;">${lic.icon || '📜'}</div>
+                <h4 style="margin:0 0 5px 0;">${lic.name}</h4>
+                <div style="font-size:0.85rem; color:var(--primary); font-weight:bold; margin-bottom:10px;">
+                    ${lic.price.toLocaleString()} 💰
+                </div>
+                ${lic.requiresEdu ? `<div style="font-size:0.75rem; color:#888; margin-bottom:10px;">📚 Eğitim ${lic.requiresEdu}+ gerekli</div>` : ''}
+                
+                ${owned ?
+                `<div style="text-align:center; color:var(--primary); font-weight:bold;">✅ Sahipsin</div>` :
+                `<button onclick="buyLicense('${code}')" class="buy-btn" style="width:100%;">Satın Al</button>`
+            }
+            </div>
+        `;
+    }
+
+    container.innerHTML = html || '<div style="text-align:center; padding:40px; opacity:0.5;">Lisans bulunamadı.</div>';
+}
+
+// Piyasa fiyatlarını göster
+function renderMarketPrices() {
+    const container = document.getElementById('product-prices-table');
+    if (!container) return;
+
+    const categories = {
+        'raw': '🌿 Hammadde',
+        'processed': '⚙️ İşlenmiş',
+        'fresh': '🥬 Taze',
+        'animal': '🥩 Hayvansal',
+        'premium': '💎 Premium',
+        'ready': '🍽️ Hazır'
+    };
+
+    let html = '';
+    for (const [catKey, catName] of Object.entries(categories)) {
+        const catProducts = Object.entries(productData).filter(([k, v]) => v.category === catKey);
+        if (catProducts.length === 0) continue;
+
+        html += `<div style="grid-column: 1/-1; margin-top:15px; font-weight:bold; color:var(--primary);">${catName}</div>`;
+
+        for (const [code, prod] of catProducts) {
+            const price = marketPrices[code] || prod.basePrice;
+            const priceChange = price > prod.basePrice ? '+' : (price < prod.basePrice ? '-' : '');
+            const priceColor = price > prod.basePrice ? '#00ff88' : (price < prod.basePrice ? '#ff4444' : '#888');
+
+            html += `
+                <div style="background:rgba(0,0,0,0.3); padding:10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+                    <span>${prod.icon} ${prod.name}</span>
+                    <span style="font-weight:bold; color:${priceColor};">${priceChange}${price.toLocaleString()} / ${prod.unit}</span>
+                </div>
+            `;
+        }
+    }
+
+    container.innerHTML = html;
+}
+
+// İşletme kur modal
+function showCreateBusinessModal(typeCode) {
+    const type = businessTypes[typeCode];
+    if (!type) return;
+
+    const cities = ['İstanbul', 'Ankara', 'İzmir', 'Amasya', 'Bursa', 'Antalya'];
+
+    showConfirm(`
+        <h3>${type.icon} ${type.name} Kur</h3>
+        <div style="margin:15px 0;">
+            <input type="text" id="new-biz-name" placeholder="İşletme Adı" class="borsa-input" style="width:100%; margin-bottom:10px;">
+            <select id="new-biz-city" class="borsa-input" style="width:100%;">
+                ${cities.map(c => `<option value="${c}">${c}</option>`).join('')}
+            </select>
+        </div>
+        <p style="color:#888; font-size:0.85rem;">Kuruluş maliyeti: <b style="color:var(--primary);">${type.setupCost.toLocaleString()} 💰</b></p>
+    `, async () => {
+        const name = document.getElementById('new-biz-name').value.trim();
+        const city = document.getElementById('new-biz-city').value;
+
+        if (!name) return showToast('İşletme adı gerekli!', 'error');
+
+        try {
+            const res = await fetch('/api/business/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: currentUser, businessType: typeCode, city, name })
+            });
+            const data = await res.json();
+            showToast(data.message || data.error, data.success ? 'success' : 'error');
+            if (data.success) {
+                loadMyBusinesses();
+                switchBusinessTab('my-businesses');
+            }
+        } catch (e) {
+            showToast('Hata: ' + e.message, 'error');
+        }
+    });
+}
+
+// Lisans satın al
+async function buyLicense(code) {
+    showConfirm(`Bu lisansı satın almak istediğine emin misin?`, async () => {
+        try {
+            const res = await fetch('/api/business/buy-license', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: currentUser, licenseCode: code })
+            });
+            const data = await res.json();
+            showToast(data.message || data.error, data.success ? 'success' : 'error');
+            if (data.success) {
+                userLicenses.push(code);
+                renderLicenses();
+                renderBusinessTypes();
+            }
+        } catch (e) {
+            showToast('Hata: ' + e.message, 'error');
+        }
+    });
+}
+
+// Üretim yap - Ürün seçimi ile
+async function businessProduce(bizId) {
+    // Önce işletme bilgilerini al
+    try {
+        const res = await fetch(`/api/business/my-businesses?username=${encodeURIComponent(currentUser)}`);
+        const data = await res.json();
+
+        if (!data.success) {
+            showToast('İşletme bilgisi alınamadı!', 'error');
+            return;
+        }
+
+        const biz = data.businesses.find(b => b.id === bizId);
+        if (!biz) {
+            showToast('İşletme bulunamadı!', 'error');
+            return;
+        }
+
+        const typeInfo = businessTypes[biz.type] || {};
+        const produces = typeInfo.produces || [];
+
+        if (produces.length === 0) {
+            showToast('Bu işletme üretim yapmaz!', 'error');
+            return;
+        }
+
+        if (produces.length === 1) {
+            // Tek ürün varsa direkt üret
+            doProductionRequest(bizId, produces[0]);
+        } else {
+            // Birden fazla ürün varsa seçim göster
+            const productOptions = produces.map(p => {
+                const prod = productData[p];
+                return `<option value="${p}">${prod?.icon || ''} ${prod?.name || p}</option>`;
+            }).join('');
+
+            showConfirm(`
+                <h3>⚙️ Ürün Seçimi</h3>
+                <p style="margin:10px 0; color:#888;">Hangi ürünü üretmek istiyorsun?</p>
+                <select id="produce-select" class="borsa-input" style="width:100%;">
+                    ${productOptions}
+                </select>
+            `, () => {
+                const selected = document.getElementById('produce-select').value;
+                doProductionRequest(bizId, selected);
+            });
+        }
+    } catch (e) {
+        showToast('Hata: ' + e.message, 'error');
+    }
+}
+
+async function doProductionRequest(bizId, productCode) {
+    try {
+        const res = await fetch('/api/business/produce', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser, businessId: bizId, selectedProduct: productCode })
+        });
+        const data = await res.json();
+        showToast(data.message || data.error, data.success ? 'success' : 'error');
+        if (data.success) loadMyBusinesses();
+    } catch (e) {
+        showToast('Hata: ' + e.message, 'error');
+    }
+}
+
+// Bakım yap
+async function businessMaintain(bizId) {
+    showConfirm('İşletme bakımı yapmak istiyor musun?', async () => {
+        try {
+            const res = await fetch('/api/business/maintain', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: currentUser, businessId: bizId })
+            });
+            const data = await res.json();
+            showToast(data.message || data.error, data.success ? 'success' : 'error');
+            if (data.success) loadMyBusinesses();
+        } catch (e) {
+            showToast('Hata: ' + e.message, 'error');
+        }
+    });
+}
+
+// Yükselt
+async function businessUpgrade(bizId) {
+    showConfirm('İşletmeyi yükseltmek istiyor musun?', async () => {
+        try {
+            const res = await fetch('/api/business/upgrade', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: currentUser, businessId: bizId })
+            });
+            const data = await res.json();
+            showToast(data.message || data.error, data.success ? 'success' : 'error');
+            if (data.success) loadMyBusinesses();
+        } catch (e) {
+            showToast('Hata: ' + e.message, 'error');
+        }
+    });
+}
+
+// Satış modal
+function showBusinessSellModal(bizId) {
+    // TODO: Implement product selection and amount input for selling
+    showToast('Satış fonksiyonu yakında!', 'info');
+}
+
+// Tab değişince çağrılacak
+function onBusinessTabOpen() {
+    loadBusinessData().then(() => {
+        loadMyBusinesses();
+    });
+}
+
+// Kalite renk hesaplama
+function getQualityColor(quality) {
+    if (quality >= 75) return '#00ff88';
+    if (quality >= 50) return '#ffaa00';
+    if (quality >= 25) return '#ff8800';
+    return '#ff4444';
+}
+
+function getQualityName(quality) {
+    if (quality >= 90) return 'Mükemmel';
+    if (quality >= 75) return 'İyi';
+    if (quality >= 50) return 'Orta';
+    if (quality >= 25) return 'Düşük';
+    return 'Çok Düşük';
+}
+
+ 
+ / /   = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
+ 
+ / /   x �   G A N G   C H A T   S Y S T E M 
+ 
+ / /   = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
+ 
+ 
+ 
+ l e t   g a n g C h a t I n t e r v a l   =   n u l l ; 
+ 
+ l e t   l a s t G a n g I d   =   n u l l ; 
+ 
+ 
+ 
+ f u n c t i o n   i n i t G a n g C h a t ( g a n g I d )   { 
+ 
+         i f   ( g a n g C h a t I n t e r v a l )   c l e a r I n t e r v a l ( g a n g C h a t I n t e r v a l ) ; 
+ 
+         l a s t G a n g I d   =   g a n g I d ; 
+ 
+         
+ 
+         / /   I n i t i a l   l o a d 
+ 
+         r e f r e s h G a n g C h a t ( ) ; 
+ 
+         
+ 
+         / /   R e f r e s h   e v e r y   5   s e c o n d s 
+ 
+         g a n g C h a t I n t e r v a l   =   s e t I n t e r v a l ( r e f r e s h G a n g C h a t ,   5 0 0 0 ) ; 
+ 
+ } 
+ 
+ 
+ 
+ a s y n c   f u n c t i o n   r e f r e s h G a n g C h a t ( )   { 
+ 
+         i f   ( ! l a s t G a n g I d   | |   d o c u m e n t . g e t E l e m e n t B y I d ( ' g a n g - d a s h b o a r d ' ) . c l a s s L i s t . c o n t a i n s ( ' h i d d e n ' ) )   r e t u r n ; 
+ 
+         
+ 
+         t r y   { 
+ 
+                 c o n s t   r e s   =   a w a i t   f e t c h ( ` / a p i / g a n g / c h a t / l i s t ? g a n g I d = $ { l a s t G a n g I d } & l i m i t = 5 0 ` ) ; 
+ 
+                 c o n s t   d a t a   =   a w a i t   r e s . j s o n ( ) ; 
+ 
+                 
+ 
+                 c o n s t   c o n t a i n e r   =   d o c u m e n t . g e t E l e m e n t B y I d ( ' g a n g - c h a t - m e s s a g e s ' ) ; 
+ 
+                 i f   ( ! c o n t a i n e r )   r e t u r n ; 
+ 
+                 
+ 
+                 i f   ( d a t a . s u c c e s s )   { 
+ 
+                         c o n s t   m e s s a g e s   =   O b j e c t . v a l u e s ( d a t a . m e s s a g e s   | |   { } ) ; 
+ 
+                         
+ 
+                         / /   E � xe r   m e s a j   s a y � � s � �   d e � xi � xm e d i y s e   v e y a   s o n   m e s a j   a y n � � y s a   r e n d e r   e t m e   ( o p t i m i z a s y o n   e k l e n e b i l i r ) 
+ 
+                         / /   � � i m d i l i k   h e r   s e f e r i n d e   r e n d e r   e d i y o r u z   b a s i t l i k   i � � i n 
+ 
+                         
+ 
+                         i f   ( m e s s a g e s . l e n g t h   = = =   0 )   { 
+ 
+                                 c o n t a i n e r . i n n e r H T M L   =   ' < d i v   s t y l e = " t e x t - a l i g n : c e n t e r ;   c o l o r : # 6 6 6 ;   f o n t - s i z e : 0 . 8 r e m ;   m a r g i n - t o p : 2 0 p x ; " > H e n � � z   m e s a j   y o k .   � � l k   m e s a j � �   s e n   y a z ! < / d i v > ' ; 
+ 
+                                 r e t u r n ; 
+ 
+                         } 
+ 
+                         
+ 
+                         c o n t a i n e r . i n n e r H T M L   =   m e s s a g e s . m a p ( m s g   = >   { 
+ 
+                                 c o n s t   i s M e   =   m s g . s e n d e r . t o L o w e r C a s e ( )   = = =   c u r r e n t U s e r . t o L o w e r C a s e ( ) ; 
+ 
+                                 c o n s t   t i m e   =   n e w   D a t e ( m s g . t i m e s t a m p ) . t o L o c a l e T i m e S t r i n g ( [ ] ,   { h o u r :   ' 2 - d i g i t ' ,   m i n u t e : ' 2 - d i g i t ' } ) ; 
+ 
+                                 c o n s t   r a n k B a d g e   =   m s g . r a n k   = = =   ' l e a d e r '   ?   ' x  '   :   ( m s g . r a n k   = = =   ' o f f i c e r '   ?   ' � a � � � '   :   ' ' ) ; 
+ 
+                                 
+ 
+                                 r e t u r n   ` 
+ 
+                                         < d i v   s t y l e = " d i s p l a y : f l e x ;   f l e x - d i r e c t i o n : c o l u m n ;   a l i g n - i t e m s : $ { i s M e   ?   ' f l e x - e n d '   :   ' f l e x - s t a r t ' } ; " > 
+ 
+                                                 < d i v   s t y l e = " d i s p l a y : f l e x ;   a l i g n - i t e m s : c e n t e r ;   g a p : 5 p x ;   m a r g i n - b o t t o m : 2 p x ; " > 
+ 
+                                                         < s p a n   s t y l e = " f o n t - s i z e : 0 . 7 r e m ;   c o l o r : $ { i s M e   ?   ' # 0 0 f f 8 8 '   :   ' # a a a ' } ;   f o n t - w e i g h t : 7 0 0 ; " > 
+ 
+                                                                 $ { r a n k B a d g e }   $ { m s g . s e n d e r } 
+ 
+                                                         < / s p a n > 
+ 
+                                                         < s p a n   s t y l e = " f o n t - s i z e : 0 . 6 r e m ;   c o l o r : # 6 6 6 ; " > $ { t i m e } < / s p a n > 
+ 
+                                                 < / d i v > 
+ 
+                                                 < d i v   s t y l e = " 
+ 
+                                                         b a c k g r o u n d : $ { i s M e   ?   ' r g b a ( 0 ,   2 5 5 ,   1 3 6 ,   0 . 1 ) '   :   ' r g b a ( 2 5 5 ,   2 5 5 ,   2 5 5 ,   0 . 0 5 ) ' } ;   
+ 
+                                                         b o r d e r : 1 p x   s o l i d   $ { i s M e   ?   ' r g b a ( 0 ,   2 5 5 ,   1 3 6 ,   0 . 2 ) '   :   ' r g b a ( 2 5 5 ,   2 5 5 ,   2 5 5 ,   0 . 1 ) ' } ; 
+ 
+                                                         p a d d i n g : 8 p x   1 2 p x ;   
+ 
+                                                         b o r d e r - r a d i u s : 1 2 p x ;   
+ 
+                                                         b o r d e r - $ { i s M e   ?   ' t o p - r i g h t '   :   ' t o p - l e f t ' } - r a d i u s : 0 ; 
+ 
+                                                         c o l o r : # d d d ;   
+ 
+                                                         f o n t - s i z e : 0 . 9 r e m ; 
+ 
+                                                         m a x - w i d t h : 8 5 % ; 
+ 
+                                                         w o r d - w r a p : b r e a k - w o r d ; 
+ 
+                                                 " > 
+ 
+                                                         $ { m s g . t e x t } 
+ 
+                                                 < / d i v > 
+ 
+                                         < / d i v > 
+ 
+                                 ` ; 
+ 
+                         } ) . j o i n ( ' ' ) ; 
+ 
+                         
+ 
+                         / /   A u t o   s c r o l l   t o   b o t t o m 
+ 
+                         c o n t a i n e r . s c r o l l T o p   =   c o n t a i n e r . s c r o l l H e i g h t ; 
+ 
+                 } 
+ 
+         }   c a t c h   ( e )   {   c o n s o l e . e r r o r ( " C h a t   r e f r e s h   e r r o r " ,   e ) ;   } 
+ 
+ } 
+ 
+ 
+ 
+ a s y n c   f u n c t i o n   s e n d G a n g C h a t ( )   { 
+ 
+         c o n s t   i n p u t   =   d o c u m e n t . g e t E l e m e n t B y I d ( ' g a n g - c h a t - i n p u t ' ) ; 
+ 
+         c o n s t   m s g   =   i n p u t . v a l u e . t r i m ( ) ; 
+ 
+         i f   ( ! m s g   | |   ! l a s t G a n g I d )   r e t u r n ; 
+ 
+         
+ 
+         i n p u t . v a l u e   =   ' ' ;   / /   C l e a r   i m m e d i a t e l y 
+ 
+         
+ 
+         t r y   { 
+ 
+                 c o n s t   r e s   =   a w a i t   f e t c h ( ' / a p i / g a n g / c h a t / s e n d ' ,   { 
+ 
+                         m e t h o d :   ' P O S T ' , 
+ 
+                         h e a d e r s :   {   ' C o n t e n t - T y p e ' :   ' a p p l i c a t i o n / j s o n '   } , 
+ 
+                         b o d y :   J S O N . s t r i n g i f y ( {   u s e r n a m e :   c u r r e n t U s e r ,   g a n g I d :   l a s t G a n g I d ,   m e s s a g e :   m s g   } ) 
+ 
+                 } ) ; 
+ 
+                 c o n s t   d a t a   =   a w a i t   r e s . j s o n ( ) ; 
+ 
+                 
+ 
+                 i f   ( d a t a . s u c c e s s )   { 
+ 
+                         r e f r e s h G a n g C h a t ( ) ;   / /   R e f r e s h   i m m e d i a t e l y 
+ 
+                 }   e l s e   { 
+ 
+                         s h o w T o a s t ( " M e s a j   g � � n d e r i l e m e d i :   "   +   d a t a . e r r o r ,   " e r r o r " ) ; 
+ 
+                 } 
+ 
+         }   c a t c h   ( e )   { 
+ 
+                 s h o w T o a s t ( " H a t a   o l u � xt u ! " ,   " e r r o r " ) ; 
+ 
+         } 
+ 
+ } 
+ 
+ 

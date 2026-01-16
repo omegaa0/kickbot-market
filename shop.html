@@ -8,6 +8,87 @@
     <link rel="stylesheet" href="shop.css">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- GÜVENLİK: DevTools ve Sağ Tık Engelleme -->
+    <script>
+        // F12, Ctrl+Shift+I, Ctrl+U engelleme
+        document.addEventListener('keydown', function(e) {
+            // F12
+            if (e.key === 'F12' || e.keyCode === 123) {
+                e.preventDefault();
+                return false;
+            }
+            // Ctrl+Shift+I (DevTools)
+            if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.keyCode === 73)) {
+                e.preventDefault();
+                return false;
+            }
+            // Ctrl+Shift+J (Console)
+            if (e.ctrlKey && e.shiftKey && (e.key === 'J' || e.keyCode === 74)) {
+                e.preventDefault();
+                return false;
+            }
+            // Ctrl+Shift+C (Inspect Element)
+            if (e.ctrlKey && e.shiftKey && (e.key === 'C' || e.keyCode === 67)) {
+                e.preventDefault();
+                return false;
+            }
+            // Ctrl+U (View Source)
+            if (e.ctrlKey && (e.key === 'U' || e.keyCode === 85)) {
+                e.preventDefault();
+                return false;
+            }
+            // Ctrl+S (Save Page)
+            if (e.ctrlKey && (e.key === 'S' || e.keyCode === 83)) {
+                e.preventDefault();
+                return false;
+            }
+        });
+
+        // Sağ tık engelleme
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            return false;
+        });
+
+        // Metin seçimi engelleme
+        document.addEventListener('selectstart', function(e) {
+            e.preventDefault();
+            return false;
+        });
+
+        // Kopyalama engelleme
+        document.addEventListener('copy', function(e) {
+            e.preventDefault();
+            return false;
+        });
+
+        // DevTools açık mı kontrolü (Sürekli)
+        (function detectDevTools() {
+            const threshold = 160;
+            const widthThreshold = window.outerWidth - window.innerWidth > threshold;
+            const heightThreshold = window.outerHeight - window.innerHeight > threshold;
+
+            if (widthThreshold || heightThreshold) {
+                // DevTools açık - sayfayı yenile veya boş göster
+                document.body.innerHTML = '';
+                window.location.reload();
+            }
+
+            setTimeout(detectDevTools, 1000);
+        })();
+
+        // Console log override
+        (function() {
+            const noop = function() {};
+            window.console.log = noop;
+            window.console.warn = noop;
+            window.console.error = noop;
+            window.console.info = noop;
+            window.console.debug = noop;
+        })();
+    </script>
+
     <style>
         .channel-info {
             display: flex;
@@ -244,6 +325,8 @@
             <button class="tab-btn" onclick="switchTab('leaderboard')">🏆 Liderlik</button>
             <button class="tab-btn" onclick="switchTab('borsa')">📈 Borsa</button>
             <button class="tab-btn" onclick="switchTab('emlak')">🏠 Emlak</button>
+            <button class="tab-btn" onclick="switchTab('business')">🏪 İşletmeler <span
+                    style="background:linear-gradient(90deg,#00ff88,#00ccff); color:black; font-size:0.6rem; padding:2px 5px; border-radius:4px; margin-left:5px; font-weight:800;">YENİ</span></button>
             <button class="tab-btn" onclick="switchTab('gangs')">🏴 Çeteler <span
                     style="background:var(--primary); color:black; font-size:0.6rem; padding:2px 5px; border-radius:4px; margin-left:5px; font-weight:800;">YENİ</span></button>
             <!-- Arena Removed -->
@@ -396,6 +479,81 @@
                 </div>
             </div>
 
+            <!-- BUSINESS/İŞLETMELER TAB -->
+            <div id="tab-business" class="tab-content hidden">
+                <div
+                    style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; flex-wrap:wrap; gap:15px;">
+                    <div>
+                        <h2 style="margin:0;">🏪 İşletme Yönetimi</h2>
+                        <p style="color:var(--text-dim); margin-top:8px; font-size:0.9rem; max-width:600px;">
+                            Dükkan aç, fabrika kur, tarla işlet! Üret, sat ve piyasayı takip et.
+                        </p>
+                    </div>
+                    <div id="market-events-banner"
+                        style="background:linear-gradient(135deg, rgba(255,165,0,0.2), rgba(255,100,0,0.1)); border:1px solid rgba(255,165,0,0.3); padding:10px 20px; border-radius:12px; max-width:400px;">
+                        <div style="font-size:0.75rem; color:#ffa500; font-weight:800; margin-bottom:5px;">📰 GÜNCEL
+                            PİYASA OLAYLARI</div>
+                        <div id="market-events-list" style="font-size:0.85rem; color:#fff;">Yükleniyor...</div>
+                    </div>
+                </div>
+
+                <!-- Alt Sekmeler -->
+                <div class="business-sub-tabs" style="display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap;">
+                    <button class="sub-tab-btn active" onclick="switchBusinessTab('my-businesses')">📋
+                        İşletmelerim</button>
+                    <button class="sub-tab-btn" onclick="switchBusinessTab('new-business')">➕ Yeni İşletme</button>
+                    <button class="sub-tab-btn" onclick="switchBusinessTab('licenses')">📜 Lisanslar</button>
+                    <button class="sub-tab-btn" onclick="switchBusinessTab('market-prices')">📊 Piyasa
+                        Fiyatları</button>
+                </div>
+
+                <!-- İşletmelerim -->
+                <div id="business-sub-my-businesses" class="business-sub-content">
+                    <div id="my-businesses-list" class="market-grid" style="gap:20px;">
+                        <!-- JS fills -->
+                        <div style="grid-column: 1/-1; text-align:center; padding:60px; opacity:0.5;">
+                            <i class="fas fa-store-slash" style="font-size:4rem; margin-bottom:20px;"></i>
+                            <p>Henüz işletmen yok. Yeni bir işletme kurmak için "➕ Yeni İşletme" sekmesine git.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Yeni İşletme Kur -->
+                <div id="business-sub-new-business" class="business-sub-content hidden">
+                    <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:15px;">
+                        <!-- İşletme Türleri - JS ile doldurulacak -->
+                        <div id="business-types-grid">
+                            <div style="text-align:center; padding:40px; opacity:0.5;">
+                                <div class="loader"></div>
+                                <p style="margin-top:15px;">İşletme türleri yükleniyor...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lisanslar -->
+                <div id="business-sub-licenses" class="business-sub-content hidden">
+                    <div id="licenses-grid"
+                        style="display:grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap:15px;">
+                        <!-- JS fills -->
+                    </div>
+                </div>
+
+                <!-- Piyasa Fiyatları -->
+                <div id="business-sub-market-prices" class="business-sub-content hidden">
+                    <div class="glass-panel" style="padding:20px; margin-bottom:20px;">
+                        <h3 style="margin:0 0 15px 0;">📈 Haftalık Ürün Fiyatları</h3>
+                        <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:20px;">
+                            Fiyatlar arz/talep dengesine ve aktif piyasa olaylarına göre değişir. Haftalık güncellenir.
+                        </p>
+                        <div id="product-prices-table"
+                            style="display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap:10px;">
+                            <!-- JS fills -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- QUESTS TAB -->
             <div id="tab-quests" class="tab-content hidden">
                 <h2 style="margin-bottom:20px;">🎯 Günlük Görevler</h2>
@@ -522,6 +680,27 @@
                         <h4 class="sect-title"><i class="fas fa-users-viewfinder"></i> Çete Kadrosu</h4>
                         <div id="gang-members-list" style="display: grid; grid-template-columns: 1fr; gap: 10px;">
                             <!-- Dynamic Rows -->
+                        </div>
+                    </div>
+
+                    <!-- ÇETE SOHBET BÖLÜMÜ -->
+                    <div id="gang-chat-section" style="margin-top:40px;">
+                        <h4 class="sect-title"><i class="fas fa-comments"></i> Çete Sohbeti</h4>
+                        <div class="gang-card" style="padding:20px;">
+                            <div id="gang-chat-messages" style="height:300px; overflow-y:auto; background:rgba(0,0,0,0.3); border-radius:12px; padding:15px; margin-bottom:15px; display:flex; flex-direction:column; gap:10px;">
+                                <div style="color:#666; font-size:0.85rem; text-align:center; padding:20px;">Mesaj yok. İlk mesajı sen gönder!</div>
+                            </div>
+                            <div id="gang-chat-input-section" style="display:flex; gap:10px;">
+                                <input type="text" id="gang-chat-input" placeholder="Mesajını yaz..."
+                                    style="flex:1; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:12px; padding:12px; color:white; font-size:0.95rem;"
+                                    maxlength="500">
+                                <button onclick="sendGangMessage()" class="primary-btn" style="width:auto; padding:12px 25px;">
+                                    <i class="fas fa-paper-plane"></i> Gönder
+                                </button>
+                            </div>
+                            <div id="gang-chat-readonly-notice" class="hidden" style="text-align:center; padding:15px; color:#888; font-size:0.85rem;">
+                                <i class="fas fa-lock"></i> Sadece lider ve sağ kollar mesaj gönderebilir.
+                            </div>
                         </div>
                     </div>
                 </div>
