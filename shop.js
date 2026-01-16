@@ -242,7 +242,7 @@ function renderFreeCommands() {
 
 // Devlog/Duyuru sistemini yükle
 async function loadDevlogs() {
-    const container = document.getElementById('devlog-list');
+    const container = document.getElementById('devlog-content');
     if (!container) return;
 
     try {
@@ -1750,7 +1750,7 @@ async function loadGangs() {
                     // Re-using existing structure, adding a line
                     let infoDiv = document.getElementById('gang-info-extra');
                     if (!infoDiv) {
-                        const headerDiv = document.querySelector('#gang-dashboard .glass-panel > div');
+                        const headerDiv = document.querySelector('#gang-dashboard .gang-header > div:first-child');
                         infoDiv = document.createElement('p');
                         infoDiv.id = 'gang-info-extra';
                         infoDiv.style = "color:#aaa; margin-top:5px; font-size:0.8rem;";
