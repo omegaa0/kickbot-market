@@ -1001,114 +1001,115 @@ header {
 /* --- DEVELOPER LOG (TIMELINE DESIGN) --- */
 
 .devlog-header {
-    background: linear-gradient(90deg, var(--glass-bg) 0%, rgba(0, 0, 0, 0) 100%);
-    padding: 20px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    display: flex;
-    align-items: center;
-    gap: 12px;
+    padding: 30px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: center;
 }
 
 .devlog-header h3 {
     margin: 0;
-    font-size: 1.1rem;
-    font-weight: 800;
-    color: var(--primary);
+    font-size: 1.5rem;
+    font-weight: 900;
+    color: #fff;
     text-transform: uppercase;
-    letter-spacing: 1px;
-    text-shadow: 0 0 10px rgba(5, 234, 106, 0.4);
+    letter-spacing: 3px;
+    background: linear-gradient(to bottom, #fff, #555);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
 
 #devlog-content {
-    padding: 20px;
+    padding: 25px;
     overflow-y: auto;
-    position: relative;
-    /* Timeline Line */
-    border-left: 2px solid rgba(255, 255, 255, 0.1);
-    margin-left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
 }
 
 .announcement-item {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    padding: 25px;
     position: relative;
-    margin-bottom: 30px;
-    padding-left: 25px;
-    animation: slideInRight 0.5s ease backwards;
+    transition: all 0.5s cubic-bezier(0.2, 1, 0.3, 1);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
 }
 
-/* Timeline Dot */
+.announcement-item:hover {
+    transform: translateY(-8px) scale(1.01);
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--primary);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
 .announcement-item::before {
     content: '';
     position: absolute;
-    left: -27px;
-    /* Adjust for parent margin + border width */
-    top: 5px;
-    width: 12px;
-    height: 12px;
-    background: var(--bg-dark);
-    border: 2px solid var(--primary);
-    border-radius: 50%;
-    box-shadow: 0 0 8px var(--primary);
-    z-index: 2;
-}
-
-.announcement-item.badge-breaking::before {
-    border-color: #e74c3c;
-    box-shadow: 0 0 8px #e74c3c;
-}
-
-.announcement-item.badge-warning::before {
-    border-color: #f39c12;
-    box-shadow: 0 0 8px #f39c12;
+    inset: 0;
+    border-radius: 20px;
+    padding: 2px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), transparent);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
 }
 
 .ann-header {
-    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
 }
 
 .ann-type {
-    display: inline-block;
     font-size: 0.7rem;
-    font-weight: 800;
-    color: var(--primary);
-    background: rgba(5, 234, 106, 0.1);
-    padding: 2px 8px;
-    border-radius: 4px;
-    margin-bottom: 5px;
+    font-weight: 900;
+    padding: 5px 12px;
+    border-radius: 30px;
+    background: var(--primary);
+    color: #000;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    box-shadow: 0 0 15px var(--primary-dim);
+}
+
+.announcement-item.badge-breaking .ann-type {
+    background: #ff4757;
+    box-shadow: 0 0 15px rgba(255, 71, 87, 0.4);
+}
+
+.announcement-item.badge-warning .ann-type {
+    background: #ffa502;
+    box-shadow: 0 0 15px rgba(255, 165, 2, 0.4);
 }
 
 .ann-date {
-    display: block;
-    font-size: 0.7rem;
-    color: #666;
-    margin-bottom: 8px;
-    font-family: monospace;
+    font-size: 0.75rem;
+    color: #555;
+    font-weight: 700;
 }
 
 .ann-text {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    padding: 15px;
-    border-radius: 8px;
-    font-size: 0.9rem;
+    font-size: 1rem;
     color: #ccc;
-    line-height: 1.5;
-    position: relative;
+    line-height: 1.7;
 }
 
-/* Arrow for box */
-.ann-text::after {
-    content: '';
-    position: absolute;
-    left: -6px;
-    top: 15px;
-    width: 10px;
-    height: 10px;
-    background: rgba(30, 30, 30, 1);
-    /* Should match inner bg roughly */
-    border-left: 1px solid rgba(255, 255, 255, 0.05);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    transform: rotate(45deg);
+/* Scrollbar */
+#devlog-content::-webkit-scrollbar {
+    width: 5px;
 }
+
+#devlog-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
 
 @keyframes slideInRight {
     from {

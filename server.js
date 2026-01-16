@@ -2531,7 +2531,7 @@ app.post('/api/market/buy', verifySession, async (req, res) => {
                 'czn': 'TxGEqnHWrfWFTfGW9XjX', // Josh (Sample)
                 'polat': 'ODq5zmih8GrVes37Dizd', // Patrick (Sample)
                 'ezel': 'VR6AewGX3KQ9Gs3uJ1G5',  // Adam (Sample)
-                'azeri': 'AZNZlk1XjnGjx8xLd4qD'   // Domi (AZE Placeholder)
+                'azeri': 'Lcf765pS20Ga8unf7fXf'   // Domi (Multilingual Support)
             };
 
             let audioUrl = null;
@@ -2548,7 +2548,7 @@ app.post('/api/market/buy', verifySession, async (req, res) => {
                 // Badge yapısını esnek kontrol et (obje veya string olabilir)
                 const isSubscriber = badges.some(b => {
                     const badgeType = typeof b === 'string' ? b : (b.type || b.badge_type || '');
-                    return ['subscriber', 'founder', 'vip', 'moderator', 'broadcaster', 'sub_gifter', 'og'].includes(badgeType.toLowerCase());
+                    return ['subscriber', 'founder', 'vip', 'moderator', 'broadcaster', 'sub_gifter', 'og', 'abone'].includes(badgeType.toLowerCase());
                 }) || uData.is_subscriber === true || uData.isSubscriber === true;
 
                 // Ayrıca admin veya is_infinite olanlar da kullanabilsin
@@ -2563,8 +2563,8 @@ app.post('/api/market/buy', verifySession, async (req, res) => {
                     const elevenKey = process.env.ELEVENLABS_API_KEY;
 
                     if (!elevenKey || elevenKey.includes('sk_73928')) {
-                        console.error("ElevenLabs API Key Missing or Default!");
-                        throw new Error("API Key Missing");
+                        console.error("ElevenLabs API Key Hatası: Anahtar eksik veya varsayılan değerde!");
+                        throw new Error("Anahtar bulunamadı.");
                     }
 
                     const voiceId = elevenVoices[voice];
@@ -2574,27 +2574,27 @@ app.post('/api/market/buy', verifySession, async (req, res) => {
                         {
                             text: text,
                             model_id: "eleven_multilingual_v2",
-                            voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+                            voice_settings: { stability: 0.5, similarity_boost: 0.8 }
                         },
                         {
                             headers: {
                                 'xi-api-key': elevenKey,
                                 'Content-Type': 'application/json'
                             },
-                            responseType: 'arraybuffer' // Binary data
+                            responseType: 'arraybuffer'
                         }
                     );
 
-                    // Convert to Base64 to serve directly via Firebase (Not ideal for large files but OK for short TTS)
+                    // Convert to Base64 to serve directly via Firebase
                     const base64Audio = Buffer.from(ttsResp.data).toString('base64');
                     audioUrl = `data:audio/mpeg;base64,${base64Audio}`;
                 } catch (err) {
-                    console.error("ElevenLabs Error:", err.message);
-                    if (err.response) console.error("ElevenLabs Response:", err.response.data ? (err.response.data.toString() || 'binary') : 'no-data');
-                    // Fallback to standard if error
+                    console.error(`ElevenLabs Error [Voice: ${voice}]:`, err.message);
+                    if (err.response) {
+                        const errText = err.response.data ? (err.response.data.toString() || 'binary') : 'no-data';
+                        console.error("ElevenLabs API Response Error:", errText);
+                    }
                     isEleven = false;
-                    // Note: We don't return error to client to avoid blocking the purchase, 
-                    // but we fallback to standard TTS. The user receives standard TTS.
                 }
             }
 
