@@ -995,13 +995,11 @@ async function updateGlobalStocks() {
             const maxChangeLimit = 25 + (code.charCodeAt(0) % 26); // 25-50%
 
             if (currentDailyChange > maxChangeLimit) {
-                // Sınıra ulaştı - %1-3 düşür
-                const dropFactor = 0.97 + Math.random() * 0.03;
-                newPrice = Math.round(oldPrice * dropFactor);
+                // Tavan fiyata sabitle
+                newPrice = Math.floor(dailyStartPrice * (1 + maxChangeLimit / 100));
             } else if (currentDailyChange < -maxChangeLimit) {
-                // Taban sınıra ulaştı - %1-3 yükselt
-                const pumpFactor = 1.01 + Math.random() * 0.03;
-                newPrice = Math.round(oldPrice * pumpFactor);
+                // Taban fiyata sabitle
+                newPrice = Math.ceil(dailyStartPrice * (1 - maxChangeLimit / 100));
             }
 
             if (!data.name && baseData.name) data.name = baseData.name;
@@ -7327,27 +7325,67 @@ app.post('/api/gang/process-request', async (req, res) => {
             // UPDATE MEMBER COUNT explicitly
             const currentMembersSnap = await gangRef.child('members').once('value');
             const cnt = currentMembersSnap.numChildren();
-            // Optional: Store count if frontend relies on it
-            // await gangRef.child('memberCount').set(cnt); 
+            await gangRef.child('memberCount').set(cnt);
 
             // C. Update user profile
             await targetUserRef.child('gang').set(gangId);
             await targetUserRef.child('gang_rank').set('member'); // Explicitly set rank
             console.log("   ➤ Kullanıcı profili güncellendi");
 
-            res.json({ success: true, message: `${targetUser} çeteye dahil edildi!` });
+            res.json({ success: true, message: `${targetUser} çeteye dahil edildi!`, newMemberCount: cnt });
         } else {
             // Reject logic
             await gangRef.child('requests').child(cleanTarget).remove();
             console.log(`🚫 ${cleanTarget} isteği reddedildi`);
-            res.json({ success: true, message: "Katılım isteği reddedildi." });
+            res.json({ success: true, message: "İstek reddedildi." });
         }
-
     } catch (e) {
-        console.error("❌ Gang Process Request Error:", e);
+        console.error("Gang Process Error:", e);
         res.json({ success: false, error: e.message });
     }
 });
+
+// --- IMMEDIATE STOCK FIX (One-time run on server restart/update) ---
+(async function enforceStockLimitsNow() {
+    try {
+        console.log("🔧 Stock Limits Enforcement Started...");
+        const stockRef = db.ref('global_stocks');
+        const snap = await stockRef.once('value');
+        const stocks = snap.val();
+        if (!stocks) return;
+
+        const updates = {};
+        for (const [code, data] of Object.entries(stocks)) {
+            const maxChangeLimit = 25 + (code.charCodeAt(0) % 26); // 25-50%
+            let dailyStartPrice = data.daily_start_price;
+
+            // If no daily start, assume current is start (can't fix what we don't know), 
+            // BUT if price is suspiciously high/low vs oldPrice, we might want to stabilize.
+            // For now, only clamp if we have a baseline.
+            if (!dailyStartPrice) continue;
+
+            let newPrice = data.price;
+            const currentChange = ((newPrice - dailyStartPrice) / dailyStartPrice) * 100;
+
+            if (currentChange > maxChangeLimit) {
+                newPrice = Math.floor(dailyStartPrice * (1 + maxChangeLimit / 100));
+                updates[`${code}/price`] = newPrice;
+                updates[`${code}/trend`] = 1; // It's still 'up' technically, just capped
+                console.log(`📉 Clamping ${code}: ${data.price} -> ${newPrice} (Max +${maxChangeLimit}%)`);
+            } else if (currentChange < -maxChangeLimit) {
+                newPrice = Math.ceil(dailyStartPrice * (1 - maxChangeLimit / 100));
+                updates[`${code}/price`] = newPrice;
+                updates[`${code}/trend`] = -1;
+                console.log(`📈 Clamping ${code}: ${data.price} -> ${newPrice} (Max -${maxChangeLimit}%)`);
+            }
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await stockRef.update(updates);
+            console.log("✅ All stocks clamped to daily limits.");
+        }
+    } catch (e) { console.error("Stock Fix Error:", e); }
+})();
 
 // 6. GET GANG INFO
 app.post('/api/gang/info', async (req, res) => {

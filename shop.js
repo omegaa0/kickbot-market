@@ -2417,8 +2417,9 @@ async function loadCityProperties(cityId, cityName) {
     list.innerHTML = `<div class="loader" style="margin: 20px auto;"></div>`;
 
     try {
-        const res = await fetch(`/api/real-estate/properties/${cityId}`);
+        const res = await fetch(`/api/real-estate/properties/${cityId}?_t=${Date.now()}`);
         const props = await res.json();
+
 
         // Veriyi kaydet
         currentCityProperties = props || [];
