@@ -192,27 +192,87 @@ if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const auth = firebase.auth();
 
-// SERVER BOT LOGIN
+// SERVER BOT LOGIN WITH RETRIES
 const SERVER_EMAIL = process.env.SERVER_BOT_EMAIL;
 const SERVER_PASS = process.env.SERVER_BOT_PASSWORD;
+let isDbReady = false;
 
-if (SERVER_EMAIL && SERVER_PASS) {
-    auth.signInWithEmailAndPassword(SERVER_EMAIL, SERVER_PASS)
-        .then((userCredential) => {
-            console.log("✅ Sunucu Botu Giriş Yaptı:", userCredential.user.email);
-        })
-        .catch((error) => {
-            console.error("⚠️ Sunucu Botu Giriş Hatası:", error.code);
-            if (error.code === 'auth/user-not-found') {
-                console.log("ℹ️ Sunucu Botu oluşturuluyor...");
-                auth.createUserWithEmailAndPassword(SERVER_EMAIL, SERVER_PASS)
-                    .then((user) => console.log("✅ Sunucu Botu Oluşturuldu:", user.user.email))
-                    .catch((e) => console.error("❌ Sunucu Botu Oluşturma Hatası:", e.message));
-            }
-        });
-} else {
-    console.warn("⚠️ SERVER_BOT_EMAIL veya SERVER_BOT_PASSWORD eksik! Veritabanı yazma işlemleri başarısız olabilir.");
+// BACKGROUND TASKS STARTUP
+function initializeBackgroundTasks() {
+    console.log("🚀 Veritabanı görevleri başlatılıyor...");
+
+    // Admin verilerini kontrol et/oluştur
+    initAdminUsers();
+
+    // Borsa sistemini başlat
+    setInterval(updateGlobalStocks, 2000);
+    updateGlobalStocks();
+
+    // Saatlik borsa geçmişi (Kayıt)
+    setInterval(saveHourlyStockHistory, 3600000);
+
+    // Kanal istatistiklerini senkronize et (Dakikalık)
+    setInterval(syncChannelStats, 60000);
+    syncChannelStats();
+
+    // Günlük istatistik snapshot
+    setInterval(takeDailyStatsSnapshot, 3600000);
+    takeDailyStatsSnapshot();
+
+    // Hisseleri düzelt
+    fixStockVolatility();
+
+    // Webhook kayıtlarını tazele
+    setTimeout(registerAllWebhooks, 5000);
+
+    console.log("✅ Tüm arka plan görevleri kuyruğa alındı.");
 }
+
+async function startServerBot() {
+    if (!SERVER_EMAIL || !SERVER_PASS) {
+        console.warn("⚠️ SERVER_BOT_EMAIL veya SERVER_BOT_PASSWORD eksik! Veritabanı yazma işlemleri başarısız olabilir.");
+        return;
+    }
+
+    let retryCount = 0;
+    const maxRetries = 5;
+
+    async function attemptLogin() {
+        try {
+            console.log(`[Firebase Auth] Giriş deneniyor (${SERVER_EMAIL})...`);
+            const userCredential = await auth.signInWithEmailAndPassword(SERVER_EMAIL, SERVER_PASS);
+            console.log("✅ Sunucu Botu Giriş Yaptı:", userCredential.user.email);
+            isDbReady = true;
+
+            // Başarılı girişten sonra arka plan görevlerini başlat
+            initializeBackgroundTasks();
+        } catch (error) {
+            console.error("⚠️ Sunucu Botu Giriş Hatası:", error.code, error.message);
+
+            if (error.code === 'auth/user-not-found') {
+                try {
+                    console.log("ℹ️ Sunucu Botu oluşturuluyor...");
+                    const user = await auth.createUserWithEmailAndPassword(SERVER_EMAIL, SERVER_PASS);
+                    console.log("✅ Sunucu Botu Oluşturuldu:", user.user.email);
+                    isDbReady = true;
+                } catch (e) {
+                    console.error("❌ Sunucu Botu Oluşturma Hatası:", e.message);
+                }
+            } else if (retryCount < maxRetries) {
+                retryCount++;
+                const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
+                console.log(`🔄 ${delay / 1000} saniye sonra tekrar denenecek (Deneme ${retryCount}/${maxRetries})...`);
+                setTimeout(attemptLogin, delay);
+            } else {
+                console.error("❌ Maksimum giriş denemesine ulaşıldı. Veritabanı işlemleri kısıtlı olabilir.");
+            }
+        }
+    }
+
+    attemptLogin();
+}
+
+startServerBot();
 
 const KICK_CLIENT_ID = process.env.KICK_CLIENT_ID || "01KDQNP2M930Y7YYNM62TVWJCP";
 const KICK_CLIENT_SECRET = process.env.KICK_CLIENT_SECRET;
@@ -436,7 +496,7 @@ async function initAdminUsers() {
         console.error("Admin Users Init Error:", e.message);
     }
 }
-initAdminUsers();
+// initAdminUsers(); // initializeBackgroundTasks içinde çağrılıyor
 
 // Global Cooldown Takibi
 const userGlobalCooldowns = {};
@@ -581,13 +641,15 @@ async function registerKickWebhook(broadcasterId, accessToken) {
 
         console.log(`[Webhook] ✅ Kanal ${broadcasterId} için Kick'e abone olundu.`);
 
-        // Kayıt bilgisini ve Kick'ten gelen subscription ID'leri sakla
-        await db.ref(`channels/${broadcasterId}/webhook`).update({
-            registered: true,
-            last_registration: Date.now(),
-            subscription_ids: response.data?.data?.map(s => s.subscription_id) || [],
-            last_status: 'SUCCESS'
-        });
+        if (isDbReady) {
+            // Kayıt bilgisini ve Kick'ten gelen subscription ID'leri sakla
+            await db.ref(`channels/${broadcasterId}/webhook`).update({
+                registered: true,
+                last_registration: Date.now(),
+                subscription_ids: response.data?.data?.map(s => s.subscription_id) || [],
+                last_status: 'SUCCESS'
+            });
+        }
 
         return { success: true, data: response.data };
     } catch (e) {
@@ -1477,6 +1539,7 @@ app.post('/admin-api/trigger-news', authAdmin, hasPerm('stocks'), async (req, re
 });
 
 async function updateGlobalStocks() {
+    if (!isDbReady) return; // Auth olmadan borsa güncelleme yapma
     if (isUpdatingStocks) return;
     isUpdatingStocks = true;
 
@@ -2031,11 +2094,11 @@ async function saveHourlyStockHistory() {
         console.log(`📈 Borsa saatlik geçmiş güncellendi.`);
     } catch (e) { console.error("Hourly History Error:", e.message); }
 }
-setInterval(saveHourlyStockHistory, 3600000); // 1 Saat
+// setInterval(saveHourlyStockHistory, 3600000); // Moved to initializeBackgroundTasks
 
 // Borsa güncelleme (Her 2 saniyede bir)
-setInterval(updateGlobalStocks, 2000);
-updateGlobalStocks(); // İlk çalıştırma
+// setInterval(updateGlobalStocks, 2000); // Moved to initializeBackgroundTasks
+// updateGlobalStocks(); // Moved to initializeBackgroundTasks
 
 // Sunucu başladığında tüm hisselerin volatilite değerlerini düzelt
 async function fixStockVolatility() {
@@ -4302,20 +4365,24 @@ app.post('/webhook/kick', async (req, res) => {
 
         // --- CHAT LOGGING FOR AI SUMMARY ---
         if (!rawMsg.startsWith('!')) {
-            const chatLogRef = db.ref(`channels/${broadcasterId}/chat_log`);
-            chatLogRef.push({
-                user: payload.sender?.username || user,
-                message: rawMsg,
-                timestamp: Date.now()
-            });
+            if (isDbReady) {
+                const chatLogRef = db.ref(`channels/${broadcasterId}/chat_log`);
+                chatLogRef.push({
+                    user: payload.sender?.username || user,
+                    message: rawMsg,
+                    timestamp: Date.now()
+                }).catch(e => console.error(`[Chat Log Error] ${broadcasterId}:`, e.message));
 
-            // Keep only last 200 messages
-            chatLogRef.once('value', snap => {
-                if (snap.numChildren() > 200) {
-                    const keys = Object.keys(snap.val());
-                    chatLogRef.child(keys[0]).remove();
-                }
-            });
+                // Keep only last 200 messages
+                chatLogRef.limitToLast(1).once('value').then(snap => {
+                    chatLogRef.once('value', snap => {
+                        if (snap.numChildren() > 200) {
+                            const keys = Object.keys(snap.val());
+                            chatLogRef.child(keys[0]).remove().catch(() => { });
+                        }
+                    });
+                }).catch(() => { });
+            }
         }
 
         // console.log(`[Webhook] 💬 @${user}: ${rawMsg}`);
@@ -7413,8 +7480,8 @@ async function takeDailyStatsSnapshot() {
         console.error("Snapshot Error:", e.message);
     }
 }
-setInterval(takeDailyStatsSnapshot, 3600000); // Once an hour is enough to be up to date
-takeDailyStatsSnapshot(); // Initial take
+// setInterval(takeDailyStatsSnapshot, 3600000); // Moved to initializeBackgroundTasks
+// takeDailyStatsSnapshot(); // Moved to initializeBackgroundTasks
 
 async function syncSingleChannelStats(chanId, chan) {
     try {
@@ -10344,10 +10411,9 @@ app.listen(PORT, () => {
 
     // Sunucu başladığında webhook'ları kaydet
     setTimeout(() => {
-        console.log('[Webhook] Event subscription başlatılıyor...');
-        registerAllWebhooks();
-        syncChannelStats();
+        console.log('[Webhook] Event subscription kontrol ediliyor...');
+        // registerAllWebhooks ve syncChannelStats artık isDbReady sonrası initializeBackgroundTasks içinde çalışıyor
     }, 5000);
 
-    setInterval(syncChannelStats, 60000);
+    // setInterval(syncChannelStats, 60000); // initializeBackgroundTasks içinde çalışıyor
 });
