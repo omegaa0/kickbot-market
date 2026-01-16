@@ -5996,6 +5996,60 @@ app.post('/admin-api/rig-ship', authAdmin, hasPerm('troll'), (req, res) => {
     res.json({ success: true });
 });
 
+
+// ADD STOCK
+app.post('/admin-api/stocks/add', authAdmin, hasPerm('stocks'), async (req, res) => {
+    const { code, name, price } = req.body;
+    await db.ref(`global_stocks/${code}`).set({
+        name,
+        price: parseFloat(price),
+        trend: 0,
+        history: [parseFloat(price)]
+    });
+    addLog("Borsa", `Hisse Eklendi: ${code} - ${price}`);
+    res.json({ success: true });
+});
+
+// ADD NEWS
+app.post('/admin-api/add-news', authAdmin, hasPerm('stocks'), async (req, res) => {
+    const { code, text, type, impact } = req.body;
+    const impactVal = parseInt(impact) || 0;
+
+    // 1. Add News to Ticker
+    await db.ref('global_news').push({
+        text,
+        type, // 'good', 'bad', 'info'
+        timestamp: Date.now()
+    });
+
+    // 2. Apply Impact to Stock Price
+    if (code && code !== 'GENEL' && impactVal !== 0) {
+        const ref = db.ref(`global_stocks/${code}`);
+        const snap = await ref.once('value');
+        if (snap.exists()) {
+            const stock = snap.val();
+            let newPrice = stock.price + (stock.price * (impactVal / 100));
+            if (newPrice < 0.01) newPrice = 0.01;
+
+            await ref.update({
+                price: newPrice,
+                trend: impactVal > 0 ? 1 : (impactVal < 0 ? -1 : 0)
+            });
+
+            // Add history
+            const histRef = db.ref(`global_stocks/${code}/history`);
+            const hSnap = await histRef.once('value');
+            let history = hSnap.val() || [];
+            history.push(newPrice);
+            if (history.length > 20) history.shift();
+            await histRef.set(history);
+        }
+    }
+
+    addLog("Borsa Haber", `Haber: ${text} (Etki: %${impactVal})`);
+    res.json({ success: true });
+});
+
 // RIG GAMBLE
 app.post('/admin-api/rig-gamble', authAdmin, hasPerm('troll'), (req, res) => {
     const { user, result } = req.body;
