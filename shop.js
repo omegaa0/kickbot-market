@@ -1,8 +1,8 @@
 // shop.js - Dynamic Channel Market Implementation
 let db = null;
 
-// Firebase config'i güvenli şekilde sunucudan al
-(async function initFirebase() {
+// Firebase initialization promise
+const dbReady = (async function initFirebase() {
     try {
         const response = await fetch('/api/firebase-config');
         const firebaseConfig = await response.json();
@@ -12,10 +12,10 @@ let db = null;
         }
         db = firebase.database();
         console.log('Firebase initialized successfully');
+        return db;
     } catch (error) {
         console.error('Firebase initialization failed:', error);
-        // Fallback: Sayfa yenilenmesini öner
-        setTimeout(() => window.location.reload(), 3000);
+        return null;
     }
 })();
 
@@ -327,7 +327,16 @@ function toggleDevlog(show) {
     }
 }
 
-function init() {
+async function init() {
+    console.log("Waiting for Firebase...");
+    const database = await dbReady;
+    if (!database) {
+        console.error("Database not ready!");
+        showToast("Veritabanı bağlantısı kurulamadı. Yenileniyor...", "error");
+        setTimeout(() => window.location.reload(), 3000);
+        return;
+    }
+
     console.log("Market initialized");
     const savedUser = localStorage.getItem('aloskegang_user');
     renderFreeCommands();
@@ -345,7 +354,6 @@ function init() {
 
     const genBtn = document.getElementById('generate-code-btn');
     if (genBtn) {
-        // Remove old listeners to be safe (though not strictly possible easily without reference, but init runs once usually)
         genBtn.replaceWith(genBtn.cloneNode(true));
         document.getElementById('generate-code-btn').addEventListener('click', startAuth);
     }
@@ -363,7 +371,6 @@ function init() {
 
         const localTs = localStorage.getItem('last_processed_logout') || 0;
 
-        // Eğer sunucudaki logout emri, benim son işlemimden (veya girişimden) yeniyse
         if (serverTs > localTs) {
             console.log("FORCE LOGOUT RECEIVED");
             localStorage.setItem('last_processed_logout', serverTs);
@@ -373,7 +380,6 @@ function init() {
             }
         }
     });
-    // ... (init function ends)
 }
 
 window.addEventListener('DOMContentLoaded', init);
