@@ -9,6 +9,86 @@
         rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- GÜVENLİK: DevTools ve Sağ Tık Engelleme -->
+    <script>
+        // F12, Ctrl+Shift+I, Ctrl+U engelleme
+        document.addEventListener('keydown', function (e) {
+            // F12
+            if (e.key === 'F12' || e.keyCode === 123) {
+                e.preventDefault();
+                return false;
+            }
+            // Ctrl+Shift+I (DevTools)
+            if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.keyCode === 73)) {
+                e.preventDefault();
+                return false;
+            }
+            // Ctrl+Shift+J (Console)
+            if (e.ctrlKey && e.shiftKey && (e.key === 'J' || e.keyCode === 74)) {
+                e.preventDefault();
+                return false;
+            }
+            // Ctrl+Shift+C (Inspect Element)
+            if (e.ctrlKey && e.shiftKey && (e.key === 'C' || e.keyCode === 67)) {
+                e.preventDefault();
+                return false;
+            }
+            // Ctrl+U (View Source)
+            if (e.ctrlKey && (e.key === 'U' || e.keyCode === 85)) {
+                e.preventDefault();
+                return false;
+            }
+            // Ctrl+S (Save Page)
+            if (e.ctrlKey && (e.key === 'S' || e.keyCode === 83)) {
+                e.preventDefault();
+                return false;
+            }
+        });
+
+        // Sağ tık engelleme
+        document.addEventListener('contextmenu', function (e) {
+            e.preventDefault();
+            return false;
+        });
+
+        // Metin seçimi engelleme
+        document.addEventListener('selectstart', function (e) {
+            e.preventDefault();
+            return false;
+        });
+
+        // Kopyalama engelleme
+        document.addEventListener('copy', function (e) {
+            e.preventDefault();
+            return false;
+        });
+
+        // DevTools açık mı kontrolü (Sürekli)
+        (function detectDevTools() {
+            const threshold = 160;
+            const widthThreshold = window.outerWidth - window.innerWidth > threshold;
+            const heightThreshold = window.outerHeight - window.innerHeight > threshold;
+
+            if (widthThreshold || heightThreshold) {
+                // DevTools açık - sayfayı yenile veya boş göster
+                document.body.innerHTML = '';
+                window.location.reload();
+            }
+
+            setTimeout(detectDevTools, 1000);
+        })();
+
+        // Console log override
+        (function () {
+            const noop = function () { };
+            window.console.log = noop;
+            window.console.warn = noop;
+            window.console.error = noop;
+            window.console.info = noop;
+            window.console.debug = noop;
+        })();
+    </script>
     <style>
         :root {
             --bg: #0b0c10;
