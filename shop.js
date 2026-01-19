@@ -4712,86 +4712,83 @@ async function loadWarehouseInfo() {
                             </div>
                          `;
                     });
+                    // Henüz seçilmemiş - Drodown Seçim UI
+                    const cityOptions = EMLAK_CITIES
+                        .sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+                        .map(c => `<option value="${c.name}">${c.name}</option>`)
+                        .join('');
 
                     baseEl.innerHTML = `
-                        <div style="padding:20px; background:rgba(255,50,50,0.05); border-radius:12px; border:1px dashed rgba(255,50,50,0.3);">
-                            <div style="text-align:center; margin-bottom:20px;">
-                                <h4 style="color:#ff6666; margin-bottom:5px;">⚠️ Merkez Üs Seçimi Yapılmadı</h4>
-                                <p style="font-size:0.9rem; color:#ccc;">Lojistik operasyonları başlatmak için bir ana merkez seçmelisin. <br><span style="color:#ff6666; font-weight:bold;">Bu işlem kalıcıdır ve değiştirilemez!</span></p>
-                            </div>
+                        <div style="background:rgba(255,255,255,0.05); padding:20px; border-radius:12px; text-align:center;">
+                            <div style="font-size:3rem; margin-bottom:15px;">🏗️</div>
+                            <h3 style="margin-bottom:10px;">Merkez Lojistik Üssünü Kur</h3>
+                            <p style="color:#aaa; font-size:0.9rem; margin-bottom:20px;">
+                                Depolama ve dağıtım ağını yönetmek için bir şehir seçmelisin.<br>
+                                <span style="color:#f39c12; font-size:0.8rem;">(DİKKAT: Bu seçim kalıcıdır!)</span>
+                            </p>
                             
-                            <div style="height:300px; overflow-y:auto; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:10px; margin-bottom:20px; background:rgba(0,0,0,0.2);">
-                                <div id="base-city-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap:8px;">
-                                    ${cityGridHtml}
-                                </div>
+                            <div style="display:flex; gap:10px; justify-content:center; max-width:400px; margin:0 auto;">
+                                <select id="base-city-select" class="borsa-input" style="flex:1; padding:12px; font-size:1rem; border-radius:8px;">
+                                    <option value="" disabled selected>Şehir Seçiniz...</option>
+                                    ${cityOptions}
+                                </select>
+                                <button onclick="saveBaseCity()" class="buy-btn" style="width:120px; border-radius:8px;">KUR</button>
                             </div>
-                            
-                            <input type="hidden" id="selected-base-city-val">
-                            <button id="save-base-btn" class="primary-btn" onclick="saveBaseCity()" disabled style="width:100%; opacity:0.5; cursor:not-allowed;">MERKEZİ ONAYLA</button>
                         </div>
                     `;
                 }
             }
 
+            // Upgrade Buton Durumu
             if (upgradeBtn) {
                 if (nextCost > 0) {
-                    upgradeBtn.innerHTML = `📦 Depo Yükselt (${nextCost.toLocaleString()} 💰)`;
+                    upgradeBtn.innerHTML = `YÜKSELT <span style="font-size:0.8em; opacity:0.8;">(${nextCost.toLocaleString()} 💰)</span>`;
+                    upgradeBtn.disabled = false;
                     upgradeBtn.onclick = () => upgradeWarehouse(nextCost);
                 } else {
-                    upgradeBtn.innerHTML = `📦 Maksimum Seviye`;
+                    upgradeBtn.innerHTML = "MAKSİMUM SEVİYE";
                     upgradeBtn.disabled = true;
-                    upgradeBtn.style.opacity = 0.5;
+                    upgradeBtn.onclick = null;
                 }
             }
         }
     } catch (e) {
-        console.error('Warehouse info error:', e);
+        console.error('Depo yükleme hatası:', e);
     }
 }
 
-// Helper function for new Base City Selection UI
-function selectBaseCityCard(city, cardEl) {
-    // Tüm kartların active class'ını kaldır
-    document.querySelectorAll('.city-select-card').forEach(el => {
-        el.style.background = 'rgba(255,255,255,0.05)';
-        el.style.borderColor = 'rgba(255,255,255,0.1)';
-        el.style.transform = 'scale(1)';
-    });
-
-    // Seçileni active yap
-    cardEl.style.background = 'rgba(0,255,136,0.1)';
-    cardEl.style.borderColor = 'var(--primary)';
-    cardEl.style.transform = 'scale(1.05)';
-
-    // Değeri set et
-    document.getElementById('selected-base-city-val').value = city;
-
-    // Butonu aç
-    const btn = document.getElementById('save-base-btn');
-    btn.disabled = false;
-    btn.style.opacity = 1;
-    btn.style.cursor = 'pointer';
-}
-
 async function saveBaseCity() {
-    const city = document.getElementById('selected-base-city-val').value;
-    if (!city) return showToast('Lütfen bir şehir seçin!', 'error');
+    const selectEl = document.getElementById('base-city-select');
+    if (!selectEl || !selectEl.value) {
+        return showToast('Lütfen bir şehir seçin!', 'error');
+    }
+    const city = selectEl.value;
 
-    showConfirm('Ana Üs Seçimi', `${city} şehrini ana üssün olarak belirlemek istiyor musun? Bu işlem geri alınamaz!`).then(async (c) => {
-        if (!c) return;
-        try {
-            const res = await fetch('/api/warehouse/set-base', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: currentUser, city })
-            });
-            const d = await res.json();
-            showToast(d.message || d.error, d.success ? "success" : "error");
-            if (d.success) loadWarehouseInfo();
-        } catch (e) {
-            showToast("Hata oluştu!", "error");
+    const confirmed = await showConfirm(`
+        <h3>Merkez Üs: ${city}</h3>
+        <p>Depo merkezinizi <b>${city}</b> şehrine kurmak üzeresiniz.</p>
+        <p style="color:#f39c12; margin-top:10px; font-size:0.9rem;">Bu işlem geri alınamaz!</p>
+    `);
+
+    if (!confirmed) return;
+
+    try {
+        const res = await fetch('/api/warehouse/set-base', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser, city })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('Merkez üs başarıyla kuruldu!', 'success');
+            loadWarehouseInfo(); // Refresh UI immediately
+        } else {
+            showToast(data.error || 'Hata oluştu', 'error');
         }
-    });
+    } catch (e) {
+        console.error(e);
+        showToast('Bağlantı hatası', 'error');
+    }
 }
 
 async function upgradeWarehouse(cost) {

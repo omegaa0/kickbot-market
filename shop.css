@@ -1433,3 +1433,107 @@ header {
 .health-bad {
     background: #ff4444;
 }
+
+/* =============================================================================
+   📢 GOOGLE ADS STYLES
+============================================================================= */
+
+.google-ad-vertical {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 160px;
+    height: 600px;
+    z-index: 99;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.google-ad-vertical:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(0, 0, 0, 0.4);
+}
+
+.google-ad-vertical.left-ad {
+    left: 20px;
+}
+
+.google-ad-vertical.right-ad {
+    right: 20px;
+}
+
+.ad-placeholder {
+    text-align: center;
+    padding: 20px;
+    pointer-events: none;
+    user-select: none;
+}
+
+/* Hide ads on smaller screens/laptops to prevent pushing content */
+@media (max-width: 1600px) {
+    .google-ad-vertical {
+        display: none !important;
+    }
+}
+
+/* =============================================================================
+   🚫 ADBLOCK DETECTOR STYLES
+============================================================================= */
+#adblock-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 10000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(10px);
+}
+
+.adblock-modal {
+    background: #111;
+    border: 2px solid #ff4444;
+    padding: 40px;
+    border-radius: 20px;
+    text-align: center;
+    max-width: 500px;
+    box-shadow: 0 0 50px rgba(255, 68, 68, 0.3);
+    animation: shake 0.5s ease-in-out;
+}
+
+.adblock-icon {
+    font-size: 5rem;
+    color: #ff4444;
+    margin-bottom: 20px;
+}
+
+@keyframes shake {
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    10%,
+    30%,
+    50%,
+    70%,
+    90% {
+        transform: translateX(-5px);
+    }
+
+    20%,
+    40%,
+    60%,
+    80% {
+        transform: translateX(5px);
+    }
+}

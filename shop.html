@@ -152,10 +152,54 @@
             transition: width 0.5s ease-out;
         }
     </style>
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6254920933187497"
+        crossorigin="anonymous"></script>
 </head>
 
 <body>
     <div class="glow-bg"></div>
+
+    <!-- ADBLOCK BAIT (Hidden but detectable by blockers) -->
+    <div class="ad-banner adsbox google-ad" id="ad-bait"
+        style="position:absolute; top:-9999px; left:-9999px; width:1px; height:1px;"></div>
+
+    <!-- ADBLOCK WARNING OVERLAY -->
+    <div id="adblock-overlay">
+        <div class="adblock-modal">
+            <div class="adblock-icon">🛡️</div>
+            <h2 style="color:white; margin-bottom:15px; font-size:2rem;">Reklam Engelleyici Tespit Edildi!</h2>
+            <p style="color:#aaa; margin-bottom:25px; font-size:1.1rem;">
+                AloskeGangBOT sunucularını ayakta tutmak için reklamlara ihtiyacımız var.<br><br>
+                Lütfen <b>AdBlock</b> eklentini devre dışı bırakıp sayfayı yenile.
+            </p>
+            <button onclick="location.reload()" class="primary-btn" style="background:#ff4444; color:white;">🔄 SAYFAYI
+                YENİLE</button>
+        </div>
+    </div>
+
+    <script>
+        // AdBlock Detection Logic
+        window.onload = function () {
+            setTimeout(() => {
+                const bait = document.getElementById('ad-bait');
+                const baitStyle = getComputedStyle(bait);
+
+                if (bait.offsetParent === null ||
+                    bait.offsetHeight === 0 ||
+                    bait.offsetLeft === 0 ||
+                    baitStyle.display === 'none' ||
+                    baitStyle.visibility === 'hidden') {
+
+                    // AdBlock Detected!
+                    // Localhost exception: Don't block dev environment
+                    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                        document.getElementById('adblock-overlay').style.display = 'flex';
+                        document.body.style.overflow = 'hidden'; // Prevent scrolling
+                    }
+                }
+            }, 2000); // Wait 2s for extensions to kick in
+        };
+    </script>
 
     <!-- DUYURULAR SIDEBAR (Sol Kısım) -->
     <button id="devlog-toggle-btn" class="hidden" onclick="toggleDevlog(true)">
@@ -205,10 +249,39 @@
         </div>
     </div>
 
+    <!-- GOOGLE ADS LEFT -->
+    <div class="google-ad-vertical left-ad">
+        <div class="ad-placeholder">
+            <span style="font-size:0.8rem; color:#666;">GOOGLE REKLAM ALANI<br>(160x600)</span>
+            <!-- Buraya Google AdSense Kodu Gelecek -->
+            <!-- 
+            <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
+            <ins class="adsbygoogle"
+                 style="display:inline-block;width:160px;height:600px"
+                 data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
+                 data-ad-slot="XXXXXXXXXX"></ins>
+            <script>
+                 (adsbygoogle = window.adsbygoogle || []).push({});
+            </script>
+            -->
+        </div>
+    </div>
+
+    <!-- GOOGLE ADS RIGHT -->
+    <div class="google-ad-vertical right-ad">
+        <div class="ad-placeholder">
+            <span style="font-size:0.8rem; color:#666;">GOOGLE REKLAM ALANI<br>(160x600)</span>
+            <!-- Buraya Google AdSense Kodu Gelecek -->
+        </div>
+    </div>
+
+
+
     <!-- MAIN MARKET SECTION -->
     <div id="main-content" class="hidden">
         <header>
             <div class="user-profile">
+
                 <div class="avatar" id="user-avatar"
                     style="overflow:hidden; background: #111; display: flex; align-items: center; justify-content: center;">
                     <img id="user-pfp" src="" style="width:100%; height:100%; object-fit:cover; display:none;"
