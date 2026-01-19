@@ -3512,30 +3512,97 @@ async function loadBusinessData() {
 }
 
 // Piyasa olaylarını göster
+// Piyasa olaylarını göster (Breaking News Ticker Style)
 function renderMarketEvents() {
     const container = document.getElementById('market-events-list');
     if (!container) return;
 
-    if (marketEvents.length === 0) {
+    if (!marketEvents || marketEvents.length === 0) {
         container.innerHTML = '<div style="opacity:0.5; font-size:0.8rem; padding:10px; text-align:center;">Şu an aktif küresel bir olay yok.</div>';
         return;
     }
 
-    container.innerHTML = marketEvents.map(e => `
-        <div class="glass-panel" style="padding:15px; margin-bottom:12px; border:none; background:rgba(255,165,0,0.05); border-left:4px solid #ffa500; display:flex; gap:12px; align-items:start;">
-            <div style="background:#ffa500; color:black; padding:5px; border-radius:8px; display:flex; align-items:center; justify-content:center; min-width:35px; height:35px;">
-                <span style="font-size:1.2rem;">📢</span>
-            </div>
-            <div style="flex:1;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                    <span style="font-weight:800; color:#ffa500; text-transform:uppercase; font-size:0.75rem; letter-spacing:1px;">FLAŞ HABER</span>
-                    <span style="font-size:0.7rem; color:#666;">AKTİF</span>
-                </div>
-                <div style="font-weight:700; color:#fff; font-size:0.95rem; margin-bottom:5px;">${e.name}</div>
-                <div style="font-size:0.8rem; color:rgba(255,255,255,0.7); line-height:1.4;">${e.desc}</div>
-            </div>
+    // Haber bandı stilleri
+    const styleId = 'news-ticker-style';
+    if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.innerHTML = `
+            @keyframes ticker {
+                0% { transform: translate3d(0, 0, 0); }
+                100% { transform: translate3d(-100%, 0, 0); }
+            }
+            .news-ticker-wrap {
+                width: 100%;
+                overflow: hidden;
+                background: linear-gradient(90deg, #cc0000 0%, #aa0000 100%);
+                border-radius: 8px;
+                display: flex;
+                align-items: center;
+                height: 40px;
+                position: relative;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            }
+            .news-label {
+                background: #ff0000;
+                color: white;
+                padding: 0 15px;
+                font-weight: 900;
+                font-size: 0.85rem;
+                height: 100%;
+                display: flex;
+                align-items: center;
+                z-index: 2;
+                box-shadow: 4px 0 10px rgba(0,0,0,0.2);
+                position: absolute;
+                left: 0;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+            .ticker-content {
+                display: flex;
+                animation: ticker 30s linear infinite;
+                padding-left: 120px; /* Label width + padding */
+                white-space: nowrap;
+                height: 100%;
+                align-items: center;
+            }
+            .ticker-item {
+                display: inline-flex;
+                align-items: center;
+                color: white;
+                font-weight: 600;
+                margin-right: 50px;
+                font-size: 0.9rem;
+            }
+            .ticker-item span {
+                opacity: 0.8;
+                font-weight: 400;
+                margin-left: 5px;
+                font-size: 0.8rem;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // Haberleri tekrarla (sonsuz döngü hissi için)
+    const displayEvents = [...marketEvents, ...marketEvents];
+
+    const newsHtml = displayEvents.map(e => `
+        <div class="ticker-item">
+            🚨 ${e.name}
+            <span>- ${e.desc || 'Piyasa bu gelişmeyi fiyatlıyor...'}</span>
         </div>
     `).join('');
+
+    container.innerHTML = `
+        <div class="news-ticker-wrap">
+            <div class="news-label">SON DAKİKA</div>
+            <div class="ticker-content" style="animation-duration: ${Math.max(20, marketEvents.length * 10)}s;">
+                ${newsHtml}
+            </div>
+        </div>
+    `;
 }
 
 // Alt sekme değiştir

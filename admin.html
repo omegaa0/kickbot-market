@@ -1094,8 +1094,9 @@
                             <th style="width:10%">Sıra</th>
                             <th style="width:30%">Sekme Adı (Görünen)</th>
                             <th style="width:15%">ID</th>
-                            <th style="width:20%">Görünürlük</th>
-                            <th style="width:20%">YENİ Etiketi</th>
+                            <th style="width:15%">Görünürlük</th>
+                            <th style="width:15%">NEW 🔥</th>
+                            <th style="width:15%">🔒 Kilitli (Bakım)</th>
                         </tr>
                     </thead>
                     <tbody id="shop-tabs-tbody">
@@ -2728,6 +2729,12 @@
                                     <span class="slider"></span>
                                 </label>
                             </td>
+                            <td>
+                                <label class="switch">
+                                    <input type="checkbox" class="shop-tab-locked" data-id="${id}" ${config.locked ? 'checked' : ''}>
+                                    <span class="slider" style="background-color: ${config.locked ? '#ff4444' : '#ccc'}"></span>
+                                </label>
+                            </td>
                         `;
                         tbody.appendChild(tr);
                     });
@@ -2749,7 +2756,8 @@
                         order: parseInt(row.querySelector('.shop-tab-order').value),
                         text: textInput.value,
                         enabled: row.querySelector('.shop-tab-enabled').checked,
-                        showNew: row.querySelector('.shop-tab-new').checked
+                        showNew: row.querySelector('.shop-tab-new').checked,
+                        locked: row.querySelector('.shop-tab-locked').checked
                     };
                 });
 

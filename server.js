@@ -1304,7 +1304,7 @@ function getRandomStockNews(name, type) {
 // HELPER: Günlük Limit Kontrolü (%25-50)
 function applyDailyLimit(code, newPrice, dailyStartPrice) {
     if (!dailyStartPrice || dailyStartPrice <= 0) return newPrice;
-    const maxChangeLimit = 25 + (code.charCodeAt(0) % 26); // 25-50%
+    const maxChangeLimit = 15; // Sabit %15 (Kullanıcı isteği)
     const maxPrice = Math.floor(dailyStartPrice * (1 + maxChangeLimit / 100));
     const minPrice = Math.ceil(dailyStartPrice * (1 - maxChangeLimit / 100));
 
@@ -2106,24 +2106,48 @@ app.post('/admin-api/trigger-news', authAdmin, hasPerm('stocks'), async (req, re
 });
 
 // --- MAĞAZA SEKMELERİ YÖNETİMİ ---
+const defaultTabs = {
+    career: { enabled: true, showNew: false, locked: false, order: 0, text: "💼 Meslek & Kariyer" },
+    market: { enabled: true, showNew: false, locked: false, order: 1, text: "🛒 Market" },
+    leaderboard: { enabled: true, showNew: false, locked: false, order: 2, text: "🏆 Liderlik" },
+    borsa: { enabled: true, showNew: false, locked: false, order: 3, text: "📈 Borsa" },
+    emlak: { enabled: true, showNew: false, locked: false, order: 4, text: "🏠 Emlak" },
+    business: { enabled: true, showNew: true, locked: false, order: 5, text: "🏪 İşletmeler" },
+    marketplace: { enabled: true, showNew: true, locked: false, order: 6, text: "🛍️ Pazar Yeri" },
+    gangs: { enabled: true, showNew: false, locked: false, order: 7, text: "🏴 Çeteler" },
+    quests: { enabled: true, showNew: false, locked: false, order: 8, text: "🎯 Görevler" },
+    commands: { enabled: true, showNew: false, locked: false, order: 9, text: "📜 Komutlar" },
+    stats: { enabled: true, showNew: false, locked: false, order: 10, text: "📊 İstatistikler" },
+    profile: { enabled: true, showNew: false, locked: false, order: 11, text: "👤 Profilim" }
+};
+
+// Helper: Sekme Kilidi Kontrolü
+async function checkTabLock(tabName, username) {
+    if (username.toLowerCase() === 'omegacyr') return false; // Omegacyr etkilenmez
+
+    try {
+        const snap = await db.ref('settings/shop_tabs/' + tabName).once('value');
+        const tab = snap.val();
+        // Varsayılan değer kontrolü (Db'de yoksa default'a bak)
+        if (!tab && defaultTabs[tabName]) return defaultTabs[tabName].locked;
+        return tab ? tab.locked : false;
+    } catch (e) {
+        return false;
+    }
+}
+
 app.get('/api/shop-tabs', async (req, res) => {
     try {
         const snap = await db.ref('settings/shop_tabs').once('value');
-        const defaultTabs = {
-            career: { enabled: true, showNew: false, order: 0, text: "💼 Meslek & Kariyer" },
-            market: { enabled: true, showNew: false, order: 1, text: "🛒 Market" },
-            leaderboard: { enabled: true, showNew: false, order: 2, text: "🏆 Liderlik" },
-            borsa: { enabled: true, showNew: false, order: 3, text: "📈 Borsa" },
-            emlak: { enabled: true, showNew: false, order: 4, text: "🏠 Emlak" },
-            business: { enabled: true, showNew: true, order: 5, text: "🏪 İşletmeler" },
-            marketplace: { enabled: true, showNew: true, order: 6, text: "🛍️ Pazar Yeri" },
-            gangs: { enabled: true, showNew: false, order: 7, text: "🏴 Çeteler" },
-            quests: { enabled: true, showNew: false, order: 8, text: "🎯 Görevler" },
-            commands: { enabled: true, showNew: false, order: 9, text: "📜 Komutlar" },
-            stats: { enabled: true, showNew: false, order: 10, text: "📊 İstatistikler" },
-            profile: { enabled: true, showNew: false, order: 11, text: "👤 Profilim" }
-        };
-        const tabs = snap.val() || defaultTabs;
+        let tabs = snap.val();
+        if (!tabs) tabs = defaultTabs;
+
+        // Eksik alanları default ile doldur (özellikle yeni eklenen 'locked' için)
+        for (const key in defaultTabs) {
+            if (!tabs[key]) tabs[key] = defaultTabs[key];
+            if (tabs[key].locked === undefined) tabs[key].locked = false;
+        }
+
         res.json({ success: true, tabs });
     } catch (e) {
         res.json({ success: false, error: e.message });
@@ -2135,7 +2159,7 @@ app.post('/admin-api/shop-tabs/update', authAdmin, hasPerm('settings'), async (r
         const { tabs } = req.body;
         if (!tabs) return res.json({ success: false, error: 'Eksik bilgi' });
         await db.ref('settings/shop_tabs').set(tabs);
-        addLog("Mağaza Ayarları", "Sekme görünürlüğü/yeni etiketi güncellendi.");
+        addLog("Mağaza Ayarları", "Sekme görünürlüğü/kilit durumu güncellendi.");
         res.json({ success: true, message: "Mağaza sekmeleri güncellendi!" });
     } catch (e) {
         res.json({ success: false, error: e.message });
@@ -2887,6 +2911,11 @@ app.post('/api/borsa/buy', transactionLimiter, async (req, res) => {
             return res.status(403).json({ success: false, error: "Borsa şu anda alım işlemlerine kapalıdır!" });
         }
 
+        // KİLİT KONTROLÜ
+        if (await checkTabLock('borsa', req.body.username)) {
+            return res.json({ success: false, error: "Borsa şu an bakımda veya erişime kapalı! 🔒" });
+        }
+
         let { username, code, amount, idempotencyKey } = req.body;
 
         // GÜVENLİK: Username sanitization (NoSQL Injection koruması)
@@ -2980,6 +3009,11 @@ app.post('/api/borsa/sell', transactionLimiter, async (req, res) => {
         const borsaSnap = await db.ref('settings/borsa_active').once('value');
         if (borsaSnap.val() === false) {
             return res.status(403).json({ success: false, error: "Borsa şu anda satım işlemlerine kapalıdır!" });
+        }
+
+        // KİLİT KONTROLÜ
+        if (await checkTabLock('borsa', req.body.username)) {
+            return res.json({ success: false, error: "Borsa şu an bakımda veya erişime kapalı! 🔒" });
         }
 
         let { username, code, amount, idempotencyKey } = req.body;
@@ -3285,6 +3319,11 @@ app.get('/api/real-estate/properties/:cityId', async (req, res) => {
 app.post('/api/real-estate/buy', async (req, res) => {
     try {
         const { username, cityId, propertyId } = req.body;
+
+        // KİLİT KONTROLÜ
+        if (await checkTabLock('emlak', username)) {
+            return res.json({ success: false, error: "Emlak şu an bakımda veya erişime kapalı! 🔒" });
+        }
 
         const userRef = db.ref('users/' + username);
         const userSnap = await userRef.once('value');
@@ -3755,6 +3794,12 @@ app.get('/api/real-estate/properties/:cityId', async (req, res) => {
 
 app.post('/api/real-estate/buy', async (req, res) => {
     const { username, cityId, propertyId } = req.body;
+
+    // KİLİT KONTROLÜ
+    if (await checkTabLock('emlak', username)) {
+        return res.json({ success: false, error: "Emlak şu an bakımda veya erişime kapalı! 🔒" });
+    }
+
     if (!username || !cityId || !propertyId) return res.json({ success: false, error: "Eksik bilgi!" });
 
     try {
@@ -9982,14 +10027,12 @@ app.post('/api/business/create', transactionLimiter, async (req, res) => {
             }
         }
 
-        // Mülkü işletmeyle ilişkilendir
-        await db.ref('users/' + username.toLowerCase() + '/properties/' + propertyId).update({
-            usedBy: 'business',
-            businessId: null // henüz oluşturulmadı, aşağıda güncelleyeceğiz
-        });
+        // Mülkü 'usedBy' olarak işaretle (İşletme henüz oluşmadı ama rezerve edelim)
+        // (Asıl update aşağıda atomic olarak yapılabilir ama şimdilik burada kalsın)
 
-        // İşletme oluştur
+        // İşletme ID oluştur
         const businessId = 'biz_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+
         const newBusiness = {
             id: businessId,
             type: businessType,
@@ -9997,16 +10040,16 @@ app.post('/api/business/create', transactionLimiter, async (req, res) => {
             city: city,
             owner: username.toLowerCase(),
             level: 1,
-            health: 100, // Bakım durumu (0-100)
-            inventory: {}, // Stok
-            advertising: 0, // Reklam seviyesi
+            health: 100,
+            inventory: {},
+            advertising: 0,
             is_active: true,
             total_sales: 0,
             total_revenue: 0,
             last_production: 0,
             last_maintenance: Date.now(),
             created_at: Date.now(),
-            propertyId: propertyId || null
+            propertyId: propertyId
         };
 
         // Firebase'e kaydet
@@ -10016,17 +10059,37 @@ app.post('/api/business/create', transactionLimiter, async (req, res) => {
         const userBusinesses = user.businesses || [];
         await db.ref('users/' + username.toLowerCase()).update({
             balance: (user.balance || 0) - bizType.setupCost,
-            businesses: [...userBusinesses, businessId]
+            businesses: [...userBusinesses, businessId],
+            ['properties/' + propertyId + '/usedBy']: businessId
         });
 
-        // Mülke businessId'yi yaz
-        await db.ref('users/' + username.toLowerCase() + '/properties/' + propertyId).update({
-            businessId: businessId
-        });
+        // Log ekle
+        addLog('İşletme Kuruldu', `${username} ${city} şehrinde ${bizType.name} kurdu.`, 'business');
 
-        res.json({ success: true, message: `${bizType.name} kuruldu! ${bizType.icon}`, businessId });
+
+
+        res.json({ success: true, message: `${bizType.name} başarıyla kuruldu! 🎉`, businessId });
     } catch (e) {
         res.json({ success: false, error: e.message });
+    }
+});
+
+// Kullanıcının işletmelerini getir
+app.get('/api/business/my/:username', async (req, res) => {
+    try {
+        const username = req.params.username.toLowerCase();
+        const snap = await db.ref('businesses').orderByChild('owner').equalTo(username).once('value');
+        const businesses = snap.val() || {};
+
+        // Diziye çevir
+        const businessList = Object.keys(businesses).map(key => ({
+            id: key,
+            ...businesses[key]
+        }));
+
+        res.json({ success: true, businesses: businessList });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
     }
 });
 
@@ -10268,6 +10331,11 @@ app.post('/api/business/produce', transactionLimiter, async (req, res) => {
         username = sanitizeUsername(username);
         if (!username) {
             return res.json({ success: false, error: "Geçersiz kullanıcı adı!" });
+        }
+
+        // KİLİT KONTROLÜ
+        if (await checkTabLock('business', username)) {
+            return res.json({ success: false, error: "İşletmeler şu an bakımda veya erişime kapalı! 🔒" });
         }
 
         // GÜVENLİK: BusinessId validation
@@ -11321,6 +11389,11 @@ app.post('/api/marketplace/create-listing', async (req, res) => {
     try {
         const { username, productCode, quantity, pricePerUnit, city } = req.body;
 
+        // KİLİT KONTROLÜ
+        if (await checkTabLock('marketplace', username)) {
+            return res.json({ success: false, error: "Pazar Yeri şu an bakımda veya erişime kapalı! 🔒" });
+        }
+
         // Validasyon
         if (!username || !productCode || !quantity || !pricePerUnit || !city) {
             return res.json({ success: false, error: 'Eksik bilgi!' });
@@ -11368,6 +11441,12 @@ app.post('/api/marketplace/create-listing', async (req, res) => {
 app.post('/api/marketplace/buy-listing', transactionLimiter, async (req, res) => {
     try {
         const { username, listingId, targetCity, buyQty } = req.body;
+
+        // KİLİT KONTROLÜ
+        if (await checkTabLock('marketplace', username)) {
+            return res.json({ success: false, error: "Pazar Yeri şu an bakımda veya erişime kapalı! 🔒" });
+        }
+
         const purchaseQty = parseInt(buyQty) || 0;
 
         if (purchaseQty <= 0) return res.json({ success: false, error: 'Geçersiz miktar!' });
@@ -11472,6 +11551,11 @@ app.post('/api/marketplace/buy-listing', transactionLimiter, async (req, res) =>
 app.post('/api/marketplace/cancel-listing', async (req, res) => {
     try {
         const { username, listingId } = req.body;
+
+        // KİLİT KONTROLÜ
+        if (await checkTabLock('marketplace', username)) {
+            return res.json({ success: false, error: "Pazar Yeri şu an bakımda veya erişime kapalı! 🔒" });
+        }
 
         const listingSnap = await db.ref('marketplace/' + listingId).once('value');
         const listing = listingSnap.val();
