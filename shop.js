@@ -341,6 +341,7 @@ async function init() {
     const savedUser = localStorage.getItem('aloskegang_user');
     renderFreeCommands();
     loadDevlogs(); // Duyuruları yükle
+    renderDynamicTabs(); // Sekmeleri dinamik yükle
 
     // Devlog gizleme durumunu kontrol et
     const isDevlogVisible = localStorage.getItem('devlog_visible') !== 'false';
@@ -3483,14 +3484,20 @@ function renderMarketEvents() {
     if (!container) return;
 
     if (marketEvents.length === 0) {
-        container.innerHTML = '<span style="opacity:0.7">Şu an aktif küresel bir olay yok.</span>';
+        container.innerHTML = '<div style="opacity:0.5; font-size:0.8rem; padding:10px; text-align:center;">Şu an aktif küresel bir olay yok.</div>';
         return;
     }
 
     container.innerHTML = marketEvents.map(e => `
-        <div class="glass-panel" style="padding:10px; margin-bottom:10px; border-left:4px solid var(--primary);">
-            <div style="font-weight:700; color:var(--primary); margin-bottom:4px;">${e.name}</div>
-            <div style="font-size:0.8rem; opacity:0.8;">${e.desc || 'Piyasa koşulları değişiyor...'}</div>
+        <div class="market-event-card" style="padding:14px; margin-bottom:12px; background:rgba(255,255,255,0.02); border-radius:14px; border:1px solid rgba(255,255,255,0.06); position:relative; overflow:hidden; display:flex; align-items:start; gap:12px; transition:0.3s; background: linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,165,0,0.02));">
+            <div style="position:absolute; left:0; top:0; bottom:0; width:3px; background:linear-gradient(to bottom, #ffa500, #ff4500); box-shadow: 0 0 10px rgba(255,165,0,0.5);"></div>
+            <div style="font-size:1.4rem; filter: drop-shadow(0 0 5px rgba(255,255,255,0.2));">🗞️</div>
+            <div style="flex:1;">
+                <div style="font-weight:800; color:#fff; font-size:0.95rem; margin-bottom:4px; letter-spacing:0.3px;">
+                    ${e.name}
+                </div>
+                <div style="font-size:0.8rem; color:rgba(255,255,255,0.6); font-weight:500; line-height:1.5;">${e.desc || 'Küresel piyasa koşulları bu olaydan etkileniyor.'}</div>
+            </div>
         </div>
     `).join('');
 }
@@ -3809,10 +3816,14 @@ async function showCreateBusinessModal(typeCode) {
 
     try {
         // Kullanıcının mülklerini kontrol et
-        const userRes = await fetch('/api/user/info?username=' + currentUser);
+        const userRes = await fetch('/api/user/' + currentUser);
         const userData = await userRes.json();
-        const user = userData.user || {};
-        const properties = user.properties || [];
+        const user = userData.user || userData; // handle different API response structures
+
+        let properties = user.properties || [];
+        if (!Array.isArray(properties)) {
+            properties = Object.values(properties);
+        }
 
         // Hangi tip mülk gerekli? (Retail -> shop, Diğerleri -> land)
         const requiredCategory = (type.category === 'retail') ? 'shop' : 'land';
@@ -4423,6 +4434,55 @@ async function cancelMarketListing(listingId) {
             showToast('Hata: ' + e.message, 'error');
         }
     });
+}
+
+async function renderDynamicTabs() {
+    try {
+        const res = await fetch('/api/shop-tabs');
+        const data = await res.json();
+        if (!data.success) return;
+
+        const nav = document.querySelector('.tabs-nav');
+        if (!nav) return;
+
+        const tabs = Object.entries(data.tabs)
+            .sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
+
+        let html = '';
+        tabs.forEach(([id, config]) => {
+            if (!config.enabled) return;
+
+            const isNew = config.showNew;
+            const newBadge = isNew ? `
+                <span style="background:linear-gradient(90deg, #00ff88, #00ccff); color:black; font-size:0.6rem; padding:2px 6px; border-radius:4px; margin-left:8px; font-weight:800; box-shadow: 0 0 10px rgba(0,255,136,0.3); animation: pulse-new 2s infinite;">YENİ</span>
+            ` : '';
+
+            html += `
+                <button class="tab-btn ${id === 'career' ? 'active' : ''}" id="tab-btn-${id}" onclick="switchTab('${id}')">
+                    ${config.text} ${newBadge}
+                </button>
+            `;
+        });
+
+        nav.innerHTML = html;
+
+        // Pulse animasyonu CSS'e ekle (Eğer yoksa)
+        if (!document.getElementById('pulse-anim-style')) {
+            const style = document.createElement('style');
+            style.id = 'pulse-anim-style';
+            style.textContent = `
+                @keyframes pulse-new {
+                    0% { transform: scale(1); filter: brightness(1); }
+                    50% { transform: scale(1.05); filter: brightness(1.2); }
+                    100% { transform: scale(1); filter: brightness(1); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+    } catch (e) {
+        console.error('Tabs error:', e);
+    }
 }
 
 // ==================== WAREHOUSE FONKSİYONLARI ====================

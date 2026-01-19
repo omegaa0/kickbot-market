@@ -585,6 +585,8 @@
             <button id="tab-memory" class="tab-btn" onclick="showTab('memory'); loadMemory();">🧠 Bot Hafızası</button>
             <button id="tab-bot-commands" class="tab-btn" onclick="showTab('bot-commands')">🤖 Bot Komutları</button>
             <button id="tab-global" class="tab-btn" onclick="showTab('global')">⚙️ Duyuru</button>
+            <button id="tab-shop-nav" class="tab-btn" onclick="showTab('shop-nav'); loadShopSettings();">🛒 Mağaza
+                Ayarları</button>
             <button id="tab-admins" class="tab-btn" style="display:none;" onclick="showTab('admins'); loadAdmins();">🔐
                 Admin Yetkileri</button>
         </div>
@@ -1074,6 +1076,38 @@
 
         </div>
 
+        <!-- SHOP NAV MANAGEMENT -->
+        <div id="shop-nav" class="section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 style="margin:0;">🛒 Mağaza Navigasyon Yönetimi</h2>
+                <button class="btn"
+                    style="width: auto; padding: 0 20px; height: 45px; background:var(--primary); color:#000; font-weight:800;"
+                    onclick="saveShopTabs()">💾 AYARLARI KAYDET</button>
+            </div>
+            <p style="color:var(--muted); margin-bottom:20px;">Mağaza üst barındaki sekmeleri açıp kapatabilir,
+                isimlerini değiştirebilir ve 'YENİ' etiketini kontrol edebilirsiniz.</p>
+
+            <div class="table-container">
+                <table style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th style="width:10%">Sıra</th>
+                            <th style="width:30%">Sekme Adı (Görünen)</th>
+                            <th style="width:15%">ID</th>
+                            <th style="width:20%">Görünürlük</th>
+                            <th style="width:20%">YENİ Etiketi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="shop-tabs-tbody">
+                        <tr>
+                            <td colspan="5" style="text-align:center; padding:20px; color:var(--muted);">Sekmeler
+                                yükleniyor...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- BALANCE MODAL -->
         <div id="balanceModal" class="modal">
             <div class="card" style="width:350px;">
@@ -1313,6 +1347,8 @@
                     loadStocks();
                 } else if (id === 'global') {
                     loadAnnouncements();
+                } else if (id === 'shop-nav') {
+                    loadShopSettings();
                 } else {
                     if (logInterval) { clearInterval(logInterval); logInterval = null; }
                 }
@@ -2661,6 +2697,77 @@
                     body: JSON.stringify({ key: sessionKey, id })
                 });
                 if ((await res.json()).success) loadMemory();
+            }
+
+            async function loadShopSettings() {
+                try {
+                    const res = await fetch('/api/shop-tabs');
+                    const data = await res.json();
+                    if (!data.success) return;
+
+                    const tbody = document.getElementById('shop-tabs-tbody');
+                    tbody.innerHTML = "";
+
+                    const tabs = Object.entries(data.tabs).sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
+
+                    tabs.forEach(([id, config]) => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td><input type="number" class="inp shop-tab-order" data-id="${id}" value="${config.order || 0}" style="width:60px; margin:0; height:35px; text-align:center; padding: 0;"></td>
+                            <td><input type="text" class="inp shop-tab-text" data-id="${id}" value="${config.text}" style="margin:0; height:35px; text-align: left; padding: 0 10px;"></td>
+                            <td style="font-family:monospace; color:var(--muted);">${id}</td>
+                            <td>
+                                <label class="switch">
+                                    <input type="checkbox" class="shop-tab-enabled" data-id="${id}" ${config.enabled ? 'checked' : ''}>
+                                    <span class="slider"></span>
+                                </label>
+                            </td>
+                            <td>
+                                <label class="switch">
+                                    <input type="checkbox" class="shop-tab-new" data-id="${id}" ${config.showNew ? 'checked' : ''}>
+                                    <span class="slider"></span>
+                                </label>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } catch (e) {
+                    showToast("Sekme ayarları yüklenemedi!");
+                }
+            }
+
+            async function saveShopTabs() {
+                const tabs = {};
+                const rows = document.querySelectorAll('#shop-tabs-tbody tr');
+
+                rows.forEach(row => {
+                    const textInput = row.querySelector('.shop-tab-text');
+                    if (!textInput) return;
+
+                    const id = textInput.dataset.id;
+                    tabs[id] = {
+                        order: parseInt(row.querySelector('.shop-tab-order').value),
+                        text: textInput.value,
+                        enabled: row.querySelector('.shop-tab-enabled').checked,
+                        showNew: row.querySelector('.shop-tab-new').checked
+                    };
+                });
+
+                try {
+                    const res = await fetch('/admin-api/shop-tabs/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ key: sessionKey, tabs })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        showAdminAlert("Ayarlar başarıyla kaydedildi!", "Başarılı");
+                    } else {
+                        showAdminAlert(data.error, "Hata");
+                    }
+                } catch (e) {
+                    showAdminAlert("Sunucu hatası!");
+                }
             }
 
             function showToast(msg) {
