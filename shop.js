@@ -4671,26 +4671,45 @@ async function loadWarehouseInfo() {
             // Ana Üs (Base City) Durumu
             if (baseEl) {
                 if (baseCity) {
-                    baseEl.innerHTML = `<div style="padding:10px; background:rgba(0,255,0,0.1); border-radius:8px; border:1px solid rgba(0,255,0,0.2);">
-                        📍 Ana Lojistik Üssü: <strong>${baseCity}</strong>
-                        <div style="font-size:0.8rem; color:#aaa; margin-top:5px;">Kargo ücretleri bu şehre göre hesaplanır.</div>
+                    baseEl.innerHTML = `<div style="padding:20px; background:linear-gradient(135deg, rgba(0,255,136,0.1), rgba(0,0,0,0.3)); border-radius:12px; border:1px solid rgba(0,255,136,0.3); display:flex; align-items:center; gap:15px; box-shadow:0 4px 15px rgba(0,255,136,0.1);">
+                        <div style="font-size:2.5rem; background:rgba(0,0,0,0.3); width:60px; height:60px; display:flex; align-items:center; justify-content:center; border-radius:50%;">📍</div>
+                        <div>
+                            <div style="font-size:0.75rem; color:var(--primary); font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px;">MERKEZ LOJİSTİK ÜSSÜ</div>
+                            <div style="font-size:1.8rem; font-weight:900; color:white; line-height:1;">${baseCity}</div>
+                            <div style="font-size:0.85rem; color:#aaa; margin-top:5px;">Tüm kargo operasyonları bu merkezden yönetiliyor.</div>
+                        </div>
                     </div>`;
                 } else {
-                    baseEl.innerHTML = `
-                        <div style="padding:15px; background:rgba(255,200,0,0.1); border-radius:8px; border:1px solid rgba(255,200,0,0.2);">
-                            ⚠️ Henüz bir ANA ÜS seçmedin!
-                            <p style="font-size:0.85rem; color:#ccc; margin-bottom:10px;">Pazar yerinden alışveriş yapmak ve kargo hesaplamaları için bir merkez belirlemelisin. (Dikkat: Sadece 1 kez seçilebilir!)</p>
-                            <div style="display:flex; gap:10px;">
-                                <select id="base-city-select" class="inp" style="margin:0;">
-                                    <option value="İstanbul">İstanbul</option>
-                                    <option value="Ankara">Ankara</option>
-                                    <option value="İzmir">İzmir</option>
-                                    <option value="Antalya">Antalya</option>
-                                    <option value="Bursa">Bursa</option>
-                                    <option value="Amasya">Amasya</option>
-                                </select>
-                                <button class="btn btn-primary" onclick="setWarehouseBase()">SEÇ VE KAYDET</button>
+                    // Seçilebilir Şehirler (Backend validasyonuna uygun olmalı)
+                    const allowedCities = ['İstanbul', 'Ankara', 'İzmir', 'Antalya', 'Bursa', 'Amasya'];
+
+                    let cityGridHtml = '';
+                    allowedCities.forEach(cityName => {
+                        // EMLAK_CITIES'den veri bulmaya çalış ama yoksa da sorun değil, ismi kullan
+                        const cityData = EMLAK_CITIES.find(c => c.name === cityName) || { name: cityName };
+
+                        cityGridHtml += `
+                            <div class="city-select-card" onclick="selectBaseCityCard('${cityName}', this)" 
+                                 style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:15px; cursor:pointer; text-align:center; transition:all 0.2s;">
+                                <div style="font-size:1.5rem; margin-bottom:5px;">🏙️</div>
+                                <div style="font-weight:700; font-size:1rem;">${cityData.name}</div>
                             </div>
+                         `;
+                    });
+
+                    baseEl.innerHTML = `
+                        <div style="padding:20px; background:rgba(255,50,50,0.05); border-radius:12px; border:1px dashed rgba(255,50,50,0.3);">
+                            <div style="text-align:center; margin-bottom:20px;">
+                                <h4 style="color:#ff6666; margin-bottom:5px;">⚠️ Merkez Üs Seçimi Yapılmadı</h4>
+                                <p style="font-size:0.9rem; color:#ccc;">Lojistik operasyonları başlatmak için bir ana merkez seçmelisin. <br><span style="color:#ff6666; font-weight:bold;">Bu işlem kalıcıdır ve değiştirilemez!</span></p>
+                            </div>
+                            
+                            <div id="base-city-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap:10px; margin-bottom:20px;">
+                                ${cityGridHtml}
+                            </div>
+                            
+                            <input type="hidden" id="selected-base-city-val">
+                            <button id="save-base-btn" class="primary-btn" onclick="saveBaseCity()" disabled style="width:100%; opacity:0.5; cursor:not-allowed;">MERKEZİ ONAYLA</button>
                         </div>
                     `;
                 }
@@ -4712,8 +4731,34 @@ async function loadWarehouseInfo() {
     }
 }
 
-async function setWarehouseBase() {
-    const city = document.getElementById('base-city-select').value;
+// Helper function for new Base City Selection UI
+function selectBaseCityCard(city, cardEl) {
+    // Tüm kartların active class'ını kaldır
+    document.querySelectorAll('.city-select-card').forEach(el => {
+        el.style.background = 'rgba(255,255,255,0.05)';
+        el.style.borderColor = 'rgba(255,255,255,0.1)';
+        el.style.transform = 'scale(1)';
+    });
+
+    // Seçileni active yap
+    cardEl.style.background = 'rgba(0,255,136,0.1)';
+    cardEl.style.borderColor = 'var(--primary)';
+    cardEl.style.transform = 'scale(1.05)';
+
+    // Değeri set et
+    document.getElementById('selected-base-city-val').value = city;
+
+    // Butonu aç
+    const btn = document.getElementById('save-base-btn');
+    btn.disabled = false;
+    btn.style.opacity = 1;
+    btn.style.cursor = 'pointer';
+}
+
+async function saveBaseCity() {
+    const city = document.getElementById('selected-base-city-val').value;
+    if (!city) return showToast('Lütfen bir şehir seçin!', 'error');
+
     showConfirm('Ana Üs Seçimi', `${city} şehrini ana üssün olarak belirlemek istiyor musun? Bu işlem geri alınamaz!`).then(async (c) => {
         if (!c) return;
         try {
