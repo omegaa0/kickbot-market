@@ -5280,6 +5280,13 @@ app.post('/webhook/kick', async (req, res) => {
 
         const reply = (msg) => sendChatMessage(msg, broadcasterId);
 
+        // --- GLOBAL BOT MASTER SWITCH ---
+        // Sadece !bot-kontrol komutu geçebilir
+        // Diğer tüm komutlar engellenir.
+        if (!botMasterSwitch && lowMsg.startsWith('!') && !lowMsg.startsWith('!bot-kontrol')) {
+            return;
+        }
+
         // --- RIG KONTROLÜ ---
         const checkRig = () => {
             const r = riggedGambles[user.toLowerCase()];
