@@ -571,12 +571,39 @@
 
                 <!-- Browse Listings -->
                 <div id="market-sub-browse" class="market-sub-content">
+                    <div class="glass-panel"
+                        style="padding:15px; margin-bottom:20px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                        <input type="text" id="market-search" placeholder="Ürün ara..." class="borsa-input"
+                            style="flex:1; margin:0;" oninput="loadMarketListings(1)">
+                        <select id="market-category-filter" class="borsa-input" style="width:150px; margin:0;"
+                            onchange="loadMarketListings(1)">
+                            <option value="">Tüm Kategoriler</option>
+                            <option value="raw">Hammaddeler</option>
+                            <option value="processed">İşlenmiş Ürünler</option>
+                            <option value="fresh">Taze Ürünler</option>
+                            <option value="animal">Hayvansal Ürünler</option>
+                            <option value="premium">Premium</option>
+                        </select>
+                        <select id="market-city-filter" class="borsa-input" style="width:150px; margin:0;"
+                            onchange="loadMarketListings(1)">
+                            <option value="">Tüm Şehirler</option>
+                            <option value="İstanbul">İstanbul</option>
+                            <option value="Ankara">Ankara</option>
+                            <option value="İzmir">İzmir</option>
+                            <option value="Amasya">Amasya</option>
+                            <option value="Bursa">Bursa</option>
+                            <option value="Antalya">Antalya</option>
+                        </select>
+                    </div>
+
                     <div id="marketplace-listings"
                         style="display:grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap:20px;">
-                        <div style="grid-column:1/-1; text-align:center; padding:60px; opacity:0.5;">
-                            <div class="loader"></div>
-                            <p style="margin-top:15px;">İlanlar yükleniyor...</p>
-                        </div>
+                        <!-- JS fills -->
+                    </div>
+
+                    <div id="market-pagination"
+                        style="display:flex; justify-content:center; gap:10px; margin-top:30px;">
+                        <!-- JS fills -->
                     </div>
                 </div>
 
@@ -954,7 +981,7 @@
     <div id="toast" class="toast hidden"></div>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
-    <script src="shop.min.js"></script>
+    <script src="shop.js"></script>
 </body>
 
 </html>

@@ -1079,7 +1079,7 @@ const authAdmin = async (req, res, next) => {
                     req.adminUser.role = 'master';
                     req.adminUser.permissions = {
                         channels: true, users: true, troll: true, logs: true,
-                        quests: true, stocks: true, memory: true, global: true, admins: true
+                        quests: true, stocks: true, memory: true, global: true, admins: true, settings: true
                     };
                 }
 
@@ -1095,7 +1095,7 @@ const authAdmin = async (req, res, next) => {
             role: 'master',
             permissions: {
                 channels: true, users: true, troll: true, logs: true,
-                quests: true, stocks: true, memory: true, global: true, admins: true
+                quests: true, stocks: true, memory: true, global: true, admins: true, settings: true
             }
         };
         return next();
@@ -1498,6 +1498,8 @@ const BUSINESS_TYPES = {
     "hali_fabrikasi": { name: "Halı Fabrikası", category: "production", setupCost: 35000000, icon: "🪢", taxRate: 0.10, baseMaintenance: 65000, produces: ["hali", "kilim"], requires: ["yun", "iplik"], requiredLicense: "uretim_izni" },
     "camasir_makinesi_fabrikasi": { name: "Beyaz Eşya Fabrikası", category: "production", setupCost: 150000000, icon: "🏠", taxRate: 0.12, baseMaintenance: 120000, produces: ["camasir_makinesi", "buzdolabi", "bulasik_makinesi"], requires: ["metal", "plastik", "elektronik"], requiredLicense: "sanayi_ruhsati" },
     "gozluk_fabrikasi": { name: "Gözlük Fabrikası", category: "production", setupCost: 18000000, icon: "👓", taxRate: 0.09, baseMaintenance: 40000, produces: ["gozluk"], requires: ["cam", "plastik"], requiredLicense: "uretim_izni" },
+    "beton_santrali": { name: "Beton Santrali", category: "production", setupCost: 40000000, icon: "🏗️", taxRate: 0.10, baseMaintenance: 60000, produces: ["beton"], requires: ["cimento", "kum", "su"], requiredLicense: "sanayi_ruhsati" },
+    "tekstil_boya_fabrikasi": { name: "Boyahane", category: "production", setupCost: 12000000, icon: "🧶", taxRate: 0.08, baseMaintenance: 35000, produces: ["kumas_boyali"], requires: ["kumas", "boya"], requiredLicense: "uretim_izni" },
 
     // ==================== YENİ TARIM ====================
     "antep_fistigi": { name: "Antep Fıstığı Bahçesi", category: "farming", setupCost: 3500000, icon: "🥜", taxRate: 0.05, baseMaintenance: 15000, produces: ["antep_fistigi"], requires: [], requiredLicense: null },
@@ -1792,7 +1794,9 @@ const PRODUCTS = {
 
     // Tarım Ürünleri  
     "tutun": { name: "Tütün", basePrice: 800, category: "fresh", unit: "kg", icon: "🚬" },
-    "keten": { name: "Keten", basePrice: 120, category: "fresh", unit: "kg", icon: "🌾" }
+    "keten": { name: "Keten", basePrice: 120, category: "fresh", unit: "kg", icon: "🌾" },
+    "beton": { name: "Beton", basePrice: 500, category: "processed", unit: "m³", icon: "🏗️" },
+    "kumas_boyali": { name: "Boyalı Kumaş", basePrice: 450, category: "processed", unit: "m", icon: "🌈" }
 };
 
 // --- LİSANS SİSTEMİ ---
@@ -9966,7 +9970,7 @@ app.post('/api/business/create', transactionLimiter, async (req, res) => {
             if (!specProp) {
                 return res.json({ success: false, error: "Bu mülk size ait değil!" });
             }
-            if (specProp.city !== city) {
+            if (specProp.city !== city && specProp.cityId !== city) {
                 return res.json({ success: false, error: "Bu mülk başka şehirde!" });
             }
             if (specProp.category !== requiredPropType) {
@@ -11219,54 +11223,94 @@ async function collectBusinessTaxes() {
 // Pazar yerindeki tüm ilanları getir
 app.get('/api/marketplace/listings', async (req, res) => {
     try {
+        const { category, city, q, page = 1, limit = 20 } = req.query;
         const snap = await db.ref('marketplace').once('value');
         const allListings = snap.val() || {};
 
-        // Aktif ilanları filtrele
-        const activeListings = [];
+        let listings = [];
         for (const [id, listing] of Object.entries(allListings)) {
             if (listing.status === 'active') {
-                activeListings.push({ id, ...listing });
+                listings.push({ id, ...listing });
             }
         }
 
-        // --- SISTEM ÜRÜNLERİ (%10 Kalite) ---
-        // Her önemli ürün grubundan farklı şehirlerde sistem ilanları ekle
-        const SYSTEM_PRODUCTS = [
-            { code: 'ekmek', qty: 100, price: 15 },
-            { code: 'su', qty: 100, price: 10 },
-            { code: 'un', qty: 50, price: 80 },
-            { code: 'seker', qty: 50, price: 60 },
-            { code: 'yumurta', qty: 50, price: 80 },
-            { code: 'sut', qty: 50, price: 50 },
-            { code: 'domates', qty: 50, price: 35 },
-            { code: 'patates', qty: 100, price: 20 }
+        // --- SABİT SİSTEM ÜRÜNLERİ ---
+        const SYSTEM_BASE = [
+            { code: 'ekmek', qty: 100000, price: 15 },
+            { code: 'su', qty: 100000, price: 10 },
+            { code: 'un', qty: 50000, price: 80 },
+            { code: 'seker', qty: 50000, price: 60 },
+            { code: 'yumurta', qty: 50000, price: 80 },
+            { code: 'sut', qty: 50000, price: 50 },
+            { code: 'domates', qty: 50000, price: 35 },
+            { code: 'patates', qty: 100000, price: 20 },
+            { code: 'metal', qty: 20000, price: 200 },
+            { code: 'plastik', qty: 20000, price: 100 },
+            { code: 'kereste', qty: 20000, price: 150 },
+            { code: 'kum', qty: 50000, price: 30 }
         ];
 
         const CITIES = ['İstanbul', 'Ankara', 'İzmir', 'Amasya', 'Bursa', 'Antalya'];
 
-        SYSTEM_PRODUCTS.forEach(p => {
-            // Her ürün için 2-3 farklı şehirde ilan oluştur
-            const cityCount = 2 + Math.floor(Math.random() * 2);
-            const shuffledCities = [...CITIES].sort(() => 0.5 - Math.random());
-
-            for (let i = 0; i < cityCount; i++) {
-                activeListings.unshift({
-                    id: 'system_' + p.code + '_' + shuffledCities[i],
+        // Her şehir için sistem ilanlarını ekle (Stabil olması için random değil)
+        SYSTEM_BASE.forEach(p => {
+            CITIES.forEach(c => {
+                listings.push({
+                    id: `system_${p.code}_${c}`,
                     seller: 'SYSTEM',
                     productCode: p.code,
                     quantity: p.qty,
                     pricePerUnit: p.price,
                     totalPrice: p.qty * p.price,
                     quality: 10,
-                    city: shuffledCities[i],
+                    city: c,
                     isSystem: true,
-                    createdAt: Date.now()
+                    createdAt: 0
                 });
-            }
+            });
         });
 
-        res.json({ success: true, listings: activeListings });
+        // Filtreleme
+        if (category) {
+            listings = listings.filter(l => {
+                const prod = PRODUCTS[l.productCode];
+                return prod && prod.category === category;
+            });
+        }
+        if (city) {
+            listings = listings.filter(l => l.city === city);
+        }
+        if (q) {
+            const query = q.toLowerCase();
+            listings = listings.filter(l => {
+                const prod = PRODUCTS[l.productCode];
+                return prod && prod.name.toLowerCase().includes(query);
+            });
+        }
+
+        // Sıralama (En yeni önce, sistem ürünleri en sonda)
+        listings.sort((a, b) => {
+            if (a.isSystem && !b.isSystem) return 1;
+            if (!a.isSystem && b.isSystem) return -1;
+            return b.createdAt - a.createdAt;
+        });
+
+        // Sayfalama
+        const startIndex = (page - 1) * limit;
+        const endIndex = page * limit;
+        const totalPages = Math.ceil(listings.length / limit);
+        const pagedListings = listings.slice(startIndex, endIndex);
+
+        res.json({
+            success: true,
+            listings: pagedListings,
+            pagination: {
+                currentPage: parseInt(page),
+                totalPages,
+                totalItems: listings.length,
+                limit: parseInt(limit)
+            }
+        });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
@@ -11321,101 +11365,104 @@ app.post('/api/marketplace/create-listing', async (req, res) => {
 });
 
 // İlan satın al
-app.post('/api/marketplace/buy-listing', async (req, res) => {
+app.post('/api/marketplace/buy-listing', transactionLimiter, async (req, res) => {
     try {
-        const { username, listingId, targetCity } = req.body; // Alıcının bulunduğu şehir
+        const { username, listingId, targetCity, buyQty } = req.body;
+        const purchaseQty = parseInt(buyQty) || 0;
+
+        if (purchaseQty <= 0) return res.json({ success: false, error: 'Geçersiz miktar!' });
 
         let listing;
+        let isSystem = false;
+
         if (listingId.startsWith('system_')) {
-            // Sistem ilanı bilgilerini manuel oluştur (GET endpoint'i ile uyumlu)
+            isSystem = true;
             const parts = listingId.split('_');
             const code = parts[1];
             const city = parts[2];
 
-            const SYSTEM_DEFAULTS = {
-                'ekmek': { qty: 100, price: 15 }, 'su': { qty: 100, price: 10 },
-                'un': { qty: 50, price: 80 }, 'seker': { qty: 50, price: 60 },
-                'yumurta': { qty: 50, price: 80 }, 'sut': { qty: 50, price: 50 },
-                'domates': { qty: 50, price: 35 }, 'patates': { qty: 100, price: 20 }
-            };
-
-            const config = SYSTEM_DEFAULTS[code];
-            if (!config) return res.json({ success: false, error: 'Sistem ürünü bulunamadı!' });
+            const product = PRODUCTS[code];
+            if (!product) return res.json({ success: false, error: 'Ürün bulunamadı!' });
 
             listing = {
                 id: listingId,
                 seller: 'SYSTEM',
                 productCode: code,
-                quantity: config.qty,
-                pricePerUnit: config.price,
-                totalPrice: config.qty * config.price,
                 city: city,
-                quality: 10,
-                isSystem: true,
-                status: 'active'
+                pricePerUnit: product.basePrice,
+                quantity: 99999999
             };
         } else {
-            const listingSnap = await db.ref('marketplace/' + listingId).once('value');
-            listing = listingSnap.val();
+            const snap = await db.ref('marketplace/' + listingId).once('value');
+            listing = snap.val();
+            if (!listing || listing.status !== 'active') return res.json({ success: false, error: 'İlan artık aktif değil!' });
         }
 
-        if (!listing || listing.status !== 'active') {
-            return res.json({ success: false, error: 'İlan bulunamadı veya aktif değil!' });
+        if (purchaseQty > listing.quantity) return res.json({ success: false, error: 'İlanda bu kadar stok yok!' });
+
+        const userSnap = await db.ref('users/' + username).once('value');
+        const user = userSnap.val();
+        if (!user) return res.json({ success: false, error: 'Kullanıcı bulunamadı!' });
+
+        // Maliyet hesapla
+        const itemCost = listing.pricePerUnit * purchaseQty;
+
+        // Kargo ücreti hesapla
+        let shippingFee = 0;
+        if (listing.city !== targetCity && CITY_DISTANCES[listing.city] && CITY_DISTANCES[listing.city][targetCity]) {
+            const distance = CITY_DISTANCES[listing.city][targetCity];
+            shippingFee = Math.round(distance * LOGISTICS_COST_PER_KM * (purchaseQty / 100)); // Her 100 birim için km başına ücret
+            if (shippingFee < 500) shippingFee = 500; // Minimum kargo
         }
 
-        if (listing.seller === username) {
-            return res.json({ success: false, error: 'Kendi ilanını satın alamazsın!' });
+        const totalCost = itemCost + shippingFee;
+
+        if (user.balance < totalCost) {
+            return res.json({ success: false, error: `Yetersiz bakiye! Gerekli: ${totalCost.toLocaleString()} 💰` });
         }
 
-        // --- TAŞIMA ÜCRETİ HESAPLAMA ---
-        let transportFee = 0;
-        if (targetCity && listing.city && targetCity.trim() !== listing.city.trim()) {
-            transportFee = Math.ceil(listing.totalPrice * 0.10); // %10 Taşıma ücreti
-        }
-        const totalCost = listing.totalPrice + transportFee;
-
-        // Alıcının bakiyesini kontrol et
-        const buyerSnap = await db.ref('users/' + username).once('value');
-        const buyer = buyerSnap.val();
-        if (!buyer) return res.json({ success: false, error: 'Kullanıcı bulunamadı!' });
-
-        if ((buyer.balance || 0) < totalCost) {
-            const errorMsg = transportFee > 0
-                ? `Bakiye yetersiz! Ürün: ${listing.totalPrice} + Nakliye: ${transportFee} = Toplam: ${totalCost} 💰`
-                : `Bakiye yetersiz! (${listing.totalPrice} 💰)`;
-            return res.json({ success: false, error: errorMsg });
+        // Depo kontrol
+        const warehouseSnap = await db.ref('warehouses/' + username).once('value');
+        const warehouse = warehouseSnap.val() || { level: 1, currentUsage: 0 };
+        const capacity = WAREHOUSE_LEVELS[warehouse.level || 1].capacity;
+        if (warehouse.currentUsage + purchaseQty > capacity) {
+            return res.json({ success: false, error: 'Depo kapasitesi yetersiz!' });
         }
 
-        // Satıcı (Eğer sistem değilse)
-        let seller = null;
-        if (!listing.isSystem) {
+        // İşlemleri gerçekleştir
+        await db.ref('users/' + username + '/balance').set(user.balance - totalCost);
+
+        // Satıcıya ödeme yap (Sistem değilse)
+        if (!isSystem) {
             const sellerSnap = await db.ref('users/' + listing.seller).once('value');
-            seller = sellerSnap.val();
-            if (!seller) return res.json({ success: false, error: 'Satıcı bulunamadı!' });
-        }
-        // İşlem yap
-        await db.ref('users/' + username).update({
-            balance: (buyer.balance || 0) - (listing.totalPrice + transportFee),
-            ['inventory/' + listing.productCode]: ((buyer.inventory || {})[listing.productCode] || 0) + listing.quantity
-        });
+            const seller = sellerSnap.val();
+            if (seller) {
+                await db.ref('users/' + listing.seller + '/balance').set(seller.balance + itemCost);
+                addLog('Pazar Satışı', `${listing.seller} kullanıcısının ${listing.productCode} ilanı ${username} tarafından satın alındı. Gelir: ${itemCost} 💰`);
+            }
 
-        if (!listing.isSystem && seller) {
-            await db.ref('users/' + listing.seller).update({
-                balance: (seller.balance || 0) + listing.totalPrice
-            });
+            // İlanı güncelle veya sil
+            if (purchaseQty === listing.quantity) {
+                await db.ref('marketplace/' + listingId).set(null);
+            } else {
+                await db.ref('marketplace/' + listingId + '/quantity').set(listing.quantity - purchaseQty);
+            }
         }
 
-        // İlanı kaldır (Sistem ilanı değilse)
-        if (!listing.isSystem) {
-            await db.ref('marketplace/' + listingId).update({ status: 'sold', soldTo: username, soldAt: Date.now() });
-        }
+        // Depoya ekle
+        const inventory = user.inventory || {};
+        inventory[listing.productCode] = (inventory[listing.productCode] || 0) + purchaseQty;
+        await db.ref('users/' + username + '/inventory').set(inventory);
+        await db.ref('warehouses/' + username + '/currentUsage').set(warehouse.currentUsage + purchaseQty);
+
+        addLog('Pazar Alışı', `${username} kullanıcısı ${purchaseQty} ${listing.productCode} satın aldı. Toplam: ${totalCost.toLocaleString()} 💰 (Kargo: ${shippingFee.toLocaleString()})`);
 
         res.json({
             success: true,
-            message: transportFee > 0
-                ? `${listing.quantity} adet ürün satın alındı! (${transportFee} 💰 nakliye dahil)`
-                : `${listing.quantity} adet ürün satın alındı!`
+            message: `${purchaseQty} adet ürün başarıyla alındı! Kargo: ${shippingFee > 0 ? shippingFee.toLocaleString() + ' 💰' : 'Ücretsiz'}`,
+            balance: user.balance - totalCost
         });
+
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }

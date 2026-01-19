@@ -2177,6 +2177,39 @@ async function kickMember(target, gangId) {
     } catch (e) { showToast("Bağlantı hatası!", "error"); }
 }
 
+async function buyMarketListing(listingId, listingCity, pricePerUnit, maxQty, prodName, unit) {
+    showInput(`📦 Ürün Satın Al: ${prodName}`, `Kaç ${unit} satın almak istiyorsun? (Maks: ${maxQty.toLocaleString()})`, '1', async (buyQty) => {
+        const qty = parseInt(buyQty);
+        if (isNaN(qty) || qty <= 0 || qty > maxQty) {
+            return showToast('Geçersiz miktar!', 'error');
+        }
+
+        try {
+            const res = await fetch('/api/marketplace/buy-listing', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: currentUser,
+                    listingId,
+                    targetCity: userProfile.city || 'İstanbul',
+                    buyQty: qty
+                })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                showToast(data.message, 'success');
+                loadMarketListings(); // Yenile
+                loadProfile(); // Bakiyeyi yenile
+            } else {
+                showToast(data.error, 'error');
+            }
+        } catch (e) {
+            showToast('İşlem sırasında bir hata oluştu!', 'error');
+        }
+    });
+}
+
 function openDonateModal() {
     document.getElementById('gang-donate-modal').classList.remove('hidden');
     document.getElementById('gang-donate-input').value = '';
@@ -3489,14 +3522,17 @@ function renderMarketEvents() {
     }
 
     container.innerHTML = marketEvents.map(e => `
-        <div class="market-event-card" style="padding:14px; margin-bottom:12px; background:rgba(255,255,255,0.02); border-radius:14px; border:1px solid rgba(255,255,255,0.06); position:relative; overflow:hidden; display:flex; align-items:start; gap:12px; transition:0.3s; background: linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,165,0,0.02));">
-            <div style="position:absolute; left:0; top:0; bottom:0; width:3px; background:linear-gradient(to bottom, #ffa500, #ff4500); box-shadow: 0 0 10px rgba(255,165,0,0.5);"></div>
-            <div style="font-size:1.4rem; filter: drop-shadow(0 0 5px rgba(255,255,255,0.2));">🗞️</div>
+        <div class="glass-panel" style="padding:15px; margin-bottom:12px; border:none; background:rgba(255,165,0,0.05); border-left:4px solid #ffa500; display:flex; gap:12px; align-items:start;">
+            <div style="background:#ffa500; color:black; padding:5px; border-radius:8px; display:flex; align-items:center; justify-content:center; min-width:35px; height:35px;">
+                <span style="font-size:1.2rem;">📢</span>
+            </div>
             <div style="flex:1;">
-                <div style="font-weight:800; color:#fff; font-size:0.95rem; margin-bottom:4px; letter-spacing:0.3px;">
-                    ${e.name}
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <span style="font-weight:800; color:#ffa500; text-transform:uppercase; font-size:0.75rem; letter-spacing:1px;">FLAŞ HABER</span>
+                    <span style="font-size:0.7rem; color:#666;">AKTİF</span>
                 </div>
-                <div style="font-size:0.8rem; color:rgba(255,255,255,0.6); font-weight:500; line-height:1.5;">${e.desc || 'Küresel piyasa koşulları bu olaydan etkileniyor.'}</div>
+                <div style="font-weight:700; color:#fff; font-size:0.95rem; margin-bottom:5px;">${e.name}</div>
+                <div style="font-size:0.8rem; color:rgba(255,255,255,0.7); line-height:1.4;">${e.desc}</div>
             </div>
         </div>
     `).join('');
@@ -3782,29 +3818,29 @@ function renderMarketPrices() {
 
         for (const [code, prod] of catProducts) {
             const price = marketPrices[code] || prod.basePrice;
-            const basePrice = prod.basePrice;
 
-            // Fiyata göre durum seviyesi hesapla (1-5)
-            let conditionLevel = 3; // Varsayılan: Orta
-            const priceRatio = price / basePrice;
-
-            if (priceRatio <= 0.6) conditionLevel = 1; // Çok Düşük
-            else if (priceRatio <= 0.85) conditionLevel = 2; // Düşük
-            else if (priceRatio <= 1.15) conditionLevel = 3; // Orta
-            else if (priceRatio <= 1.4) conditionLevel = 4; // Yüksek
-            else conditionLevel = 5; // Çok Yüksek
+            // Fiyata göre "Piyasa Durumu" belirle (Base fiyata oranla)
+            const ratio = price / prod.basePrice;
+            let conditionLevel = 3;
+            if (ratio < 0.6) conditionLevel = 1;
+            else if (ratio < 0.9) conditionLevel = 2;
+            else if (ratio < 1.1) conditionLevel = 3;
+            else if (ratio < 1.4) conditionLevel = 4;
+            else conditionLevel = 5;
 
             const condition = conditionLabels[conditionLevel];
 
             html += `
                 <div style="background:rgba(0,0,0,0.3); padding:12px 15px; border-radius:10px; display:flex; justify-content:space-between; align-items:center; border-left:3px solid ${condition.color};">
-                    <span>${prod.icon} ${prod.name}</span>
+                    <div>
+                        <span>${prod.icon} ${prod.name}</span>
+                        <span style="font-size:0.75rem; color:#888; margin-left:5px;">(${prod.unit || 'adet'})</span>
+                    </div>
                     <span style="font-weight:800; color:${condition.color}; font-size:0.95rem;">${condition.name}</span>
                 </div>
             `;
         }
     }
-
     container.innerHTML = html || '<div style="text-align:center; padding:40px; opacity:0.5;">Piyasa verileri yükleniyor...</div>';
 }
 
@@ -4145,63 +4181,77 @@ async function sendGangChat() {
 
 // ==================== MARKETPLACE FONKSİYONLARI ====================
 function switchMarketTab(tab) {
-    document.querySelectorAll('.market-sub-content').forEach(c => c.classList.add('hidden'));
+    document.querySelectorAll('.market-sub-content').forEach(d => d.classList.add('hidden'));
     document.getElementById('market-sub-' + tab).classList.remove('hidden');
 
-    document.querySelectorAll('#tab-marketplace .sub-tab-btn').forEach(b => b.classList.remove('active'));
-    if (event && event.currentTarget) event.currentTarget.classList.add('active');
+    document.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.remove('active'));
+    if (window.event) window.event.currentTarget.classList.add('active');
 
-    if (tab === 'browse') loadMarketListings();
+    if (tab === 'browse') loadMarketListings(1);
     if (tab === 'my-listings') loadMyListings();
     if (tab === 'create') loadUserInventoryForListing();
-    loadBusinessData(); // Her tab geçişinde fiyatları ve olayları tazele
 }
 
-async function loadMarketListings() {
+async function loadMarketListings(page = 1) {
     try {
-        const res = await fetch('/api/marketplace/listings');
+        const query = document.getElementById('market-search').value;
+        const category = document.getElementById('market-category-filter').value;
+        const cityFilter = document.getElementById('market-city-filter').value;
+
+        const url = `/api/marketplace/listings?page=${page}&q=${query}&category=${category}&city=${cityFilter}`;
+        const res = await fetch(url);
         const data = await res.json();
 
         const container = document.getElementById('marketplace-listings');
+        const paginationContainer = document.getElementById('market-pagination');
+
         if (!data.success || data.listings.length === 0) {
-            container.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:60px; opacity:0.5;"><div style="font-size:4rem; margin-bottom:20px;">🏪</div><p>Henüz ilan yok. İlk satıcı sen ol!</p></div>';
+            container.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:60px; opacity:0.5;"><div style="font-size:4rem; margin-bottom:20px;">🏪</div><p>Aradığın kriterlere uygun ilan bulunamadı.</p></div>';
+            paginationContainer.innerHTML = '';
             return;
         }
 
         let html = '';
         for (const listing of data.listings) {
-            const product = productData[listing.productCode] || { name: listing.productCode, icon: '📦' };
+            const product = productData[listing.productCode] || { name: listing.productCode, icon: '📦', unit: 'adet' };
             const isSystem = listing.isSystem;
-            const quality = listing.quality || 0;
 
             html += `
-                <div class="glass-panel" style="padding:20px; border-radius:16px; border:1px solid ${isSystem ? 'var(--primary)' : 'rgba(255,255,255,0.05)'}; position:relative;">
-                    ${isSystem ? '<div style="position:absolute; top:10px; right:10px; background:var(--primary); color:black; font-size:0.6rem; padding:2px 6px; border-radius:4px; font-weight:800;">SİSTEM</div>' : ''}
-                    <div style="font-size:2.5rem; text-align:center; margin-bottom:10px;">${product.icon}</div>
-                    <h4 style="margin:0 0 5px 0; text-align:center;">${product.name}</h4>
-                    <div style="text-align:center; color:#888; font-size:0.85rem; margin-bottom:10px;">
-                        Satıcı: <b style="color:${isSystem ? 'var(--primary)' : '#fff'};">${listing.seller}</b>
+                <div class="glass-panel" style="padding:20px; border-radius:16px; border:1px solid ${isSystem ? 'var(--primary)' : 'rgba(255,255,255,0.1)'};">
+                    <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:15px;">
+                        <div style="font-size:2rem;">${product.icon}</div>
+                        ${isSystem ? '<span style="background:var(--primary); color:black; font-size:0.6rem; padding:3px 8px; border-radius:10px; font-weight:900;">SİSTEM</span>' : ''}
                     </div>
-                    <div style="text-align:center; color:#aaa; font-size:0.8rem; margin-bottom:10px;">
-                        📍 <span style="color:var(--secondary); font-weight:700;">${listing.city || 'BİLİNMİYOR'}</span>
+                    <h4 style="margin:0 0 5px 0;">${product.name}</h4>
+                    <div style="font-size:0.8rem; color:#888; margin-bottom:12px;">
+                        Satıcı: <span style="color:#fff;">${listing.seller}</span> | Şehir: <span style="color:var(--secondary);">${listing.city}</span>
                     </div>
-                    <div style="text-align:center; margin-bottom:10px;">
-                        <div style="font-size:0.7rem; color:#888; text-transform:uppercase;">Kalite</div>
-                        <div style="font-size:1.1rem; font-weight:800; color:var(--secondary);">%${quality}</div>
+                    <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:10px; margin-bottom:15px; display:flex; justify-content:space-between;">
+                        <div>
+                            <div style="font-size:0.65rem; color:#888; text-transform:uppercase;">Mevcut Stok</div>
+                            <div style="font-size:1.1rem; font-weight:800;">${listing.quantity.toLocaleString()} <span style="font-size:0.75rem; font-weight:400; color:#888;">${product.unit || 'adet'}</span></div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-size:0.65rem; color:#888; text-transform:uppercase;">Birim Fiyat</div>
+                            <div style="font-size:1.1rem; font-weight:800; color:var(--primary);">💰 ${listing.pricePerUnit.toLocaleString()}</div>
+                        </div>
                     </div>
-                    <div style="text-align:center; margin-bottom:10px;">
-                        <span style="font-size:1.5rem; font-weight:800; color:var(--primary);">${listing.quantity}</span>
-                        <span style="color:#888; font-size:0.9rem;"> adet</span>
-                    </div>
-                    <div style="text-align:center; font-size:1.2rem; font-weight:700; margin-bottom:15px; color:#fff;">
-                        💰 ${listing.totalPrice.toLocaleString()}
-                    </div>
-                    <button onclick="buyMarketListing('${listing.id}')" class="buy-btn" style="width:100%;">${isSystem ? '🛒 Hemen Al' : 'Satın Al'}</button>
+                    <button onclick="buyMarketListing('${listing.id}', '${listing.city}', ${listing.pricePerUnit}, ${listing.quantity}, '${product.name}', '${product.unit || 'adet'}')" class="buy-btn" style="width:100%;">Satın Al</button>
                 </div>
             `;
         }
-
         container.innerHTML = html;
+
+        // Pagination
+        if (data.pagination) {
+            const { currentPage, totalPages } = data.pagination;
+            let pagHtml = '';
+            for (let i = 1; i <= totalPages; i++) {
+                pagHtml += `<button class="sub-tab-btn ${i === currentPage ? 'active' : ''}" onclick="loadMarketListings(${i})" style="min-width:40px;">${i}</button>`;
+            }
+            paginationContainer.innerHTML = pagHtml;
+        }
+
     } catch (e) {
         showToast('Pazar yeri yüklenemedi!', 'error');
         console.error('Marketplace error:', e);
@@ -4228,16 +4278,19 @@ async function loadMyListings() {
 
         let html = '';
         for (const listing of myListings) {
-            const product = productData[listing.productCode] || { name: listing.productCode, icon: '📦' };
+            const product = productData[listing.productCode] || { name: listing.productCode, icon: '📦', unit: 'adet' };
             html += `
                 <div class="glass-panel" style="padding:20px; border-radius:16px; border:2px solid rgba(0,255,136,0.2);">
                     <div style="font-size:2rem; text-align:center; margin-bottom:10px;">${product.icon}</div>
                     <h4 style="margin:0 0 5px 0; text-align:center;">${product.name}</h4>
                     <div style="text-align:center; margin-bottom:10px;">
-                        <span style="font-size:1.3rem; font-weight:700;">${listing.quantity}</span> adet
+                        <span style="font-size:1.3rem; font-weight:700;">${listing.quantity.toLocaleString()}</span> ${product.unit || 'adet'}
+                    </div>
+                    <div style="text-align:center; color:#888; font-size:0.8rem; margin-bottom:5px;">
+                        Birim: 💰 ${listing.pricePerUnit.toLocaleString()}
                     </div>
                     <div style="text-align:center; font-size:1.1rem; font-weight:700; margin-bottom:15px; color:var(--primary);">
-                        💰 ${listing.totalPrice.toLocaleString()}
+                        Toplam: 💰 ${listing.totalPrice.toLocaleString()}
                     </div>
                     <button onclick="cancelMarketListing('${listing.id}')" class="logout-btn" style="width:100%;">İlanı İptal Et</button>
                 </div>
@@ -4252,77 +4305,34 @@ async function loadMyListings() {
 }
 
 async function loadUserInventoryForListing() {
-    const userData = await getUserData();
-    const inventory = userData.inventory || {};
+    try {
+        const res = await fetch('/api/user/' + currentUser);
+        const data = await res.json();
+        const user = data.user || data;
 
-    const select = document.getElementById('new-listing-product');
-    let html = '<option value="">Ürün Seç</option>';
+        const select = document.getElementById('new-listing-product');
+        select.innerHTML = '<option value="">Ürün Seç</option>';
 
-    for (const [code, quantity] of Object.entries(inventory)) {
-        if (quantity > 0) {
-            const product = productData[code] || { name: code, icon: '📦' };
-            html += `<option value="${code}">${product.icon} ${product.name} (${quantity} adet)</option>`;
+        const inventory = user.inventory || {};
+        for (const [code, qty] of Object.entries(inventory)) {
+            if (qty > 0) {
+                const product = productData[code] || { name: code, unit: 'adet' };
+                select.innerHTML += `<option value="${code}">${product.name} (${qty.toLocaleString()} ${product.unit || 'adet'})</option>`;
+            }
         }
+    } catch (e) {
+        console.error('Inventory load error:', e);
     }
-
-    select.innerHTML = html;
-
-    // Şehir seçimi için
-    const cities = ['İstanbul', 'Ankara', 'İzmir', 'Amasya', 'Bursa', 'Antalya']; // Örnek şehirler
-    const citySelect = document.getElementById('new-listing-city');
-    if (citySelect) {
-        citySelect.innerHTML = cities.map(c => `<option value="${c}">${c}</option>`).join('');
-    }
-
-
-    // Preview güncellemelerini dinle
-    const qtyInput = document.getElementById('new-listing-quantity');
-    const priceInput = document.getElementById('new-listing-price');
-
-    const updatePreview = () => {
-        const qty = parseInt(qtyInput.value) || 0;
-        const price = parseInt(priceInput.value) || 0;
-        document.getElementById('listing-preview-qty').textContent = qty || '-';
-        document.getElementById('listing-preview-unit').textContent = price ? `${price.toLocaleString()} 💰` : '-';
-        document.getElementById('listing-preview-total').textContent = (qty * price).toLocaleString() + ' 💰';
-    };
-
-    qtyInput.addEventListener('input', updatePreview);
-    priceInput.addEventListener('input', updatePreview);
 }
 
 async function createMarketListing() {
-    const productEl = document.getElementById('new-listing-product');
-    const qtyEl = document.getElementById('new-listing-quantity');
-    const priceEl = document.getElementById('new-listing-price');
-
-    let citySelect = document.getElementById('new-listing-city');
-    if (!citySelect) {
-        // Dropdown yoksa uyar (İlk kez render edildiğinde olmayabilir)
-        showToast("Lütfen bir şehir seçin!", "error");
-        return;
-    }
-
-    const productCode = productEl.value;
-    const quantity = parseInt(qtyEl.value);
-    const pricePerUnit = parseInt(priceEl.value);
-    const city = citySelect.value;
+    const productCode = document.getElementById('new-listing-product').value;
+    const quantity = parseInt(document.getElementById('new-listing-quantity').value);
+    const pricePerUnit = parseInt(document.getElementById('new-listing-price').value);
+    const city = document.getElementById('new-listing-city').value;
 
     if (!productCode || !quantity || !pricePerUnit || !city) {
-        showToast("Lütfen tüm alanları doldurun!", "error");
-        return;
-    }
-
-    if (!productCode) {
-        return showToast('Ürün seç!', 'error');
-    }
-
-    if (!quantity || quantity < 1) {
-        return showToast('Geçerli bir miktar gir!', 'error');
-    }
-
-    if (!pricePerUnit || pricePerUnit < 1) {
-        return showToast('Geçerli bir fiyat gir!', 'error');
+        return showToast('Lütfen tüm alanları doldurun!', 'error');
     }
 
     try {
