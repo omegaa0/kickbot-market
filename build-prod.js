@@ -21,7 +21,7 @@ async function buildProduction() {
             passes: 2
         },
         mangle: {
-            toplevel: true,
+            toplevel: false, // HTML'deki onclick fonksiyonlarının (switchTab vb.) değişmemesi için false olmalı
             properties: {
                 regex: /^_/ // Sadece _ ile başlayan private değişkenleri obfuscate et
             }
