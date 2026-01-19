@@ -9,85 +9,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <!-- GÜVENLİK: DevTools ve Sağ Tık Engelleme -->
-    <script>
-        // F12, Ctrl+Shift+I, Ctrl+U engelleme
-        document.addEventListener('keydown', function (e) {
-            // F12
-            if (e.key === 'F12' || e.keyCode === 123) {
-                e.preventDefault();
-                return false;
-            }
-            // Ctrl+Shift+I (DevTools)
-            if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.keyCode === 73)) {
-                e.preventDefault();
-                return false;
-            }
-            // Ctrl+Shift+J (Console)
-            if (e.ctrlKey && e.shiftKey && (e.key === 'J' || e.keyCode === 74)) {
-                e.preventDefault();
-                return false;
-            }
-            // Ctrl+Shift+C (Inspect Element)
-            if (e.ctrlKey && e.shiftKey && (e.key === 'C' || e.keyCode === 67)) {
-                e.preventDefault();
-                return false;
-            }
-            // Ctrl+U (View Source)
-            if (e.ctrlKey && (e.key === 'U' || e.keyCode === 85)) {
-                e.preventDefault();
-                return false;
-            }
-            // Ctrl+S (Save Page)
-            if (e.ctrlKey && (e.key === 'S' || e.keyCode === 83)) {
-                e.preventDefault();
-                return false;
-            }
-        });
-
-        // Sağ tık engelleme
-        document.addEventListener('contextmenu', function (e) {
-            e.preventDefault();
-            return false;
-        });
-
-        // Metin seçimi engelleme
-        document.addEventListener('selectstart', function (e) {
-            e.preventDefault();
-            return false;
-        });
-
-        // Kopyalama engelleme
-        document.addEventListener('copy', function (e) {
-            e.preventDefault();
-            return false;
-        });
-
-        // DevTools açık mı kontrolü (Sürekli)
-        (function detectDevTools() {
-            const threshold = 160;
-            const widthThreshold = window.outerWidth - window.innerWidth > threshold;
-            const heightThreshold = window.outerHeight - window.innerHeight > threshold;
-
-            if (widthThreshold || heightThreshold) {
-                // DevTools açık - sayfayı yenile veya boş göster
-                document.body.innerHTML = '';
-                window.location.reload();
-            }
-
-            setTimeout(detectDevTools, 1000);
-        })();
-
-        // Console log override
-        (function () {
-            const noop = function () { };
-            window.console.log = noop;
-            window.console.warn = noop;
-            window.console.error = noop;
-            window.console.info = noop;
-            window.console.debug = noop;
-        })();
-    </script>
 
     <style>
         .channel-info {
@@ -499,12 +420,21 @@
 
                 <!-- Alt Sekmeler -->
                 <div class="business-sub-tabs" style="display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap;">
-                    <button class="sub-tab-btn active" onclick="switchBusinessTab('my-businesses')">📋
+                    <button class="sub-tab-btn active" onclick="switchBusinessTab('my-businesses')"
+                        title="Sahip olduğunuz işletmeleri görüntüleyin">📋
                         İşletmelerim</button>
-                    <button class="sub-tab-btn" onclick="switchBusinessTab('new-business')">➕ Yeni İşletme</button>
-                    <button class="sub-tab-btn" onclick="switchBusinessTab('licenses')">📜 Lisanslar</button>
-                    <button class="sub-tab-btn" onclick="switchBusinessTab('market-prices')">📊 Piyasa
-                        Fiyatları</button>
+                    <button class="sub-tab-btn" onclick="switchBusinessTab('new-business')" title="Yeni işletme kurun">➕
+                        Yeni İşletme</button>
+                    <button class="sub-tab-btn" onclick="switchBusinessTab('warehouse')"
+                        title="Depo kapasitesini artır">📦 Depo</button>
+                    <button class="sub-tab-btn" onclick="switchBusinessTab('rnd')" title="AR-GE yükseltmeleri yapın">🔬
+                        AR-GE <span
+                            style="background:var(--primary); color:black; font-size:0.6rem; padding:2px 5px; border-radius:4px; margin-left:5px; font-weight:800;">YENİ</span></button>
+                    <button class="sub-tab-btn" onclick="switchBusinessTab('licenses')"
+                        title="İşletme lisanslarını görüntüleyin">📜 Lisanslar</button>
+                    <button class="sub-tab-btn" onclick="switchBusinessTab('market-prices')"
+                        title="Piyasa durumunu kontrol edin">📊 Piyasa
+                        Durumu</button>
                 </div>
 
                 <!-- İşletmelerim -->
@@ -520,12 +450,52 @@
 
                 <!-- Yeni İşletme Kur -->
                 <div id="business-sub-new-business" class="business-sub-content hidden">
+                    <!-- Filtre Bölümü -->
+                    <div
+                        style="background:rgba(0,0,0,0.3); padding:15px; border-radius:12px; margin-bottom:20px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                        <span style="font-weight:bold; color:var(--primary);">🔍 Filtrele:</span>
+                        <button class="filter-btn active" onclick="filterBusinessTypes('all', this)"
+                            style="border:none; background:rgba(255,255,255,0.1); color:#fff; padding:8px 15px; border-radius:8px; cursor:pointer; font-weight:600; transition:0.2s;">Hepsi</button>
+                        <button class="filter-btn" onclick="filterBusinessTypes('retail', this)"
+                            style="border:none; background:rgba(255,255,255,0.05); color:#aaa; padding:8px 15px; border-radius:8px; cursor:pointer; font-weight:600; transition:0.2s;">🏪
+                            Perakende</button>
+                        <button class="filter-btn" onclick="filterBusinessTypes('production', this)"
+                            style="border:none; background:rgba(255,255,255,0.05); color:#aaa; padding:8px 15px; border-radius:8px; cursor:pointer; font-weight:600; transition:0.2s;">🏭
+                            Üretim</button>
+                        <button class="filter-btn" onclick="filterBusinessTypes('farming', this)"
+                            style="border:none; background:rgba(255,255,255,0.05); color:#aaa; padding:8px 15px; border-radius:8px; cursor:pointer; font-weight:600; transition:0.2s;">🌾
+                            Tarım</button>
+                        <button class="filter-btn" onclick="filterBusinessTypes('livestock', this)"
+                            style="border:none; background:rgba(255,255,255,0.05); color:#aaa; padding:8px 15px; border-radius:8px; cursor:pointer; font-weight:600; transition:0.2s;">🐄
+                            Hayvancılık</button>
+                        <button class="filter-btn" onclick="filterBusinessTypes('special', this)"
+                            style="border:none; background:rgba(255,255,255,0.05); color:#aaa; padding:8px 15px; border-radius:8px; cursor:pointer; font-weight:600; transition:0.2s;">⭐
+                            Özel</button>
+                    </div>
                     <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:15px;">
                         <!-- İşletme Türleri - JS ile doldurulacak -->
                         <div id="business-types-grid">
                             <div style="text-align:center; padding:40px; opacity:0.5;">
                                 <div class="loader"></div>
                                 <p style="margin-top:15px;">İşletme türleri yükleniyor...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Depo -->
+                <div id="business-sub-warehouse" class="business-sub-content hidden">
+                    <div class="glass-panel" style="padding:20px; margin-bottom:20px;">
+                        <h3 style="margin:0 0 10px 0;">📦 Depo Sistemi</h3>
+                        <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:20px;">
+                            Depo kapasiteni artırarak daha fazla ürün stoklayabilirsin. Her işletmenin kendi deposu
+                            vardır, bu senin merkezi depoundur.
+                        </p>
+                        <div id="warehouse-upgrades-container"
+                            style="display:grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap:15px;">
+                            <div style="grid-column: 1/-1; text-align:center; padding:40px; opacity:0.5;">
+                                <i class="fas fa-warehouse" style="font-size:3rem; margin-bottom:15px;"></i>
+                                <p>Depo sistemi yakında aktif olacak!</p>
                             </div>
                         </div>
                     </div>
@@ -539,12 +509,30 @@
                     </div>
                 </div>
 
-                <!-- Piyasa Fiyatları -->
+                <!-- AR-GE -->
+                <div id="business-sub-rnd" class="business-sub-content hidden">
+                    <div class="glass-panel" style="padding:20px; margin-bottom:20px;">
+                        <h3 style="margin:0 0 10px 0;">🔬 Araştırma ve Geliştirme</h3>
+                        <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:20px;">
+                            İşletmelerinizin kalitesini, üretim hızını ve verimliliğini artırın.
+                        </p>
+                        <div id="rnd-upgrades-container"
+                            style="display:grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap:15px;">
+                            <div style="grid-column: 1/-1; text-align:center; padding:40px; opacity:0.5;">
+                                <i class="fas fa-flask" style="font-size:3rem; margin-bottom:15px;"></i>
+                                <p>AR-GE sistemi yakında aktif olacak!</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Piyasa Durumu -->
                 <div id="business-sub-market-prices" class="business-sub-content hidden">
                     <div class="glass-panel" style="padding:20px; margin-bottom:20px;">
-                        <h3 style="margin:0 0 15px 0;">📈 Haftalık Ürün Fiyatları</h3>
+                        <h3 style="margin:0 0 15px 0;">📊 Haftalık Piyasa Durumu</h3>
                         <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:20px;">
-                            Fiyatlar arz/talep dengesine ve aktif piyasa olaylarına göre değişir. Haftalık güncellenir.
+                            Ürün fiyatları arz/talep dengesine ve aktif piyasa olaylarına göre değişir. Piyasa durumları
+                            haftalık güncellenir.
                         </p>
                         <div id="product-prices-table"
                             style="display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap:10px;">

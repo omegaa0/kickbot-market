@@ -48,6 +48,191 @@ function generateSecureToken(length = 64) {
     return crypto.randomBytes(length).toString('base64url');
 }
 
+// ===== GÜVENLİK YARDIMCI FONKSİYONLARI =====
+
+// 1. USERNAME SANİTİZASYON - NoSQL Injection Koruması
+function sanitizeUsername(username) {
+    if (!username || typeof username !== 'string') return null;
+
+    // Sadece alfanumerik, alt çizgi ve tire karakterlerine izin ver
+    const sanitized = username.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '');
+
+    // Minimum 3, maksimum 20 karakter
+    if (sanitized.length < 3 || sanitized.length > 20) return null;
+
+    // Firebase özel karakterlerini engelle
+    if (sanitized.includes('.') || sanitized.includes('#') || sanitized.includes('$') ||
+        sanitized.includes('[') || sanitized.includes(']') || sanitized.includes('/')) {
+        return null;
+    }
+
+    return sanitized;
+}
+
+// 2. HTML ESCAPE - XSS Koruması
+function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return unsafe
+        .toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+// 3. NUMBER VALIDATION - Negative Value & Overflow Koruması
+function validateNumber(value, min = 0, max = Number.MAX_SAFE_INTEGER) {
+    const num = parseFloat(value);
+    if (isNaN(num) || !isFinite(num)) return null;
+    if (num < min || num > max) return null;
+    return num;
+}
+
+// 4. URL VALIDATION - SSRF Koruması
+function validateUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+
+    try {
+        const parsed = new URL(url);
+
+        // Sadece https protokolüne izin ver
+        if (parsed.protocol !== 'https:') return false;
+
+        // Localhost ve private IP'leri engelle
+        const hostname = parsed.hostname.toLowerCase();
+        if (hostname === 'localhost' ||
+            hostname === '127.0.0.1' ||
+            hostname.startsWith('192.168.') ||
+            hostname.startsWith('10.') ||
+            hostname.startsWith('172.16.') ||
+            hostname.startsWith('169.254.')) {
+            return false;
+        }
+
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+// 5. IDEMPOTENCY KEY STORE - Duplicate Transaction Koruması
+const processedTransactions = new Map(); // { key: timestamp }
+const TRANSACTION_TTL = 5 * 60 * 1000; // 5 dakika
+
+function checkIdempotency(key) {
+    const now = Date.now();
+
+    // Eski kayıtları temizle
+    for (const [k, timestamp] of processedTransactions.entries()) {
+        if (now - timestamp > TRANSACTION_TTL) {
+            processedTransactions.delete(k);
+        }
+    }
+
+    // Bu işlem daha önce yapıldı mı?
+    if (processedTransactions.has(key)) {
+        return false; // Duplicate
+    }
+
+    // Yeni işlem olarak kaydet
+    processedTransactions.set(key, now);
+    return true; // OK
+}
+
+// 6. CSRF TOKEN ÜRETİCİ VE DOĞRULAYICI
+const csrfTokens = new Map(); // { username: { token, expires } }
+const CSRF_TOKEN_TTL = 60 * 60 * 1000; // 1 saat
+
+function generateCsrfToken(username) {
+    const token = crypto.randomBytes(32).toString('hex');
+    csrfTokens.set(username, {
+        token,
+        expires: Date.now() + CSRF_TOKEN_TTL
+    });
+    return token;
+}
+
+function validateCsrfToken(username, token) {
+    const stored = csrfTokens.get(username);
+    if (!stored) return false;
+    if (Date.now() > stored.expires) {
+        csrfTokens.delete(username);
+        return false;
+    }
+    return stored.token === token;
+}
+
+// 7. WEBHOOK SIGNATURE DOĞRULAMA
+function verifyWebhookSignature(payload, signature, secret) {
+    if (!signature || !secret) return false;
+
+    const hmac = crypto.createHmac('sha256', secret);
+    hmac.update(JSON.stringify(payload));
+    const calculatedSignature = hmac.digest('hex');
+
+    // Timing attack'a karşı constant-time comparison
+    return crypto.timingSafeEqual(
+        Buffer.from(signature),
+        Buffer.from(calculatedSignature)
+    );
+}
+
+// 8. SESSION TIMEOUT YÖNETİMİ
+const sessionStore = new Map(); // { token: { username, expires, ip } }
+const SESSION_TTL = 60 * 60 * 1000; // 1 saat
+
+function createSession(username, ip) {
+    const token = generateSecureToken();
+    sessionStore.set(token, {
+        username,
+        expires: Date.now() + SESSION_TTL,
+        ip,
+        createdAt: Date.now()
+    });
+    return token;
+}
+
+function validateSession(token, ip) {
+    const session = sessionStore.get(token);
+    if (!session) return null;
+
+    if (Date.now() > session.expires) {
+        sessionStore.delete(token);
+        return null;
+    }
+
+    // IP değişimi kontrolü (opsiyonel, strict mode için)
+    // if (session.ip !== ip) return null;
+
+    return session.username;
+}
+
+function extendSession(token) {
+    const session = sessionStore.get(token);
+    if (session) {
+        session.expires = Date.now() + SESSION_TTL;
+        sessionStore.set(token, session);
+    }
+}
+
+// 9. AUDIT LOGGING
+function logSecurityEvent(type, username, details, ip) {
+    const logEntry = {
+        timestamp: new Date().toISOString(),
+        type,
+        username,
+        ip,
+        details
+    };
+
+    // Console'a yaz
+    console.log('[SECURITY]', JSON.stringify(logEntry));
+
+    // TODO: Production'da database veya log service'e yaz
+    // await db.ref('security_logs').push(logEntry);
+}
+
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 const app = express();
@@ -74,25 +259,34 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'c-id']
 }));
 
-// ===== RATE LIMITING =====
+// ===== RATE LIMITING (Güçlendirilmiş) =====
 const generalLimiter = rateLimit({
     windowMs: 1 * 60 * 1000, // 1 dakika
-    max: 100, // IP başına 100 istek
+    max: 60, // IP başına 60 istek (saniyede 1)
     message: { success: false, error: 'Çok fazla istek! Lütfen biraz bekleyin.' },
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    skipSuccessfulRequests: false
 });
 
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 dakika
-    max: 10, // IP başına 10 giriş denemesi
-    message: { success: false, error: 'Çok fazla giriş denemesi! 15 dakika bekleyin.' }
+    max: 5, // IP başına 5 giriş denemesi (brute force koruması)
+    message: { success: false, error: 'Çok fazla giriş denemesi! 15 dakika bekleyin.' },
+    skipSuccessfulRequests: false
 });
 
 const transactionLimiter = rateLimit({
     windowMs: 1 * 60 * 1000, // 1 dakika
-    max: 30, // Dakikada 30 işlem
-    message: { success: false, error: 'İşlem limiti aşıldı! Biraz bekleyin.' }
+    max: 10, // Dakikada 10 işlem (duplicate transaction koruması)
+    message: { success: false, error: 'İşlem limiti aşıldı! Biraz bekleyin.' },
+    skipSuccessfulRequests: false
+});
+
+const aiLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000, // 5 dakika
+    max: 3, // 5 dakikada 3 AI isteği (DoS koruması)
+    message: { success: false, error: 'AI istek limiti aşıldı! Lütfen 5 dakika bekleyin.' }
 });
 
 app.use(generalLimiter); // Tüm isteklere uygula
@@ -254,24 +448,63 @@ app.use('/ai-images', express.static(aiImagesDir));
 // Geçici AI resimleri (2 dk sonra silinecek)
 const tempAiImages = {};
 
-// MULTER SETUP
+// MULTER SETUP (Güvenlik Katmanlı)
+const ALLOWED_AUDIO_EXTENSIONS = ['.mp3', '.wav', '.ogg', '.m4a'];
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         // Öncelik: Header > Query > Body
-        const channelId = req.headers['c-id'] || req.query.channelId || req.body.channelId || 'global';
+        let channelId = req.headers['c-id'] || req.query.channelId || req.body.channelId || 'global';
+
+        // Channel ID sanitization (path traversal koruması)
+        channelId = channelId.replace(/[^a-zA-Z0-9_-]/g, '');
+        if (channelId.length > 50) channelId = channelId.substring(0, 50);
+
         const channelDir = path.join(uploadDir, channelId);
+
+        // Path traversal attack kontrolü
+        if (!channelDir.startsWith(uploadDir)) {
+            return cb(new Error('Geçersiz yükleme dizini!'));
+        }
+
         if (!fs.existsSync(channelDir)) {
             fs.mkdirSync(channelDir, { recursive: true });
         }
         cb(null, channelDir);
     },
     filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname);
-        const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1E9) + ext;
+        // Extension kontrolü
+        const ext = path.extname(file.originalname).toLowerCase();
+
+        if (!ALLOWED_AUDIO_EXTENSIONS.includes(ext)) {
+            return cb(new Error('Geçersiz dosya formatı! Sadece MP3, WAV, OGG, M4A desteklenir.'));
+        }
+
+        // Güvenli dosya adı oluştur
+        const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const uniqueName = Date.now() + '-' + crypto.randomBytes(8).toString('hex') + ext;
         cb(null, uniqueName);
     }
 });
-const upload = multer({ storage: storage });
+
+const upload = multer({
+    storage: storage,
+    limits: {
+        fileSize: MAX_FILE_SIZE,
+        files: 1
+    },
+    fileFilter: (req, file, cb) => {
+        // MIME type kontrolü (çift kontrol)
+        const allowedMimes = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/x-m4a'];
+
+        if (!allowedMimes.includes(file.mimetype)) {
+            return cb(new Error('Geçersiz dosya tipi!'));
+        }
+
+        cb(null, true);
+    }
+});
 
 const firebaseConfig = {
     apiKey: process.env.FIREBASE_API_KEY,
@@ -676,9 +909,15 @@ app.get('/ai-view/:id', (req, res) => {
     const elapsed = Date.now() - imageData.createdAt;
     const remaining = Math.max(0, Math.floor((120000 - elapsed) / 1000));
 
+    // GÜVENLİK: XSS koruması - HTML escape
+    const safePrompt = escapeHtml(imageData.prompt);
+    const safeTitle = escapeHtml(imageData.prompt.substring(0, 30));
+    const safeUsername = escapeHtml(imageData.createdBy);
+    const safeFilename = escapeHtml(imageData.filename);
+
     res.send(`
         <!DOCTYPE html>
-        <html><head><title>AI Resim - ${imageData.prompt.substring(0, 30)}...</title>
+        <html><head><title>AI Resim - ${safeTitle}...</title>
         <meta charset="UTF-8">
         <style>
             body{font-family:'Segoe UI',Arial;display:flex;flex-direction:column;align-items:center;min-height:100vh;background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;margin:0;padding:20px;box-sizing:border-box;}
@@ -692,10 +931,10 @@ app.get('/ai-view/:id', (req, res) => {
         <body>
             <div class="container">
                 <h1>🎨 AI Tarafından Üretilen Resim</h1>
-                <img src="/ai-images/${imageData.filename}" alt="AI Generated Image">
-                <div class="prompt">"${imageData.prompt}"</div>
+                <img src="/ai-images/${safeFilename}" alt="AI Generated Image">
+                <div class="prompt">"${safePrompt}"</div>
                 <div class="timer">⏳ Kalan süre: <span id="timer">${remaining}</span> saniye</div>
-                <div class="info">Oluşturan: @${imageData.createdBy}</div>
+                <div class="info">Oluşturan: @${safeUsername}</div>
             </div>
             <script>
                 let remaining = ${remaining};
@@ -836,8 +1075,8 @@ const authAdmin = async (req, res, next) => {
             if (isValid) {
                 req.adminUser = { username, ...userData };
 
-                // Omegacyr için her zaman master yetkileri (veritabanında olmasa bile)
-                if (username === 'omegacyr') {
+                // GÜVENLİK: ENV'den master kontrolü
+                if (isMasterAdmin(username)) {
                     req.adminUser.role = 'master';
                     req.adminUser.permissions = {
                         channels: true, users: true, troll: true, logs: true,
@@ -849,9 +1088,11 @@ const authAdmin = async (req, res, next) => {
             }
         }
     } else if (key === ADMIN_KEY_PRE && ADMIN_KEY_PRE !== "") {
-        // Eski usul şifre ile girilirse MASTER kabul et (omegacyr)
+        // Eski usul şifre ile girilirse MASTER kabul et
+        // GÜVENLİK: İlk master admin'i ENV'den al
+        const firstMaster = MASTER_ADMINS[0] || 'omegacyr';
         req.adminUser = {
-            username: 'omegacyr',
+            username: firstMaster,
             role: 'master',
             permissions: {
                 channels: true, users: true, troll: true, logs: true,
@@ -864,9 +1105,18 @@ const authAdmin = async (req, res, next) => {
     res.status(403).json({ success: false, error: 'Yetkisiz Erişim' });
 };
 
+// GÜVENLİK: Master admin kontrolü (ENV'den)
+const MASTER_ADMINS = (process.env.MASTER_ADMINS || 'omegacyr').split(',').map(u => u.trim().toLowerCase());
+
+function isMasterAdmin(username) {
+    if (!username) return false;
+    return MASTER_ADMINS.includes(username.toLowerCase());
+}
+
 // Yetki kontrolü için yardımcı middleware
 const hasPerm = (p) => (req, res, next) => {
-    if (req.adminUser?.username === 'omegacyr') return next();
+    // GÜVENLİK: ENV'den master kontrolü
+    if (isMasterAdmin(req.adminUser?.username)) return next();
     if (req.adminUser?.permissions && req.adminUser.permissions[p]) return next();
     res.status(403).json({ success: false, error: `Bu işlem için yetkiniz yok (${p}).` });
 };
@@ -1068,99 +1318,199 @@ function applyDailyLimit(code, newPrice, dailyStartPrice) {
 // 🏪 İŞLETME SİSTEMİ SABİTLERİ
 // =============================================================================
 
+// --- MERKEZI DEPO SİSTEMİ ---
+const WAREHOUSE_LEVELS = {
+    1: { name: "Temel Depo", capacity: 1000, cost: 0 },
+    2: { name: "Küçük Depo", capacity: 2500, cost: 1000000 },
+    3: { name: "Orta Depo", capacity: 5000, cost: 3000000 },
+    4: { name: "Büyük Depo", capacity: 10000, cost: 7000000 },
+    5: { name: "Dev Depo", capacity: 20000, cost: 15000000 },
+    6: { name: "Mega Depo", capacity: 40000, cost: 30000000 },
+    7: { name: "Ultra Depo", capacity: 80000, cost: 60000000 },
+    8: { name: "Süper Depo", capacity: 150000, cost: 120000000 }
+};
+
+// --- PERAKENDE SATIŞ TEZGAHI SİSTEMİ ---
+// Her seviye için: kaç slot (ürün çeşidi) ve her slotta kaç ürün
+const RETAIL_COUNTER_LEVELS = {
+    1: { slots: 3, itemsPerSlot: 10 },   // Seviye 1: 3 ürün çeşidi, her biri 10 adet
+    2: { slots: 5, itemsPerSlot: 20 },   // Seviye 2: 5 ürün çeşidi, her biri 20 adet
+    3: { slots: 7, itemsPerSlot: 30 },   // Seviye 3: 7 ürün çeşidi, her biri 30 adet
+    4: { slots: 10, itemsPerSlot: 50 },  // Seviye 4: 10 ürün çeşidi, her biri 50 adet
+    5: { slots: 15, itemsPerSlot: 75 },  // Seviye 5: 15 ürün çeşidi, her biri 75 adet
+    6: { slots: 20, itemsPerSlot: 100 }, // Seviye 6: 20 ürün çeşidi, her biri 100 adet
+    7: { slots: 30, itemsPerSlot: 150 }, // Seviye 7: 30 ürün çeşidi, her biri 150 adet
+    8: { slots: 50, itemsPerSlot: 200 }  // Seviye 8: 50 ürün çeşidi, her biri 200 adet
+};
+
 // --- İŞLETME TÜRLERİ ---
 const BUSINESS_TYPES = {
     // ==================== PERAKENDE (Satış Noktaları) ====================
-    "manav": { name: "Manav", category: "retail", setupCost: 300000, icon: "🥬", taxRate: 0.05, baseMaintenance: 5000, baseStorage: 50, products: ["sebze", "meyve"], requiredLicense: null },
-    "kasap": { name: "Kasap", category: "retail", setupCost: 500000, icon: "🥩", taxRate: 0.06, baseMaintenance: 8000, baseStorage: 40, products: ["et", "tavuk"], requiredLicense: "gida_lisansi" },
-    "balik": { name: "Balıkçı", category: "retail", setupCost: 400000, icon: "🐟", taxRate: 0.05, baseMaintenance: 7000, baseStorage: 30, products: ["balik"], requiredLicense: "gida_lisansi" },
-    "firinci": { name: "Fırın", category: "retail", setupCost: 600000, icon: "🥖", taxRate: 0.04, baseMaintenance: 10000, baseStorage: 60, products: ["ekmek", "pasta"], requiredLicense: null },
-    "market": { name: "Süpermarket", category: "retail", setupCost: 2000000, icon: "🛒", taxRate: 0.08, baseMaintenance: 25000, baseStorage: 200, products: ["sebze", "meyve", "et", "sut", "ekmek"], requiredLicense: "market_ruhsati" },
-    "eczane": { name: "Eczane", category: "retail", setupCost: 5000000, icon: "💊", taxRate: 0.10, baseMaintenance: 15000, baseStorage: 100, products: ["ilac"], requiredLicense: "eczaci_diplomasi" },
-    "elektronik": { name: "Elektronik Mağaza", category: "retail", setupCost: 3000000, icon: "📱", taxRate: 0.09, baseMaintenance: 12000, baseStorage: 80, products: ["elektronik"], requiredLicense: null },
-    "kuyumcu": { name: "Kuyumcu", category: "retail", setupCost: 10000000, icon: "💎", taxRate: 0.12, baseMaintenance: 20000, baseStorage: 30, products: ["altin", "mucevher"], requiredLicense: "kuyumcu_belgesi" },
-    "galeri": { name: "Araba Galerisi", category: "retail", setupCost: 50000000, icon: "🚗", taxRate: 0.15, baseMaintenance: 50000, baseStorage: 20, products: ["araba"], requiredLicense: "galeri_ruhsati" },
-    "restoran": { name: "Restoran", category: "retail", setupCost: 4000000, icon: "🍽️", taxRate: 0.07, baseMaintenance: 18000, baseStorage: 40, products: ["yemek"], requiredLicense: "isletme_ruhsati" },
-    "cafe": { name: "Kafe", category: "retail", setupCost: 1500000, icon: "☕", taxRate: 0.06, baseMaintenance: 10000, baseStorage: 50, products: ["kahve", "tatli"], requiredLicense: null },
+    "manav": { name: "Manav", category: "retail", setupCost: 300000, icon: "🥬", taxRate: 0.05, baseMaintenance: 5000, products: ["domates", "biber", "salatalik", "patlican", "elma", "armut", "uzum", "kiraz", "seftali", "portakal", "limon", "mandalina", "muz", "kavun", "karpuz", "patates", "sogan", "sarimsak"], requiredLicense: null, requiredShopType: "Küçük Dükkan" },
+    "kasap": { name: "Kasap", category: "retail", setupCost: 500000, icon: "🥩", taxRate: 0.06, baseMaintenance: 8000, products: ["et", "tavuk", "hindi_eti", "ordek_eti", "tavsan_eti", "kaz_eti", "deri"], requiredLicense: "gida_lisansi", requiredShopType: "Küçük Dükkan" },
+    "balik": { name: "Balıkçı", category: "retail", setupCost: 400000, icon: "🐟", taxRate: 0.05, baseMaintenance: 7000, products: ["balik", "havyar", "karides", "istiridye", "salyangoz"], requiredLicense: "gida_lisansi", requiredShopType: "Küçük Dükkan" },
+    "firinci": { name: "Fırın", category: "retail", setupCost: 600000, icon: "🥖", taxRate: 0.04, baseMaintenance: 10000, products: ["ekmek", "pasta"], requiredLicense: null, requiredShopType: "Orta Boy Dükkan" },
+    "market": { name: "Süpermarket", category: "retail", setupCost: 2000000, icon: "🛒", taxRate: 0.08, baseMaintenance: 25000, products: ["sebze", "meyve", "et", "sut", "ekmek", "yumurta", "yag", "seker", "un", "makarna", "spagetti", "konserve", "deterjan", "sabun", "sampuan"], requiredLicense: "market_ruhsati", requiredShopType: "Büyük Mağaza" },
+    "eczane": { name: "Eczane", category: "retail", setupCost: 5000000, icon: "💊", taxRate: 0.10, baseMaintenance: 15000, products: ["ilac"], requiredLicense: "eczaci_diplomasi", requiredShopType: "Orta Boy Dükkan" },
+    "elektronik": { name: "Elektronik Mağaza", category: "retail", setupCost: 3000000, icon: "📱", taxRate: 0.09, baseMaintenance: 12000, products: ["elektronik"], requiredLicense: null, requiredShopType: "Büyük Mağaza" },
+    "kuyumcu": { name: "Kuyumcu", category: "retail", setupCost: 10000000, icon: "💎", taxRate: 0.12, baseMaintenance: 20000, products: ["altin", "mucevher", "inci"], requiredLicense: "kuyumcu_belgesi", requiredShopType: "Küçük Dükkan" },
+    "galeri": { name: "Araba Galerisi", category: "retail", setupCost: 50000000, icon: "🚗", taxRate: 0.15, baseMaintenance: 50000, products: ["araba", "at"], requiredLicense: "galeri_ruhsati", requiredShopType: "Büyük Mağaza" },
+    "restoran": { name: "Restoran", category: "retail", setupCost: 4000000, icon: "🍽️", taxRate: 0.07, baseMaintenance: 18000, products: ["yemek"], requiredLicense: "isletme_ruhsati", requiredShopType: "Orta Boy Dükkan" },
+    "cafe": { name: "Kafe", category: "retail", setupCost: 1500000, icon: "☕", taxRate: 0.06, baseMaintenance: 10000, products: ["kahve", "tatli", "dondurma"], requiredLicense: null, requiredShopType: "Küçük Dükkan" },
     // YENİ PERAKENDE
-    "giyim": { name: "Giyim Mağazası", category: "retail", setupCost: 2500000, icon: "👔", taxRate: 0.08, baseMaintenance: 15000, baseStorage: 120, products: ["giysi", "ayakkabi"], requiredLicense: null },
-    "mobilya": { name: "Mobilya Mağazası", category: "retail", setupCost: 5000000, icon: "🛋️", taxRate: 0.09, baseMaintenance: 20000, baseStorage: 50, products: ["mobilya"], requiredLicense: null },
-    "yapi_market": { name: "Yapı Market", category: "retail", setupCost: 8000000, icon: "🔨", taxRate: 0.08, baseMaintenance: 30000, baseStorage: 300, products: ["kereste", "cimento", "demir"], requiredLicense: "insaat_ruhsati" },
-    "akaryakit": { name: "Akaryakıt İstasyonu", category: "retail", setupCost: 25000000, icon: "⛽", taxRate: 0.12, baseMaintenance: 40000, baseStorage: 500, products: ["benzin", "mazot"], requiredLicense: "akaryakit_lisansi" },
-    "parfumeri": { name: "Parfümeri", category: "retail", setupCost: 3000000, icon: "🧴", taxRate: 0.10, baseMaintenance: 12000, baseStorage: 80, products: ["parfum", "kozmetik"], requiredLicense: null },
-    "oyuncakci": { name: "Oyuncakçı", category: "retail", setupCost: 1000000, icon: "🧸", taxRate: 0.05, baseMaintenance: 6000, baseStorage: 100, products: ["oyuncak"], requiredLicense: null },
-    "kitapci": { name: "Kitabevi", category: "retail", setupCost: 800000, icon: "📚", taxRate: 0.04, baseMaintenance: 5000, baseStorage: 150, products: ["kitap"], requiredLicense: null },
-    "spor": { name: "Spor Mağazası", category: "retail", setupCost: 2000000, icon: "🏀", taxRate: 0.07, baseMaintenance: 10000, baseStorage: 100, products: ["spor_ekipman"], requiredLicense: null },
-    "pet_shop": { name: "Pet Shop", category: "retail", setupCost: 1200000, icon: "🐕", taxRate: 0.06, baseMaintenance: 8000, baseStorage: 60, products: ["evcil_hayvan", "yem"], requiredLicense: "hayvancilik_ruhsati" },
+    "giyim": { name: "Giyim Mağazası", category: "retail", setupCost: 2500000, icon: "👔", taxRate: 0.08, baseMaintenance: 15000, products: ["giysi", "ayakkabi", "kumas"], requiredLicense: null, requiredShopType: "Orta Boy Dükkan" },
+    "mobilya": { name: "Mobilya Mağazası", category: "retail", setupCost: 5000000, icon: "🛋️", taxRate: 0.09, baseMaintenance: 20000, products: ["mobilya"], requiredLicense: null, requiredShopType: "Büyük Mağaza" },
+    "yapi_market": { name: "Yapı Market", category: "retail", setupCost: 8000000, icon: "🔨", taxRate: 0.08, baseMaintenance: 30000, products: ["kereste", "cimento", "demir", "cam", "boya", "civi", "vida"], requiredLicense: "insaat_ruhsati", requiredShopType: "Büyük Mağaza" },
+    "akaryakit": { name: "Akaryakıt İstasyonu", category: "retail", setupCost: 25000000, icon: "⛽", taxRate: 0.12, baseMaintenance: 40000, products: ["benzin", "mazot"], requiredLicense: "akaryakit_lisansi", requiredShopType: "Büyük Mağaza" },
+    "parfumeri": { name: "Parfümeri", category: "retail", setupCost: 3000000, icon: "🧴", taxRate: 0.10, baseMaintenance: 12000, products: ["parfum", "kozmetik"], requiredLicense: null, requiredShopType: "Orta Boy Dükkan" },
+    "oyuncakci": { name: "Oyuncakçı", category: "retail", setupCost: 1000000, icon: "🧸", taxRate: 0.05, baseMaintenance: 6000, products: ["oyuncak"], requiredLicense: null, requiredShopType: "Orta Boy Dükkan" },
+    "kitapci": { name: "Kitabevi", category: "retail", setupCost: 800000, icon: "📚", taxRate: 0.04, baseMaintenance: 5000, products: ["kitap", "gazete"], requiredLicense: null, requiredShopType: "Orta Boy Dükkan" },
+    "spor": { name: "Spor Mağazası", category: "retail", setupCost: 2000000, icon: "🏀", taxRate: 0.07, baseMaintenance: 10000, products: ["spor_ekipman"], requiredLicense: null, requiredShopType: "Orta Boy Dükkan" },
+    "pet_shop": { name: "Pet Shop", category: "retail", setupCost: 1200000, icon: "🐕", taxRate: 0.06, baseMaintenance: 8000, products: ["evcil_hayvan", "yem"], requiredLicense: "hayvancilik_ruhsati", requiredShopType: "Küçük Dükkan" },
 
     // ==================== ÜRETİM (Fabrikalar) ====================
-    "sut_fabrikasi": { name: "Süt Fabrikası", category: "production", setupCost: 8000000, icon: "🧀", taxRate: 0.08, baseMaintenance: 30000, baseStorage: 150, produces: ["sut", "peynir", "yogurt"], requires: ["sut_ham"], requiredLicense: "uretim_izni" },
-    "konserve_fabrikasi": { name: "Konserve Fabrikası", category: "production", setupCost: 12000000, icon: "🥫", taxRate: 0.09, baseMaintenance: 35000, baseStorage: 200, produces: ["konserve"], requires: ["sebze", "meyve"], requiredLicense: "uretim_izni" },
-    "un_fabrikasi": { name: "Un Fabrikası", category: "production", setupCost: 6000000, icon: "🌾", taxRate: 0.07, baseMaintenance: 25000, baseStorage: 250, produces: ["un"], requires: ["bugday"], requiredLicense: "uretim_izni" },
-    "tekstil_fabrikasi": { name: "Tekstil Fabrikası", category: "production", setupCost: 15000000, icon: "🧵", taxRate: 0.10, baseMaintenance: 40000, baseStorage: 180, produces: ["kumas", "giysi"], requires: ["pamuk"], requiredLicense: "uretim_izni" },
-    "elektronik_fabrikasi": { name: "Elektronik Fabrikası", category: "production", setupCost: 100000000, icon: "🔌", taxRate: 0.12, baseMaintenance: 80000, baseStorage: 100, produces: ["elektronik"], requires: ["metal", "plastik"], requiredLicense: "sanayi_ruhsati" },
-    "araba_fabrikasi": { name: "Otomobil Fabrikası", category: "production", setupCost: 500000000, icon: "🏭", taxRate: 0.15, baseMaintenance: 200000, baseStorage: 50, produces: ["araba"], requires: ["metal", "elektronik", "lastik"], requiredLicense: "sanayi_ruhsati" },
-    "ilac_fabrikasi": { name: "İlaç Fabrikası", category: "production", setupCost: 80000000, icon: "💉", taxRate: 0.11, baseMaintenance: 60000, baseStorage: 120, produces: ["ilac"], requires: ["kimyasal"], requiredLicense: "saglik_uretim_izni" },
+    "sut_fabrikasi": { name: "Süt Fabrikası", category: "production", setupCost: 8000000, icon: "🧀", taxRate: 0.08, baseMaintenance: 30000, produces: ["sut", "peynir", "yogurt"], requires: ["sut_ham"], requiredLicense: "uretim_izni" },
+    "konserve_fabrikasi": { name: "Konserve Fabrikası", category: "production", setupCost: 12000000, icon: "🥫", taxRate: 0.09, baseMaintenance: 35000, produces: ["konserve"], requires: ["sebze", "meyve"], requiredLicense: "uretim_izni" },
+    "un_fabrikasi": { name: "Un Fabrikası", category: "production", setupCost: 6000000, icon: "🌾", taxRate: 0.07, baseMaintenance: 25000, produces: ["un"], requires: ["bugday"], requiredLicense: "uretim_izni" },
+    "tekstil_fabrikasi": { name: "Tekstil Fabrikası", category: "production", setupCost: 15000000, icon: "🧵", taxRate: 0.10, baseMaintenance: 40000, produces: ["kumas", "giysi"], requires: ["pamuk"], requiredLicense: "uretim_izni" },
+    "elektronik_fabrikasi": { name: "Elektronik Fabrikası", category: "production", setupCost: 100000000, icon: "🔌", taxRate: 0.12, baseMaintenance: 80000, produces: ["elektronik"], requires: ["metal", "plastik"], requiredLicense: "sanayi_ruhsati" },
+    "araba_fabrikasi": { name: "Otomobil Fabrikası", category: "production", setupCost: 500000000, icon: "🏭", taxRate: 0.15, baseMaintenance: 200000, produces: ["araba"], requires: ["metal", "elektronik", "lastik"], requiredLicense: "sanayi_ruhsati" },
+    "ilac_fabrikasi": { name: "İlaç Fabrikası", category: "production", setupCost: 80000000, icon: "💉", taxRate: 0.11, baseMaintenance: 60000, produces: ["ilac"], requires: ["kimyasal"], requiredLicense: "saglik_uretim_izni" },
     // YENİ ÜRETİM
-    "mobilya_fabrikasi": { name: "Mobilya Fabrikası", category: "production", setupCost: 20000000, icon: "🪑", taxRate: 0.09, baseMaintenance: 45000, baseStorage: 100, produces: ["mobilya"], requires: ["kereste", "metal"], requiredLicense: "uretim_izni" },
-    "ayakkabi_fabrikasi": { name: "Ayakkabı Fabrikası", category: "production", setupCost: 10000000, icon: "👟", taxRate: 0.08, baseMaintenance: 35000, baseStorage: 150, produces: ["ayakkabi"], requires: ["deri", "kumas"], requiredLicense: "uretim_izni" },
-    "boya_fabrikasi": { name: "Boya Fabrikası", category: "production", setupCost: 15000000, icon: "🎨", taxRate: 0.09, baseMaintenance: 40000, baseStorage: 200, produces: ["boya"], requires: ["kimyasal"], requiredLicense: "uretim_izni" },
-    "cimento_fabrikasi": { name: "Çimento Fabrikası", category: "production", setupCost: 50000000, icon: "🏗️", taxRate: 0.10, baseMaintenance: 70000, baseStorage: 500, produces: ["cimento"], requires: ["kireç", "kil"], requiredLicense: "sanayi_ruhsati" },
-    "celik_fabrikasi": { name: "Çelik Fabrikası", category: "production", setupCost: 80000000, icon: "⚙️", taxRate: 0.11, baseMaintenance: 90000, baseStorage: 300, produces: ["metal", "demir"], requires: ["demir_cevheri"], requiredLicense: "sanayi_ruhsati" },
-    "plastik_fabrikasi": { name: "Plastik Fabrikası", category: "production", setupCost: 25000000, icon: "🧱", taxRate: 0.09, baseMaintenance: 50000, baseStorage: 250, produces: ["plastik"], requires: ["petrol"], requiredLicense: "uretim_izni" },
-    "lastik_fabrikasi": { name: "Lastik Fabrikası", category: "production", setupCost: 35000000, icon: "⭕", taxRate: 0.10, baseMaintenance: 55000, baseStorage: 200, produces: ["lastik"], requires: ["kaucuk", "kimyasal"], requiredLicense: "uretim_izni" },
-    "cam_fabrikasi": { name: "Cam Fabrikası", category: "production", setupCost: 30000000, icon: "🪟", taxRate: 0.09, baseMaintenance: 45000, baseStorage: 150, produces: ["cam"], requires: ["kum"], requiredLicense: "uretim_izni" },
-    "seker_fabrikasi": { name: "Şeker Fabrikası", category: "production", setupCost: 18000000, icon: "🍬", taxRate: 0.08, baseMaintenance: 40000, baseStorage: 300, produces: ["seker"], requires: ["seker_pancari"], requiredLicense: "uretim_izni" },
-    "yag_fabrikasi": { name: "Yağ Fabrikası", category: "production", setupCost: 12000000, icon: "🫒", taxRate: 0.07, baseMaintenance: 35000, baseStorage: 200, produces: ["yag"], requires: ["zeytin", "aycicegi"], requiredLicense: "uretim_izni" },
-    "rafineri": { name: "Petrol Rafinerisi", category: "production", setupCost: 300000000, icon: "🛢️", taxRate: 0.15, baseMaintenance: 150000, baseStorage: 1000, produces: ["benzin", "mazot", "petrol"], requires: ["ham_petrol"], requiredLicense: "rafineri_lisansi" },
-    "kozmetik_fabrikasi": { name: "Kozmetik Fabrikası", category: "production", setupCost: 25000000, icon: "💄", taxRate: 0.10, baseMaintenance: 40000, baseStorage: 150, produces: ["parfum", "kozmetik"], requires: ["kimyasal", "esans"], requiredLicense: "uretim_izni" },
-    "oyuncak_fabrikasi": { name: "Oyuncak Fabrikası", category: "production", setupCost: 8000000, icon: "🎮", taxRate: 0.07, baseMaintenance: 25000, baseStorage: 200, produces: ["oyuncak"], requires: ["plastik", "elektronik"], requiredLicense: "uretim_izni" },
-    "matbaa": { name: "Matbaa", category: "production", setupCost: 5000000, icon: "📰", taxRate: 0.06, baseMaintenance: 20000, baseStorage: 300, produces: ["kitap", "gazete"], requires: ["kagit", "murekkep"], requiredLicense: null },
-    "kagit_fabrikasi": { name: "Kağıt Fabrikası", category: "production", setupCost: 15000000, icon: "📄", taxRate: 0.08, baseMaintenance: 40000, baseStorage: 400, produces: ["kagit"], requires: ["kereste"], requiredLicense: "uretim_izni" },
+    "mobilya_fabrikasi": { name: "Mobilya Fabrikası", category: "production", setupCost: 20000000, icon: "🪑", taxRate: 0.09, baseMaintenance: 45000, produces: ["mobilya"], requires: ["kereste", "metal"], requiredLicense: "uretim_izni" },
+    "ayakkabi_fabrikasi": { name: "Ayakkabı Fabrikası", category: "production", setupCost: 10000000, icon: "👟", taxRate: 0.08, baseMaintenance: 35000, produces: ["ayakkabi"], requires: ["deri", "kumas"], requiredLicense: "uretim_izni" },
+    "boya_fabrikasi": { name: "Boya Fabrikası", category: "production", setupCost: 15000000, icon: "🎨", taxRate: 0.09, baseMaintenance: 40000, produces: ["boya"], requires: ["kimyasal"], requiredLicense: "uretim_izni" },
+    "cimento_fabrikasi": { name: "Çimento Fabrikası", category: "production", setupCost: 50000000, icon: "🏗️", taxRate: 0.10, baseMaintenance: 70000, produces: ["cimento"], requires: ["kireç", "kil"], requiredLicense: "sanayi_ruhsati" },
+    "celik_fabrikasi": { name: "Çelik Fabrikası", category: "production", setupCost: 80000000, icon: "⚙️", taxRate: 0.11, baseMaintenance: 90000, produces: ["metal", "demir"], requires: ["demir_cevheri"], requiredLicense: "sanayi_ruhsati" },
+    "plastik_fabrikasi": { name: "Plastik Fabrikası", category: "production", setupCost: 25000000, icon: "🧱", taxRate: 0.09, baseMaintenance: 50000, produces: ["plastik"], requires: ["petrol"], requiredLicense: "uretim_izni" },
+    "lastik_fabrikasi": { name: "Lastik Fabrikası", category: "production", setupCost: 35000000, icon: "⭕", taxRate: 0.10, baseMaintenance: 55000, produces: ["lastik"], requires: ["kaucuk", "kimyasal"], requiredLicense: "uretim_izni" },
+    "cam_fabrikasi": { name: "Cam Fabrikası", category: "production", setupCost: 30000000, icon: "🪟", taxRate: 0.09, baseMaintenance: 45000, produces: ["cam"], requires: ["kum"], requiredLicense: "uretim_izni" },
+    "seker_fabrikasi": { name: "Şeker Fabrikası", category: "production", setupCost: 18000000, icon: "🍬", taxRate: 0.08, baseMaintenance: 40000, produces: ["seker"], requires: ["seker_pancari"], requiredLicense: "uretim_izni" },
+    "yag_fabrikasi": { name: "Yağ Fabrikası", category: "production", setupCost: 12000000, icon: "🫒", taxRate: 0.07, baseMaintenance: 35000, produces: ["yag"], requires: ["zeytin", "aycicegi"], requiredLicense: "uretim_izni" },
+    "rafineri": { name: "Petrol Rafinerisi", category: "production", setupCost: 300000000, icon: "🛢️", taxRate: 0.15, baseMaintenance: 150000, produces: ["benzin", "mazot", "petrol"], requires: ["ham_petrol"], requiredLicense: "rafineri_lisansi" },
+    "kozmetik_fabrikasi": { name: "Kozmetik Fabrikası", category: "production", setupCost: 25000000, icon: "💄", taxRate: 0.10, baseMaintenance: 40000, produces: ["parfum", "kozmetik"], requires: ["kimyasal", "esans"], requiredLicense: "uretim_izni" },
+    "oyuncak_fabrikasi": { name: "Oyuncak Fabrikası", category: "production", setupCost: 8000000, icon: "🎮", taxRate: 0.07, baseMaintenance: 25000, produces: ["oyuncak"], requires: ["plastik", "elektronik"], requiredLicense: "uretim_izni" },
+    "matbaa": { name: "Matbaa", category: "production", setupCost: 5000000, icon: "📰", taxRate: 0.06, baseMaintenance: 20000, produces: ["kitap", "gazete"], requires: ["kagit", "murekkep"], requiredLicense: null },
+    "kagit_fabrikasi": { name: "Kağıt Fabrikası", category: "production", setupCost: 15000000, icon: "📄", taxRate: 0.08, baseMaintenance: 40000, produces: ["kagit"], requires: ["kereste"], requiredLicense: "uretim_izni" },
 
     // ==================== TARIM ====================
-    "tarla": { name: "Tarım Arazisi", category: "farming", setupCost: 500000, icon: "🌾", taxRate: 0.03, baseMaintenance: 3000, baseStorage: 100, produces: ["bugday", "misir", "arpa"], requires: [], requiredLicense: null },
-    "sera": { name: "Sera", category: "farming", setupCost: 800000, icon: "🏡", taxRate: 0.04, baseMaintenance: 5000, baseStorage: 80, produces: ["domates", "biber", "salatalik", "patlican"], requires: [], requiredLicense: null },
-    "bahce": { name: "Meyve Bahçesi", category: "farming", setupCost: 1200000, icon: "🍎", taxRate: 0.04, baseMaintenance: 6000, baseStorage: 120, produces: ["elma", "armut", "uzum", "seftali", "kiraz"], requires: [], requiredLicense: null },
-    "pamuk_tarlasi": { name: "Pamuk Tarlası", category: "farming", setupCost: 700000, icon: "☁️", taxRate: 0.03, baseMaintenance: 4000, baseStorage: 150, produces: ["pamuk"], requires: [], requiredLicense: null },
+    "tarla": { name: "Tarım Arazisi", category: "farming", setupCost: 500000, icon: "🌾", taxRate: 0.03, baseMaintenance: 3000, produces: ["bugday", "misir", "arpa"], requires: [], requiredLicense: null },
+    "sera": { name: "Sera", category: "farming", setupCost: 800000, icon: "🏡", taxRate: 0.04, baseMaintenance: 5000, produces: ["domates", "biber", "salatalik", "patlican"], requires: [], requiredLicense: null },
+    "bahce": { name: "Meyve Bahçesi", category: "farming", setupCost: 1200000, icon: "🍎", taxRate: 0.04, baseMaintenance: 6000, produces: ["elma", "armut", "uzum", "seftali", "kiraz"], requires: [], requiredLicense: null },
+    "pamuk_tarlasi": { name: "Pamuk Tarlası", category: "farming", setupCost: 700000, icon: "☁️", taxRate: 0.03, baseMaintenance: 4000, produces: ["pamuk"], requires: [], requiredLicense: null },
     // YENİ TARIM
-    "zeytinlik": { name: "Zeytinlik", category: "farming", setupCost: 2000000, icon: "🫒", taxRate: 0.04, baseMaintenance: 8000, baseStorage: 100, produces: ["zeytin"], requires: [], requiredLicense: null },
-    "findik_bahcesi": { name: "Fındık Bahçesi", category: "farming", setupCost: 1500000, icon: "🌰", taxRate: 0.04, baseMaintenance: 7000, baseStorage: 90, produces: ["findik"], requires: [], requiredLicense: null },
-    "cay_bahcesi": { name: "Çay Bahçesi", category: "farming", setupCost: 1000000, icon: "🍵", taxRate: 0.03, baseMaintenance: 5000, baseStorage: 80, produces: ["cay"], requires: [], requiredLicense: null },
-    "seker_pancari": { name: "Şeker Pancarı Tarlası", category: "farming", setupCost: 600000, icon: "🥕", taxRate: 0.03, baseMaintenance: 4000, baseStorage: 150, produces: ["seker_pancari"], requires: [], requiredLicense: null },
-    "aycicegi_tarlasi": { name: "Ayçiçeği Tarlası", category: "farming", setupCost: 550000, icon: "🌻", taxRate: 0.03, baseMaintenance: 3500, baseStorage: 140, produces: ["aycicegi"], requires: [], requiredLicense: null },
-    "bag": { name: "Bağ (Üzüm)", category: "farming", setupCost: 1800000, icon: "🍇", taxRate: 0.05, baseMaintenance: 10000, baseStorage: 100, produces: ["uzum"], requires: [], requiredLicense: null },
-    "lavanta_tarlasi": { name: "Lavanta Tarlası", category: "farming", setupCost: 900000, icon: "💜", taxRate: 0.04, baseMaintenance: 5000, baseStorage: 60, produces: ["esans", "lavanta"], requires: [], requiredLicense: null },
-    "gul_bahcesi": { name: "Gül Bahçesi", category: "farming", setupCost: 1200000, icon: "🌹", taxRate: 0.05, baseMaintenance: 7000, baseStorage: 50, produces: ["esans", "cicek"], requires: [], requiredLicense: null },
-    "orman": { name: "Orman İşletmesi", category: "farming", setupCost: 5000000, icon: "🌲", taxRate: 0.06, baseMaintenance: 15000, baseStorage: 500, produces: ["kereste", "odun"], requires: [], requiredLicense: "orman_izni" },
-    "kavun_karpuz": { name: "Kavun/Karpuz Tarlası", category: "farming", setupCost: 400000, icon: "🍉", taxRate: 0.03, baseMaintenance: 3000, baseStorage: 200, produces: ["kavun", "karpuz"], requires: [], requiredLicense: null },
-    "patates_tarlasi": { name: "Patates Tarlası", category: "farming", setupCost: 450000, icon: "🥔", taxRate: 0.03, baseMaintenance: 3000, baseStorage: 180, produces: ["patates"], requires: [], requiredLicense: null },
-    "sogan_tarlasi": { name: "Soğan/Sarımsak Tarlası", category: "farming", setupCost: 400000, icon: "🧅", taxRate: 0.03, baseMaintenance: 2500, baseStorage: 160, produces: ["sogan", "sarimsak"], requires: [], requiredLicense: null },
-    "muz_bahcesi": { name: "Muz Bahçesi", category: "farming", setupCost: 2500000, icon: "🍌", taxRate: 0.05, baseMaintenance: 12000, baseStorage: 100, produces: ["muz"], requires: [], requiredLicense: null },
-    "narenciye": { name: "Narenciye Bahçesi", category: "farming", setupCost: 2000000, icon: "🍊", taxRate: 0.04, baseMaintenance: 10000, baseStorage: 150, produces: ["portakal", "limon", "mandalina"], requires: [], requiredLicense: null },
+    "zeytinlik": { name: "Zeytinlik", category: "farming", setupCost: 2000000, icon: "🫒", taxRate: 0.04, baseMaintenance: 8000, produces: ["zeytin"], requires: [], requiredLicense: null },
+    "findik_bahcesi": { name: "Fındık Bahçesi", category: "farming", setupCost: 1500000, icon: "🌰", taxRate: 0.04, baseMaintenance: 7000, produces: ["findik"], requires: [], requiredLicense: null },
+    "cay_bahcesi": { name: "Çay Bahçesi", category: "farming", setupCost: 1000000, icon: "🍵", taxRate: 0.03, baseMaintenance: 5000, produces: ["cay"], requires: [], requiredLicense: null },
+    "seker_pancari": { name: "Şeker Pancarı Tarlası", category: "farming", setupCost: 600000, icon: "🥕", taxRate: 0.03, baseMaintenance: 4000, produces: ["seker_pancari"], requires: [], requiredLicense: null },
+    "aycicegi_tarlasi": { name: "Ayçiçeği Tarlası", category: "farming", setupCost: 550000, icon: "🌻", taxRate: 0.03, baseMaintenance: 3500, produces: ["aycicegi"], requires: [], requiredLicense: null },
+    "bag": { name: "Bağ (Üzüm)", category: "farming", setupCost: 1800000, icon: "🍇", taxRate: 0.05, baseMaintenance: 10000, produces: ["uzum"], requires: [], requiredLicense: null },
+    "lavanta_tarlasi": { name: "Lavanta Tarlası", category: "farming", setupCost: 900000, icon: "💜", taxRate: 0.04, baseMaintenance: 5000, produces: ["esans", "lavanta"], requires: [], requiredLicense: null },
+    "gul_bahcesi": { name: "Gül Bahçesi", category: "farming", setupCost: 1200000, icon: "🌹", taxRate: 0.05, baseMaintenance: 7000, produces: ["esans", "cicek"], requires: [], requiredLicense: null },
+    "orman": { name: "Orman İşletmesi", category: "farming", setupCost: 5000000, icon: "🌲", taxRate: 0.06, baseMaintenance: 15000, produces: ["kereste", "odun"], requires: [], requiredLicense: "orman_izni" },
+    "kavun_karpuz": { name: "Kavun/Karpuz Tarlası", category: "farming", setupCost: 400000, icon: "🍉", taxRate: 0.03, baseMaintenance: 3000, produces: ["kavun", "karpuz"], requires: [], requiredLicense: null },
+    "patates_tarlasi": { name: "Patates Tarlası", category: "farming", setupCost: 450000, icon: "🥔", taxRate: 0.03, baseMaintenance: 3000, produces: ["patates"], requires: [], requiredLicense: null },
+    "sogan_tarlasi": { name: "Soğan/Sarımsak Tarlası", category: "farming", setupCost: 400000, icon: "🧅", taxRate: 0.03, baseMaintenance: 2500, produces: ["sogan", "sarimsak"], requires: [], requiredLicense: null },
+    "muz_bahcesi": { name: "Muz Bahçesi", category: "farming", setupCost: 2500000, icon: "🍌", taxRate: 0.05, baseMaintenance: 12000, produces: ["muz"], requires: [], requiredLicense: null },
+    "narenciye": { name: "Narenciye Bahçesi", category: "farming", setupCost: 2000000, icon: "🍊", taxRate: 0.04, baseMaintenance: 10000, produces: ["portakal", "limon", "mandalina"], requires: [], requiredLicense: null },
 
     // ==================== HAYVANCILIK ====================
-    "ciftlik": { name: "Büyükbaş Çiftliği", category: "livestock", setupCost: 3000000, icon: "🐄", taxRate: 0.05, baseMaintenance: 15000, baseStorage: 60, produces: ["sut_ham", "et", "deri"], requires: ["saman", "yem"], requiredLicense: "hayvancilik_ruhsati" },
-    "kumus": { name: "Kümes", category: "livestock", setupCost: 800000, icon: "🐔", taxRate: 0.04, baseMaintenance: 5000, baseStorage: 100, produces: ["yumurta", "tavuk"], requires: ["yem"], requiredLicense: null },
-    "koyun_ciftligi": { name: "Küçükbaş Çiftliği", category: "livestock", setupCost: 2000000, icon: "🐑", taxRate: 0.04, baseMaintenance: 10000, baseStorage: 70, produces: ["yun", "et", "sut_ham"], requires: ["saman", "yem"], requiredLicense: null },
-    "aricilik": { name: "Arıcılık", category: "livestock", setupCost: 400000, icon: "🐝", taxRate: 0.03, baseMaintenance: 2000, baseStorage: 40, produces: ["bal", "balmumu"], requires: [], requiredLicense: null },
-    "balik_ciftligi": { name: "Balık Çiftliği", category: "livestock", setupCost: 2500000, icon: "🐠", taxRate: 0.05, baseMaintenance: 12000, baseStorage: 80, produces: ["balik", "havyar"], requires: ["yem"], requiredLicense: "su_urunleri_izni" },
+    "ciftlik": { name: "Büyükbaş Çiftliği", category: "livestock", setupCost: 3000000, icon: "🐄", taxRate: 0.05, baseMaintenance: 15000, produces: ["sut_ham", "et", "deri"], requires: ["saman", "yem"], requiredLicense: "hayvancilik_ruhsati" },
+    "kumus": { name: "Kümes", category: "livestock", setupCost: 800000, icon: "🐔", taxRate: 0.04, baseMaintenance: 5000, produces: ["yumurta", "tavuk"], requires: ["yem"], requiredLicense: null },
+    "koyun_ciftligi": { name: "Küçükbaş Çiftliği", category: "livestock", setupCost: 2000000, icon: "🐑", taxRate: 0.04, baseMaintenance: 10000, produces: ["yun", "et", "sut_ham"], requires: ["saman", "yem"], requiredLicense: null },
+    "aricilik": { name: "Arıcılık", category: "livestock", setupCost: 400000, icon: "🐝", taxRate: 0.03, baseMaintenance: 2000, produces: ["bal", "balmumu"], requires: [], requiredLicense: null },
+    "balik_ciftligi": { name: "Balık Çiftliği", category: "livestock", setupCost: 2500000, icon: "🐠", taxRate: 0.05, baseMaintenance: 12000, produces: ["balik", "havyar"], requires: ["yem"], requiredLicense: "su_urunleri_izni" },
     // YENİ HAYVANCILIK
-    "keci_ciftligi": { name: "Keçi Çiftliği", category: "livestock", setupCost: 1500000, icon: "🐐", taxRate: 0.04, baseMaintenance: 8000, baseStorage: 60, produces: ["keci_sutu", "keci_peyniri", "et"], requires: ["yem"], requiredLicense: null },
-    "at_ciftligi": { name: "At Çiftliği", category: "livestock", setupCost: 10000000, icon: "🐎", taxRate: 0.08, baseMaintenance: 30000, baseStorage: 30, produces: ["at"], requires: ["yem", "saman"], requiredLicense: "hayvancilik_ruhsati" },
-    "ipek_bocegi": { name: "İpek Böceği Yetiştiriciliği", category: "livestock", setupCost: 2000000, icon: "🐛", taxRate: 0.05, baseMaintenance: 8000, baseStorage: 40, produces: ["ipek"], requires: ["dut_yapragi"], requiredLicense: null },
-    "deve_ciftligi": { name: "Deve Çiftliği", category: "livestock", setupCost: 5000000, icon: "🐪", taxRate: 0.06, baseMaintenance: 15000, baseStorage: 40, produces: ["deve_sutu", "deve_yunu"], requires: ["yem"], requiredLicense: "hayvancilik_ruhsati" },
-    "tavsan_ciftligi": { name: "Tavşan Çiftliği", category: "livestock", setupCost: 600000, icon: "🐰", taxRate: 0.03, baseMaintenance: 4000, baseStorage: 80, produces: ["tavsan_eti", "tavsan_tuy"], requires: ["yem"], requiredLicense: null },
-    "hindi_ciftligi": { name: "Hindi Çiftliği", category: "livestock", setupCost: 1200000, icon: "🦃", taxRate: 0.04, baseMaintenance: 7000, baseStorage: 70, produces: ["hindi_eti"], requires: ["yem"], requiredLicense: null },
-    "ordek_ciftligi": { name: "Ördek Çiftliği", category: "livestock", setupCost: 900000, icon: "🦆", taxRate: 0.04, baseMaintenance: 5000, baseStorage: 80, produces: ["ordek_eti", "ordek_tuy"], requires: ["yem"], requiredLicense: null },
-    "salyangoz": { name: "Salyangoz Çiftliği", category: "livestock", setupCost: 500000, icon: "🐌", taxRate: 0.05, baseMaintenance: 3000, baseStorage: 50, produces: ["salyangoz"], requires: [], requiredLicense: "ozel_uretim_izni" },
-    "istiridye": { name: "İstiridye/Midye Çiftliği", category: "livestock", setupCost: 3000000, icon: "🦪", taxRate: 0.06, baseMaintenance: 15000, baseStorage: 60, produces: ["istiridye", "inci"], requires: [], requiredLicense: "su_urunleri_izni" },
-    "karides": { name: "Karides Çiftliği", category: "livestock", setupCost: 4000000, icon: "🦐", taxRate: 0.07, baseMaintenance: 20000, baseStorage: 50, produces: ["karides"], requires: ["yem"], requiredLicense: "su_urunleri_izni" },
+    "keci_ciftligi": { name: "Keçi Çiftliği", category: "livestock", setupCost: 1500000, icon: "🐐", taxRate: 0.04, baseMaintenance: 8000, produces: ["keci_sutu", "keci_peyniri", "et"], requires: ["yem"], requiredLicense: null },
+    "at_ciftligi": { name: "At Çiftliği", category: "livestock", setupCost: 10000000, icon: "🐎", taxRate: 0.08, baseMaintenance: 30000, produces: ["at"], requires: ["yem", "saman"], requiredLicense: "hayvancilik_ruhsati" },
+    "ipek_bocegi": { name: "İpek Böceği Yetiştiriciliği", category: "livestock", setupCost: 2000000, icon: "🐛", taxRate: 0.05, baseMaintenance: 8000, produces: ["ipek"], requires: ["dut_yapragi"], requiredLicense: null },
+    "deve_ciftligi": { name: "Deve Çiftliği", category: "livestock", setupCost: 5000000, icon: "🐪", taxRate: 0.06, baseMaintenance: 15000, produces: ["deve_sutu", "deve_yunu"], requires: ["yem"], requiredLicense: "hayvancilik_ruhsati" },
+    "tavsan_ciftligi": { name: "Tavşan Çiftliği", category: "livestock", setupCost: 600000, icon: "🐰", taxRate: 0.03, baseMaintenance: 4000, produces: ["tavsan_eti", "tavsan_tuy"], requires: ["yem"], requiredLicense: null },
+    "hindi_ciftligi": { name: "Hindi Çiftliği", category: "livestock", setupCost: 1200000, icon: "🦃", taxRate: 0.04, baseMaintenance: 7000, produces: ["hindi_eti"], requires: ["yem"], requiredLicense: null },
+    "ordek_ciftligi": { name: "Ördek Çiftliği", category: "livestock", setupCost: 900000, icon: "🦆", taxRate: 0.04, baseMaintenance: 5000, produces: ["ordek_eti", "ordek_tuy"], requires: ["yem"], requiredLicense: null },
+    "salyangoz": { name: "Salyangoz Çiftliği", category: "livestock", setupCost: 500000, icon: "🐌", taxRate: 0.05, baseMaintenance: 3000, produces: ["salyangoz"], requires: [], requiredLicense: "ozel_uretim_izni" },
+    "istiridye": { name: "İstiridye/Midye Çiftliği", category: "livestock", setupCost: 3000000, icon: "🦪", taxRate: 0.06, baseMaintenance: 15000, produces: ["istiridye", "inci"], requires: [], requiredLicense: "su_urunleri_izni" },
+    "karides": { name: "Karides Çiftliği", category: "livestock", setupCost: 4000000, icon: "🦐", taxRate: 0.07, baseMaintenance: 20000, produces: ["karides"], requires: ["yem"], requiredLicense: "su_urunleri_izni" },
 
     // ==================== ÖZEL İŞLETMELER ====================
-    "maden": { name: "Maden İşletmesi", category: "special", setupCost: 100000000, icon: "⛏️", taxRate: 0.12, baseMaintenance: 80000, baseStorage: 500, produces: ["demir_cevheri", "bakir", "komur"], requires: [], requiredLicense: "maden_ruhsati" },
-    "petrol_kuyusu": { name: "Petrol Kuyusu", category: "special", setupCost: 500000000, icon: "🛢️", taxRate: 0.20, baseMaintenance: 200000, baseStorage: 1000, produces: ["ham_petrol"], requires: [], requiredLicense: "petrol_lisansi" },
-    "kaucuk_plantasyonu": { name: "Kauçuk Plantasyonu", category: "special", setupCost: 10000000, icon: "🌴", taxRate: 0.06, baseMaintenance: 25000, baseStorage: 200, produces: ["kaucuk"], requires: [], requiredLicense: null }
+    "maden": { name: "Maden İşletmesi", category: "special", setupCost: 100000000, icon: "⛏️", taxRate: 0.12, baseMaintenance: 80000, produces: ["demir_cevheri", "bakir", "komur"], requires: [], requiredLicense: "maden_ruhsati" },
+    "petrol_kuyusu": { name: "Petrol Kuyusu", category: "special", setupCost: 500000000, icon: "🛢️", taxRate: 0.20, baseMaintenance: 200000, produces: ["ham_petrol"], requires: [], requiredLicense: "petrol_lisansi" },
+    "kaucuk_plantasyonu": { name: "Kauçuk Plantasyonu", category: "special", setupCost: 10000000, icon: "🌴", taxRate: 0.06, baseMaintenance: 25000, produces: ["kaucuk"], requires: [], requiredLicense: null },
+
+    // Eksik Üretimler (Otomatik Eklendi)
+    "aycicegi_isleme": { name: "Ayçiçeği İşleme Tesisi", category: "production", setupCost: 3000000, icon: "🌻", taxRate: 0.06, baseMaintenance: 15000, produces: ["cekirdek", "aycicek_yagi"], requires: ["aycicegi"], requiredLicense: "gida_lisansi" },
+    "meyve_paketleme": { name: "Meyve Paketleme Tesisi", category: "production", setupCost: 2000000, icon: "🍎", taxRate: 0.05, baseMaintenance: 10000, produces: ["meyve"], requires: ["elma", "armut", "uzum"], requiredLicense: "gida_lisansi" },
+    "sebze_paketleme": { name: "Sebze Paketleme Tesisi", category: "production", setupCost: 2000000, icon: "🥗", taxRate: 0.05, baseMaintenance: 10000, produces: ["sebze"], requires: ["domates", "biber", "salatalik", "patlican"], requiredLicense: "gida_lisansi" },
+
+    // ==================== EKSİK ÜRETİMLER (Otomatik Eklendi) ====================
+    "yem_fabrikasi": { name: "Yem Fabrikası", category: "production", setupCost: 5000000, icon: "🌰", taxRate: 0.06, baseMaintenance: 20000, produces: ["yem"], requires: ["misir", "arpa", "bugday"], requiredLicense: "uretim_izni" },
+    "ekmek_fabrikasi": { name: "Ekmek Fabrikası", category: "production", setupCost: 4000000, icon: "🍞", taxRate: 0.05, baseMaintenance: 18000, produces: ["ekmek", "pasta"], requires: ["un", "seker", "yag"], requiredLicense: "gida_lisansi" },
+    "sarkuteri_fabrikasi": { name: "Şarküteri Fabrikası", category: "production", setupCost: 8000000, icon: "🥓", taxRate: 0.08, baseMaintenance: 30000, produces: ["salam", "sucuk", "sosis"], requires: ["et", "baharat"], requiredLicense: "gida_lisansi" },
+    "icecek_fabrikasi": { name: "İçecek Fabrikası", category: "production", setupCost: 10000000, icon: "🥤", taxRate: 0.08, baseMaintenance: 35000, produces: ["meşrubat", "meyve_suyu", "su"], requires: ["seker", "esans"], requiredLicense: "uretim_izni" },
+    "kahve_fabrikasi": { name: "Kahve Fabrikası", category: "production", setupCost: 6000000, icon: "☕", taxRate: 0.07, baseMaintenance: 22000, produces: ["kahve"], requires: ["cay"], requiredLicense: "gida_lisansi" },
+    "tatli_fabrikasi": { name: "Tatlı Fabrikası", category: "production", setupCost: 7000000, icon: "🍰", taxRate: 0.07, baseMaintenance: 25000, produces: ["tatli", "dondurma"], requires: ["seker", "sut", "yag"], requiredLicense: "gida_lisansi" },
+    "sut_urunleri_fabrikasi": { name: "Süt Ürünleri Fabrikası", category: "production", setupCost: 9000000, icon: "🧈", taxRate: 0.07, baseMaintenance: 28000, produces: ["tereyagi"], requires: ["sut_ham"], requiredLicense: "gida_lisansi" },
+    "aydinlatma_fabrikasi": { name: "Aydınlatma Fabrikası", category: "production", setupCost: 12000000, icon: "💡", taxRate: 0.09, baseMaintenance: 38000, produces: ["avize", "lamba"], requires: ["metal", "cam", "elektronik"], requiredLicense: "uretim_izni" },
+    "porselen_fabrikasi": { name: "Porselen Fabrikası", category: "production", setupCost: 25000000, icon: "🏺", taxRate: 0.09, baseMaintenance: 55000, produces: ["tabak", "bardak", "fincan", "vazo", "mutfak_esyasi"], requires: ["kil"], requiredLicense: "uretim_izni" },
+    "metal_islem": { name: "Metal İşleme", category: "production", setupCost: 15000000, icon: "🔩", taxRate: 0.08, baseMaintenance: 40000, produces: ["civi", "vida"], requires: ["metal"], requiredLicense: "uretim_izni" },
+    "tuhafiye_fabrikasi": { name: "Tuhafiye Fabrikası", category: "production", setupCost: 3000000, icon: "🧵", taxRate: 0.06, baseMaintenance: 15000, produces: ["iplik", "dugme"], requires: ["pamuk", "plastik"], requiredLicense: null },
+    "cicek_seralari": { name: "Çiçek Seraları", category: "farming", setupCost: 1500000, icon: "💐", taxRate: 0.05, baseMaintenance: 8000, produces: ["demet"], requires: [], requiredLicense: null },
+    "tekstil_atolyesi": { name: "Tekstil Atölyesi", category: "production", setupCost: 8000000, icon: "🪡", taxRate: 0.07, baseMaintenance: 30000, produces: ["tul"], requires: ["kumas"], requiredLicense: "uretim_izni" },
+    "spor_ekipman_fabrikasi": { name: "Spor Ekipmanı Fabrikası", category: "production", setupCost: 12000000, icon: "⚽", taxRate: 0.08, baseMaintenance: 35000, produces: ["spor_ekipman"], requires: ["plastik", "kumas", "metal"], requiredLicense: "uretim_izni" },
+    "saat_fabrikasi": { name: "Saat Fabrikası", category: "production", setupCost: 20000000, icon: "⌚", taxRate: 0.10, baseMaintenance: 45000, produces: ["saat"], requires: ["metal", "cam", "elektronik"], requiredLicense: "uretim_izni" },
+    "maden_isleme": { name: "Maden İşleme Tesisi", category: "production", setupCost: 50000000, icon: "⚒️", taxRate: 0.11, baseMaintenance: 70000, produces: ["altin", "mucevher"], requires: ["demir_cevheri", "bakir"], requiredLicense: "maden_ruhsati" },
+    "hediyelik_atolyesi": { name: "Hediyelik Atölyesi", category: "production", setupCost: 2000000, icon: "🎁", taxRate: 0.05, baseMaintenance: 12000, produces: ["hediyelik"], requires: ["plastik", "kumas"], requiredLicense: null },
+    "oto_yedek_fabrikasi": { name: "Oto Yedek Parça Fabrikası", category: "production", setupCost: 30000000, icon: "🔋", taxRate: 0.10, baseMaintenance: 55000, produces: ["aku", "fren_balatasi"], requires: ["metal", "plastik"], requiredLicense: "sanayi_ruhsati" },
+    "restoran_merkezi": { name: "Merkezi Mutfak", category: "production", setupCost: 15000000, icon: "🍽️", taxRate: 0.08, baseMaintenance: 40000, produces: ["yemek"], requires: ["et", "sebze", "meyve"], requiredLicense: "gida_lisansi" },
+    "hayvan_ciftligi_genel": { name: "Genel Hayvan Çiftliği", category: "livestock", setupCost: 2000000, icon: "🐾", taxRate: 0.05, baseMaintenance: 12000, produces: ["evcil_hayvan"], requires: ["yem"], requiredLicense: "hayvancilik_ruhsati" },
+
+    // Notlar:
+    // - "meyve" ve "sebze" generic terimler, spesifik türler tarım işletmelerinde üretiliyor
+    // - Çiçek demeti artık üretiliyor (cicek_seralari)
+    // - Tüm yemek/içecek üretimleri eklendi
+
+
+
+    // ==================== YENİ PERAKENDE İŞLETMELER ====================
+    "tuhafiye": { name: "Tuhafiye", category: "retail", setupCost: 600000, icon: "🧶", taxRate: 0.06, baseMaintenance: 6000, products: ["iplik", "dugme", "kumas"], requiredLicense: null, requiredShopType: "Küçük Dükkan" },
+    "optik": { name: "Optik", category: "retail", setupCost: 1800000, icon: "👓", taxRate: 0.08, baseMaintenance: 10000, products: ["gozluk"], requiredLicense: null, requiredShopType: "Küçük Dükkan" },
+    "saat_magazasi": { name: "Saat Mağazası", category: "retail", setupCost: 2500000, icon: "⌚", taxRate: 0.09, baseMaintenance: 12000, products: ["saat"], requiredLicense: null, requiredShopType: "Orta Boy Dükkan" },
+    "hediyelik": { name: "Hediyelik Eşya", category: "retail", setupCost: 700000, icon: "🎁", taxRate: 0.06, baseMaintenance: 7000, products: ["hediyelik"], requiredLicense: null, requiredShopType: "Küçük Dükkan" },
+    "cicek_magazasi": { name: "Çiçekçi", category: "retail", setupCost: 500000, icon: "💐", taxRate: 0.05, baseMaintenance: 5000, products: ["cicek", "demet", "lavanta"], requiredLicense: null, requiredShopType: "Küçük Dükkan" },
+    "tatlici": { name: "Tatlıcı", category: "retail", setupCost: 1200000, icon: "🍰", taxRate: 0.07, baseMaintenance: 9000, products: ["tatli", "dondurma", "biskuvi", "gofret"], requiredLicense: "gida_lisansi", requiredShopType: "Orta Boy Dükkan" },
+    "kasarci": { name: "Kasarcı", category: "retail", setupCost: 800000, icon: "🧀", taxRate: 0.06, baseMaintenance: 8000, products: ["peynir", "tereyagi", "zeytin", "yogurt", "keci_peyniri", "bal"], requiredLicense: "gida_lisansi", requiredShopType: "Küçük Dükkan" },
+    "kuruyemis": { name: "Kuruyemiş", category: "retail", setupCost: 650000, icon: "🥜", taxRate: 0.05, baseMaintenance: 6000, products: ["findik", "cekirdek", "badem", "ceviz", "antep_fistigi", "susam"], requiredLicense: null, requiredShopType: "Küçük Dükkan" },
+    "sarkuteri": { name: "Şarküteri", category: "retail", setupCost: 1000000, icon: "🥓", taxRate: 0.07, baseMaintenance: 10000, products: ["salam", "sucuk", "sosis"], requiredLicense: "gida_lisansi", requiredShopType: "Orta Boy Dükkan" },
+    "icecek_market": { name: "İçecek Marketi", category: "retail", setupCost: 1500000, icon: "🥤", taxRate: 0.07, baseMaintenance: 12000, products: ["meşrubat", "su", "meyve_suyu"], requiredLicense: null, requiredShopType: "Orta Boy Dükkan" },
+    "zuhuurat": { name: "Züccaciye", category: "retail", setupCost: 900000, icon: "🍴", taxRate: 0.06, baseMaintenance: 8000, products: ["mutfak_esyasi", "tabak", "bardak", "fincan", "vazo"], requiredLicense: null, requiredShopType: "Orta Boy Dükkan" },
+    "hirdavat": { name: "Hırdavat", category: "retail", setupCost: 1100000, icon: "🔧", taxRate: 0.07, baseMaintenance: 9000, products: ["civi", "vida", "boya"], requiredLicense: null, requiredShopType: "Orta Boy Dükkan" },
+    "hali_magazasi": { name: "Halı Mağazası", category: "retail", setupCost: 3500000, icon: "🪢", taxRate: 0.09, baseMaintenance: 18000, products: ["hali", "kilim"], requiredLicense: null, requiredShopType: "Büyük Mağaza" },
+    "perde_magazasi": { name: "Perde Mağazası", category: "retail", setupCost: 2000000, icon: "🪟", taxRate: 0.08, baseMaintenance: 14000, products: ["perde", "tul", "nevresim", "havlu"], requiredLicense: null, requiredShopType: "Orta Boy Dükkan" },
+    "aydinlatma": { name: "Aydınlatma Mağazası", category: "retail", setupCost: 2800000, icon: "💡", taxRate: 0.08, baseMaintenance: 16000, products: ["avize", "lamba"], requiredLicense: null, requiredShopType: "Büyük Mağaza" },
+    "beyaz_esya": { name: "Beyaz Eşya Mağazası", category: "retail", setupCost: 8000000, icon: "🏠", taxRate: 0.10, baseMaintenance: 30000, products: ["buzdolabi", "camasir_makinesi", "bulasik_makinesi"], requiredLicense: null, requiredShopType: "Büyük Mağaza" },
+    "oto_yedek_parca": { name: "Oto Yedek Parça", category: "retail", setupCost: 5000000, icon: "🔩", taxRate: 0.09, baseMaintenance: 22000, products: ["lastik", "aku", "fren_balatasi"], requiredLicense: null, requiredShopType: "Büyük Mağaza" },
+
+    // ==================== YENİ ÜRETİM (FABRIKA) ====================
+    "bisküvi_fabrikasi": { name: "Bisküvi Fabrikası", category: "production", setupCost: 18000000, icon: "🍪", taxRate: 0.09, baseMaintenance: 45000, produces: ["biskuvi", "gofret"], requires: ["un", "seker", "yag"], requiredLicense: "uretim_izni" },
+    "makarna_fabrikasi": { name: "Makarna Fabrikası", category: "production", setupCost: 12000000, icon: "🍝", taxRate: 0.08, baseMaintenance: 35000, produces: ["makarna", "spagetti"], requires: ["un"], requiredLicense: "uretim_izni" },
+    "deterjan_fabrikasi": { name: "Deterjan Fabrikası", category: "production", setupCost: 20000000, icon: "🧼", taxRate: 0.09, baseMaintenance: 50000, produces: ["deterjan", "sabun", "sampuan"], requires: ["kimyasal"], requiredLicense: "uretim_izni" },
+    "porselen_fabrikasi": { name: "Porselen Fabrikası", category: "production", setupCost: 25000000, icon: "🏺", taxRate: 0.09, baseMaintenance: 55000, produces: ["tabak", "fincan", "vazo"], requires: ["kil"], requiredLicense: "uretim_izni" },
+    "ev_tekstili_fabrikasi": { name: "Ev Tekstili Fabrikası", category: "production", setupCost: 22000000, icon: "🛏️", taxRate: 0.09, baseMaintenance: 50000, produces: ["perde", "nevresim", "havlu"], requires: ["kumas"], requiredLicense: "uretim_izni" },
+    "hali_fabrikasi": { name: "Halı Fabrikası", category: "production", setupCost: 35000000, icon: "🪢", taxRate: 0.10, baseMaintenance: 65000, produces: ["hali", "kilim"], requires: ["yun", "iplik"], requiredLicense: "uretim_izni" },
+    "camasir_makinesi_fabrikasi": { name: "Beyaz Eşya Fabrikası", category: "production", setupCost: 150000000, icon: "🏠", taxRate: 0.12, baseMaintenance: 120000, produces: ["camasir_makinesi", "buzdolabi", "bulasik_makinesi"], requires: ["metal", "plastik", "elektronik"], requiredLicense: "sanayi_ruhsati" },
+    "gozluk_fabrikasi": { name: "Gözlük Fabrikası", category: "production", setupCost: 18000000, icon: "👓", taxRate: 0.09, baseMaintenance: 40000, produces: ["gozluk"], requires: ["cam", "plastik"], requiredLicense: "uretim_izni" },
+
+    // ==================== YENİ TARIM ====================
+    "antep_fistigi": { name: "Antep Fıstığı Bahçesi", category: "farming", setupCost: 3500000, icon: "🥜", taxRate: 0.05, baseMaintenance: 15000, produces: ["antep_fistigi"], requires: [], requiredLicense: null },
+    "badem_bahcesi": { name: "Badem Bahçesi", category: "farming", setupCost: 2800000, icon: "🌰", taxRate: 0.04, baseMaintenance: 12000, produces: ["badem"], requires: [], requiredLicense: null },
+    "ceviz_bahcesi": { name: "Ceviz Bahçesi", category: "farming", setupCost: 2500000, icon: "🌰", taxRate: 0.04, baseMaintenance: 11000, produces: ["ceviz"], requires: [], requiredLicense: null },
+    "susam_tarlasi": { name: "Susam Tarlası", category: "farming", setupCost: 800000, icon: "🌾", taxRate: 0.03, baseMaintenance: 5000, produces: ["susam"], requires: [], requiredLicense: null },
+    "tutun_tarlasi": { name: "Tütün Tarlası", category: "farming", setupCost: 3000000, icon: "🚬", taxRate: 0.08, baseMaintenance: 18000, produces: ["tutun"], requires: [], requiredLicense: "ozel_uretim_izni" },
+    "keten_tarlasi": { name: "Keten Tarlası", category: "farming", setupCost: 1200000, icon: "🌾", taxRate: 0.04, baseMaintenance: 7000, produces: ["keten"], requires: [], requiredLicense: null },
+
+    // ==================== YENİ HAYVANCILIK ====================
+    "kaz_ciftligi": { name: "Kaz Çiftliği", category: "livestock", setupCost: 1000000, icon: "🦆", taxRate: 0.04, baseMaintenance: 6000, produces: ["kaz_eti", "kaz_tuyu"], requires: ["yem"], requiredLicense: null },
+    "bildircin_ciftligi": { name: "Bıldırcın Çiftliği", category: "livestock", setupCost: 800000, icon: "🐦", taxRate: 0.04, baseMaintenance: 5000, produces: ["bildircin_yumurtasi", "bildircin_eti"], requires: ["yem"], requiredLicense: null }
 };
 
 // --- KALİTE SİSTEMİ ---
@@ -1234,16 +1584,6 @@ const SPECIAL_LICENSE_LEVELS = {
     3: { name: "Stratejik İşletme Ruhsatı", maxSpecial: 2, cost: 200000000 },
     4: { name: "Mega İşletme Lisansı", maxSpecial: 3, cost: 500000000 },
     5: { name: "Sınırsız Özel Lisans", maxSpecial: 999, cost: 2000000000 }
-};
-
-// --- KİŞİSEL DEPO SİSTEMİ ---
-const WAREHOUSE_LEVELS = {
-    1: { name: "Küçük Depo", capacity: 500, cost: 0 },
-    2: { name: "Orta Depo", capacity: 1500, cost: 500000 },
-    3: { name: "Büyük Depo", capacity: 3000, cost: 2000000 },
-    4: { name: "Dev Depo", capacity: 6000, cost: 8000000 },
-    5: { name: "Mega Depo", capacity: 12000, cost: 30000000 },
-    6: { name: "Ultra Depo", capacity: 25000, cost: 100000000 }
 };
 
 // --- ÜRÜN VERİLERİ ---
@@ -1369,7 +1709,91 @@ const PRODUCTS = {
     // ==================== HAZIR ÜRÜNLER ====================
     "yemek": { name: "Yemek Porsiyonu", basePrice: 150, category: "ready", unit: "porsiyon", icon: "🍽️" },
     "kahve": { name: "Kahve", basePrice: 50, category: "ready", unit: "bardak", icon: "☕" },
-    "tatli": { name: "Tatlı", basePrice: 100, category: "ready", unit: "porsiyon", icon: "🍰" }
+    "tatli": { name: "Tatlı", basePrice: 100, category: "ready", unit: "porsiyon", icon: "🍰" },
+    "dondurma": { name: "Dondurma", basePrice: 80, category: "ready", unit: "top", icon: "🍦" },
+
+    // ==================== YENİ ÜRÜNLER (Yeni İşletmeler İçin) ====================
+    // Tuhafiye
+    "iplik": { name: "İplik", basePrice: 40, category: "raw", unit: "top", icon: "🧵" },
+    "dugme": { name: "Düğme", basePrice: 15, category: "raw", unit: "adet", icon: "⚫" },
+
+    // Optik & Saat
+    "gozluk": { name: "Gözlük", basePrice: 800, category: "processed", unit: "adet", icon: "👓" },
+    "saat": { name: "Saat", basePrice: 1500, category: "processed", unit: "adet", icon: "⌚" },
+
+    // Hediyelik
+    "hediyelik": { name: "Hediyelik Eşya", basePrice: 200, category: "processed", unit: "adet", icon: "🎁" },
+    "demet": { name: "Çiçek Demeti", basePrice: 150, category: "fresh", unit: "demet", icon: "💐" },
+
+    // Kuruyemiş & Baharatlar
+    "cekirdek": { name: "Çekirdek", basePrice: 80, category: "processed", unit: "kg", icon: "🌻" },
+    "antep_fistigi": { name: "Antep Fıstığı", basePrice: 400, category: "fresh", unit: "kg", icon: "🥜" },
+    "badem": { name: "Badem", basePrice: 250, category: "fresh", unit: "kg", icon: "🌰" },
+    "ceviz": { name: "Ceviz", basePrice: 200, category: "fresh", unit: "kg", icon: "🌰" },
+    "baharatlar": { name: "Baharatlar", basePrice: 150, category: "processed", unit: "kg", icon: "🌶️" },
+    "susam": { name: "Susam", basePrice: 100, category: "fresh", unit: "kg", icon: "🌾" },
+
+    // Şarküteri
+    "salam": { name: "Salam", basePrice: 250, category: "processed", unit: "kg", icon: "🥓" },
+    "sucuk": { name: "Sucuk", basePrice: 300, category: "processed", unit: "kg", icon: "🥓" },
+    "sosis": { name: "Sosis", basePrice: 200, category: "processed", unit: "kg", icon: "🌭" },
+    "tereyagi": { name: "Tereyağı", basePrice: 180, category: "processed", unit: "kg", icon: "🧈" },
+
+    // İçecekler
+    "meşrubat": { name: "Meşrubat", basePrice: 30, category: "ready", unit: "şişe", icon: "🥤" },
+    "su": { name: "Su", basePrice: 10, category: "ready", unit: "şişe", icon: "💧" },
+    "meyve_suyu": { name: "Meyve Suyu", basePrice: 40, category: "ready", unit: "kutu", icon: "🧃" },
+
+    // Ev Eşyaları
+    "mutfak_esyasi": { name: "Mutfak Eşyası", basePrice: 150, category: "processed", unit: "adet", icon: "🍴" },
+    "tabak": { name: "Tabak", basePrice: 80, category: "processed", unit: "adet", icon: "🍽️" },
+    "bardak": { name: "Bardak", basePrice: 50, category: "processed", unit: "adet", icon: "🥛" },
+    "fincan": { name: "Fincan", basePrice: 70, category: "processed", unit: "adet", icon: "☕" },
+    "vazo": { name: "Vazo", basePrice: 250, category: "processed", unit: "adet", icon: "🏺" },
+
+    // Hırdavat
+    "civi": { name: "Çivi", basePrice: 20, category: "raw", unit: "kg", icon: "📌" },
+    "vida": { name: "Vida", basePrice: 30, category: "raw", unit: "kg", icon: "🔩" },
+
+    // Tekstil
+    "perde": { name: "Perde", basePrice: 600, category: "processed", unit: "adet", icon: "🪟" },
+    "tul": { name: "Tül", basePrice: 400, category: "processed", unit: "m", icon: "🪟" },
+    "nevresim": { name: "Nevresim", basePrice: 800, category: "processed", unit: "takım", icon: "🛏️" },
+    "havlu": { name: "Havlu", basePrice: 150, category: "processed", unit: "adet", icon: "🧴" },
+    "hali": { name: "Halı", basePrice: 5000, category: "processed", unit: "adet", icon: "🪢" },
+    "kilim": { name: "Kilim", basePrice: 4000, category: "processed", unit: "adet", icon: "🪢" },
+
+    // Aydınlatma
+    "avize": { name: "Avize", basePrice: 2000, category: "processed", unit: "adet", icon: "💡" },
+    "lamba": { name: "Lamba", basePrice: 300, category: "processed", unit: "adet", icon: "💡" },
+
+    // Beyaz Eşya
+    "camasir_makinesi": { name: "Çamaşır Makinesi", basePrice: 15000, category: "processed", unit: "adet", icon: "🧺" },
+    "buzdolabi": { name: "Buzdolabı", basePrice: 20000, category: "processed", unit: "adet", icon: "🧊" },
+    "bulasik_makinesi": { name: "Bulaşık Makinesi", basePrice: 18000, category: "processed", unit: "adet", icon: "🍽️" },
+
+    // Oto Yedek Parça
+    "aku": { name: "Akü", basePrice: 2500, category: "processed", unit: "adet", icon: "🔋" },
+    "fren_balatasi": { name: "Fren Balatası", basePrice: 600, category: "processed", unit: "takım", icon: "🔩" },
+
+    // Gıda Üretim Ürünleri
+    "biskuvi": { name: "Bisküvi", basePrice: 80, category: "processed", unit: "paket", icon: "🍪" },
+    "gofret": { name: "Gofret", basePrice: 90, category: "processed", unit: "paket", icon: "🍫" },
+    "makarna": { name: "Makarna", basePrice: 40, category: "processed", unit: "paket", icon: "🍝" },
+    "spagetti": { name: "Spagetti", basePrice: 45, category: "processed", unit: "paket", icon: "🍝" },
+    "deterjan": { name: "Deterjan", basePrice: 120, category: "processed", unit: "şişe", icon: "🧼" },
+    "sabun": { name: "Sabun", basePrice: 30, category: "processed", unit: "adet", icon: "🧼" },
+    "sampuan": { name: "Şampuan", basePrice: 80, category: "processed", unit: "şişe", icon: "🧴" },
+
+    // Hayvancılık Ürünleri
+    "kaz_eti": { name: "Kaz Eti", basePrice: 200, category: "animal", unit: "kg", icon: "🦆" },
+    "kaz_tuyu": { name: "Kaz Tüyü", basePrice: 350, category: "animal", unit: "kg", icon: "🪶" },
+    "bildircin_yumurtasi": { name: "Bıldırcın Yumurtası", basePrice: 150, category: "animal", unit: "koli", icon: "🥚" },
+    "bildircin_eti": { name: "Bıldırcın Eti", basePrice: 250, category: "animal", unit: "kg", icon: "🐦" },
+
+    // Tarım Ürünleri  
+    "tutun": { name: "Tütün", basePrice: 800, category: "fresh", unit: "kg", icon: "🚬" },
+    "keten": { name: "Keten", basePrice: 120, category: "fresh", unit: "kg", icon: "🌾" }
 };
 
 // --- LİSANS SİSTEMİ ---
@@ -1405,13 +1829,13 @@ const SYSTEM_MARKET_PRODUCTS = [
 const MARKET_EVENTS = [
     { id: "hasat_sezonu", name: "🌾 Hasat Sezonu!", effect: { category: "farming", production: 1.5, price: 0.7 }, duration: 7, chance: 0.1 },
     { id: "kuraklik", name: "☀️ Kuraklık", effect: { category: "farming", production: 0.5, price: 1.5 }, duration: 7, chance: 0.08 },
-    { id: "et_krizi", name: "🥩 Et Fiyatları Tavan!", effect: { products: ["et", "tavuk"], price: 2.0 }, duration: 5, chance: 0.06 },
+    { id: "et_krizi", name: "🥩 Et Fiyatları Tavan!", effect: { products: ["et", "tavuk", "hindi_eti", "ordek_eti", "tavsan_eti", "kaz_eti", "deri"], price: 2.0 }, duration: 5, chance: 0.06 },
     { id: "sut_bolluğu", name: "🥛 Süt Bolluğu", effect: { products: ["sut", "sut_ham", "peynir", "yogurt"], price: 0.6 }, duration: 5, chance: 0.07 },
     { id: "bayram_talebi", name: "🎉 Bayram Talebi!", effect: { category: "retail", sales: 2.0 }, duration: 3, chance: 0.05 },
     { id: "ekonomik_kriz", name: "📉 Ekonomik Durgunluk", effect: { all: true, sales: 0.6, price: 0.8 }, duration: 10, chance: 0.04 },
     { id: "turizm_sezonu", name: "🏖️ Turizm Sezonu!", effect: { businesses: ["restoran", "cafe", "otel"], sales: 1.8 }, duration: 14, chance: 0.08 },
-    { id: "altin_rallisi", name: "💰 Altın Rallisi!", effect: { products: ["altin", "mucevher"], price: 1.5 }, duration: 7, chance: 0.05 },
-    { id: "araba_kampanyasi", name: "🚗 Araba Kampanya Dönemi", effect: { products: ["araba"], sales: 1.5, price: 0.9 }, duration: 7, chance: 0.04 },
+    { id: "altin_rallisi", name: "💰 Altın Rallisi!", effect: { products: ["altin", "mucevher", "inci"], price: 1.5 }, duration: 7, chance: 0.05 },
+    { id: "araba_kampanyasi", name: "🚗 Araba Kampanya Dönemi", effect: { products: ["araba", "at"], sales: 1.5, price: 0.9 }, duration: 7, chance: 0.04 },
     { id: "grip_salgini", name: "🤒 Grip Salgını", effect: { products: ["ilac"], sales: 3.0, price: 1.3 }, duration: 7, chance: 0.06 },
     { id: "teknoloji_fuari", name: "📱 Teknoloji Fuarı", effect: { products: ["elektronik"], sales: 2.0 }, duration: 5, chance: 0.05 },
     { id: "sel_felaketi", name: "🌊 Sel Felaketi", effect: { category: "farming", production: 0.3 }, duration: 5, chance: 0.03 },
@@ -2266,7 +2690,11 @@ async function fixStockVolatility() {
 // setTimeout(fixStockVolatility, 3000); // initializeBackgroundTasks içinde çalışıyor
 
 app.post('/api/borsa/fix-costs', async (req, res) => {
-    if (req.body.requester !== 'omegacyr') return res.status(403).json({ success: false, error: 'Yetkisiz Erişim' });
+    // GÜVENLİK: Master admin kontrolü
+    if (!isMasterAdmin(req.body.requester)) {
+        logSecurityEvent('UNAUTHORIZED_STOCK_FIX', req.body.requester || 'unknown', {}, req.ip);
+        return res.status(403).json({ success: false, error: 'Yetkisiz Erişim' });
+    }
     try {
         const stocksSnap = await db.ref('global_stocks').once('value');
         const stocks = stocksSnap.val() || {};
@@ -2304,7 +2732,11 @@ app.post('/api/borsa/fix-costs', async (req, res) => {
 });
 
 app.post('/api/borsa/reset', async (req, res) => {
-    if (req.body.requester !== 'omegacyr') return res.status(403).json({ success: false, error: 'Yetkisiz Erişim' });
+    // GÜVENLİK: Master admin kontrolü + audit logging
+    if (!isMasterAdmin(req.body.requester)) {
+        logSecurityEvent('UNAUTHORIZED_STOCK_RESET_ATTEMPT', req.body.requester || 'unknown', {}, req.ip);
+        return res.status(403).json({ success: false, error: 'Yetkisiz Erişim' });
+    }
     try {
         console.log(`🚨 BORSA SIFIRLAMA BAŞLATILDI (omegacyr tarafından)`);
         const usersSnap = await db.ref('users').once('value');
@@ -2332,9 +2764,33 @@ app.post('/api/borsa/reset', async (req, res) => {
 // BORSA ALIM İŞLEMİ (Server-Side Secure)
 app.post('/api/borsa/buy', transactionLimiter, async (req, res) => {
     try {
-        let { username, code, amount } = req.body;
-        amount = parseFloat(amount);
-        if (!username || !code || isNaN(amount) || amount <= 0) return res.status(400).json({ success: false, error: "Geçersiz miktar veya parametre." });
+        let { username, code, amount, idempotencyKey } = req.body;
+
+        // GÜVENLİK: Username sanitization (NoSQL Injection koruması)
+        username = sanitizeUsername(username);
+        if (!username) {
+            return res.status(400).json({ success: false, error: "Geçersiz kullanıcı adı!" });
+        }
+
+        // GÜVENLİK: Stock code validation
+        code = (code || '').toUpperCase().trim();
+        if (!/^[A-Z0-9]{2,10}$/.test(code)) {
+            return res.status(400).json({ success: false, error: "Geçersiz hisse kodu!" });
+        }
+
+        // GÜVENLİK: Number validation (Negative Value & Overflow koruması)
+        amount = validateNumber(amount, 0.001, 1000000);
+        if (!amount) {
+            return res.status(400).json({ success: false, error: "Geçersiz miktar!" });
+        }
+
+        // GÜVENLİK: Idempotency kontrolü (Duplicate Transaction koruması)
+        const txKey = idempotencyKey || `${username}-buy-${code}-${Date.now()}`;
+        if (!checkIdempotency(txKey)) {
+            return res.status(409).json({ success: false, error: "Bu işlem zaten yapıldı!" });
+        }
+
+        const clientIp = req.ip || req.connection.remoteAddress;
 
         // 1. Güncel Hisse Fiyatını Çek
         const stockSnap = await db.ref(`global_stocks/${code}`).once('value');
@@ -2343,6 +2799,11 @@ app.post('/api/borsa/buy', transactionLimiter, async (req, res) => {
 
         const currentPrice = stockData.price;
         const totalCost = Math.ceil(currentPrice * amount);
+
+        // GÜVENLİK: Maximum cost check (overflow koruması)
+        if (totalCost > Number.MAX_SAFE_INTEGER || totalCost < 0) {
+            return res.status(400).json({ success: false, error: "İşlem tutarı çok yüksek!" });
+        }
 
         // 2. Kullanıcı Bakiyesini Kontrol Et
         const userRef = db.ref(`users/${username}`);
@@ -2370,31 +2831,52 @@ app.post('/api/borsa/buy', transactionLimiter, async (req, res) => {
             return user;
         }, (error, committed, snapshot) => {
             if (error) {
+                logSecurityEvent('STOCK_BUY_ERROR', username, { code, amount, error: error.message }, req.ip);
                 res.status(500).json({ success: false, error: "İşlem hatası." });
             } else if (!committed) {
                 res.status(400).json({ success: false, error: "Bakiye yetersiz veya işlem iptal edildi." });
             } else {
-                // Double check if balance was actually deducted? No, committed is true only if transaction succeeded.
-                // But wait, if I return 'undefined' from transaction update function, committed is usually false.
-                // Let's verify: if I return user (modified), committed is true.
-                // If I enter the insufficient balance block, I return nothing (undefined). 
-                // So committed will be false. Perfect.
+                // GÜVENLİK: Audit logging
+                logSecurityEvent('STOCK_BUY_SUCCESS', username, { code, amount, totalCost, newBalance: snapshot.val().balance }, req.ip);
                 res.json({ success: true, message: `${amount} adet ${code} alındı.`, newBalance: snapshot.val().balance });
             }
         });
 
     } catch (e) {
         console.error("Borsa Buy Error:", e.message);
-        res.status(500).json({ success: false, error: e.message });
+        logSecurityEvent('STOCK_BUY_EXCEPTION', username || 'unknown', { error: e.message }, req.ip);
+        res.status(500).json({ success: false, error: "Sunucu hatası." });
     }
 });
 
 // BORSA SATIŞ İŞLEMİ (Server-Side Secure)
 app.post('/api/borsa/sell', transactionLimiter, async (req, res) => {
     try {
-        let { username, code, amount } = req.body;
-        amount = parseFloat(amount);
-        if (!username || !code || isNaN(amount) || amount <= 0) return res.status(400).json({ success: false, error: "Geçersiz miktar veya parametre." });
+        let { username, code, amount, idempotencyKey } = req.body;
+
+        // GÜVENLİK: Username sanitization
+        username = sanitizeUsername(username);
+        if (!username) {
+            return res.status(400).json({ success: false, error: "Geçersiz kullanıcı adı!" });
+        }
+
+        // GÜVENLİK: Stock code validation
+        code = (code || '').toUpperCase().trim();
+        if (!/^[A-Z0-9]{2,10}$/.test(code)) {
+            return res.status(400).json({ success: false, error: "Geçersiz hisse kodu!" });
+        }
+
+        // GÜVENLİK: Number validation
+        amount = validateNumber(amount, 0.001, 1000000);
+        if (!amount) {
+            return res.status(400).json({ success: false, error: "Geçersiz miktar!" });
+        }
+
+        // GÜVENLİK: Idempotency kontrolü
+        const txKey = idempotencyKey || `${username}-sell-${code}-${Date.now()}`;
+        if (!checkIdempotency(txKey)) {
+            return res.status(409).json({ success: false, error: "Bu işlem zaten yapıldı!" });
+        }
 
         // 1. Güncel Hisse Fiyatını Çek
         const stockSnap = await db.ref(`global_stocks/${code}`).once('value');
@@ -2405,6 +2887,11 @@ app.post('/api/borsa/sell', transactionLimiter, async (req, res) => {
         const grossTotal = currentPrice * amount;
         const commission = Math.floor(grossTotal * 0.10);
         const netTotal = Math.floor(grossTotal - commission);
+
+        // GÜVENLİK: Overflow check
+        if (netTotal < 0 || netTotal > Number.MAX_SAFE_INTEGER) {
+            return res.status(400).json({ success: false, error: "İşlem tutarı geçersiz!" });
+        }
 
         // 2. Kullanıcı İşlemi
         const userRef = db.ref(`users/${username}`);
@@ -2433,17 +2920,20 @@ app.post('/api/borsa/sell', transactionLimiter, async (req, res) => {
             return user;
         }, (error, committed, snapshot) => {
             if (error) {
+                logSecurityEvent('STOCK_SELL_ERROR', username, { code, amount, error: error.message }, req.ip);
                 res.status(500).json({ success: false, error: "İşlem hatası." });
             } else if (!committed) {
                 res.status(400).json({ success: false, error: "Yetersiz hisse senedi." });
             } else {
+                logSecurityEvent('STOCK_SELL_SUCCESS', username, { code, amount, netTotal, newBalance: snapshot.val().balance }, req.ip);
                 res.json({ success: true, message: `${amount} adet ${code} satıldı.`, newBalance: snapshot.val().balance });
             }
         });
 
     } catch (e) {
         console.error("Borsa Sell Error:", e.message);
-        res.status(500).json({ success: false, error: e.message });
+        logSecurityEvent('STOCK_SELL_EXCEPTION', username || 'unknown', { error: e.message }, req.ip);
+        res.status(500).json({ success: false, error: "Sunucu hatası." });
     }
 });
 
@@ -2578,18 +3068,21 @@ app.get('/api/map/turkey', (req, res) => {
 });
 
 app.post('/api/emlak/reset', async (req, res) => {
-    // Manual Auth Check to allow 'omegacyr' bypass from Shop without Key
+    // GÜVENLİK: Master admin kontrolü
     const { requester, key } = req.body;
     let isAdmin = false;
 
-    if (requester === 'omegacyr') {
+    if (isMasterAdmin(requester)) {
         isAdmin = true;
     } else {
-        // Fallback to standard admin check (Mock logic or check DB)
+        // Fallback to standard admin check
         if (key && key === process.env.ADMIN_KEY) isAdmin = true;
     }
 
-    if (!isAdmin) return res.status(403).json({ success: false, error: "Yetkisiz işlem!" });
+    if (!isAdmin) {
+        logSecurityEvent('UNAUTHORIZED_REAL_ESTATE_RESET', requester || 'unknown', {}, req.ip);
+        return res.status(403).json({ success: false, error: "Yetkisiz işlem!" });
+    }
 
     try {
         console.log(`🚨 EMLAK PİYASASI SIFIRLAMA BAŞLATILDI (${requester || 'Admin'} tarafından)`);
@@ -4294,10 +4787,27 @@ app.post('/webhook/kick', async (req, res) => {
         const eventType = headers['kick-event-type'] || payload.event || headers['kick-event'] || 'unknown';
         const eventId = headers['kick-event-id'] || 'no-id';
 
-        // --- CHALLENGE / VERIFICATION ---
+        // GÜVENLİK: Webhook Signature Verification
+        const signature = headers['kick-signature'] || headers['x-kick-signature'];
+        const webhookSecret = process.env.KICK_WEBHOOK_SECRET;
+
+        // Challenge verification (initial webhook setup)
         if (payload.challenge) {
             console.log(`[Webhook] Challenge verification: ${payload.challenge}`);
             return res.status(200).send(payload.challenge);
+        }
+
+        // GÜVENLİK: Production'da signature zorunlu
+        if (webhookSecret && signature) {
+            const isValid = verifyWebhookSignature(payload, signature, webhookSecret);
+            if (!isValid) {
+                logSecurityEvent('WEBHOOK_INVALID_SIGNATURE', 'system', { eventType, eventId }, req.ip);
+                return res.status(401).send('Invalid signature');
+            }
+        } else if (process.env.NODE_ENV === 'production' && !signature) {
+            // Production'da signature yoksa reddet
+            logSecurityEvent('WEBHOOK_MISSING_SIGNATURE', 'system', { eventType, eventId }, req.ip);
+            return res.status(401).send('Missing signature');
         }
 
         // --- OK RESPONSE (Immediate) ---
@@ -9311,13 +9821,58 @@ app.post('/api/business/create', transactionLimiter, async (req, res) => {
             return res.json({ success: false, error: `Yetersiz bakiye! Gerekli: ${bizType.setupCost.toLocaleString()} 💰` });
         }
 
-        // Mülk kontrolü (emlaktan alınmış mı)
-        if (propertyId) {
-            const propSnap = await db.ref('users/' + username.toLowerCase() + '/properties/' + propertyId).once('value');
-            if (!propSnap.exists()) {
-                return res.json({ success: false, error: "Bu mülke sahip değilsin!" });
+        // === MÜLK KONTROLÜ - Şehir ve Tip Bazlı ===
+        // Perakende -> Dükkan, Diğerleri -> Arazi gerektirir
+        const requiredPropType = (category === 'retail') ? 'shop' : 'land';
+        const userPropsSnap = await db.ref('users/' + username.toLowerCase() + '/properties').once('value');
+        const userProps = userPropsSnap.val() || {};
+
+        // Seçilen şehirde gerekli mülk türünde mülk var mı?
+        const hasRequiredProperty = Object.values(userProps).some(p =>
+            p.city === city && p.type === requiredPropType && !p.usedBy
+        );
+
+        if (!hasRequiredProperty) {
+            const propName = requiredPropType === 'shop' ? 'Dükkan' : 'Arazi';
+            return res.json({
+                success: false,
+                error: `${city} şehrinde ${propName} sahibi olmalısın! Emlak sekmesinden satın alabilirsin.`
+            });
+        }
+
+        // PropertyId belirtilmemişse, otomatik uygun mülkü bul ve ata
+        if (!propertyId) {
+            const suitableProp = Object.entries(userProps).find(([id, p]) =>
+                p.city === city && p.type === requiredPropType && !p.usedBy
+            );
+            if (suitableProp) {
+                propertyId = suitableProp[0];
+            } else {
+                return res.json({ success: false, error: "Uygun mülk bulunamadı!" });
+            }
+        } else {
+            // PropertyId belirtilmişse doğrula
+            const specProp = userProps[propertyId];
+            if (!specProp) {
+                return res.json({ success: false, error: "Bu mülk size ait değil!" });
+            }
+            if (specProp.city !== city) {
+                return res.json({ success: false, error: "Bu mülk başka şehirde!" });
+            }
+            if (specProp.type !== requiredPropType) {
+                const needName = requiredPropType === 'shop' ? 'dükkan' : 'arazi';
+                return res.json({ success: false, error: `Bu işletme için ${needName} gerekli!` });
+            }
+            if (specProp.usedBy) {
+                return res.json({ success: false, error: "Bu mülk başka bir işletme tarafından kullanılıyor!" });
             }
         }
+
+        // Mülkü işletmeyle ilişkilendir
+        await db.ref('users/' + username.toLowerCase() + '/properties/' + propertyId).update({
+            usedBy: 'business',
+            businessId: null // henüz oluşturulmadı, aşağıda güncelleyeceğiz
+        });
 
         // İşletme oluştur
         const businessId = 'biz_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
@@ -9348,6 +9903,11 @@ app.post('/api/business/create', transactionLimiter, async (req, res) => {
         await db.ref('users/' + username.toLowerCase()).update({
             balance: (user.balance || 0) - bizType.setupCost,
             businesses: [...userBusinesses, businessId]
+        });
+
+        // Mülke businessId'yi yaz
+        await db.ref('users/' + username.toLowerCase() + '/properties/' + propertyId).update({
+            businessId: businessId
         });
 
         res.json({ success: true, message: `${bizType.name} kuruldu! ${bizType.icon}`, businessId });
@@ -9388,11 +9948,272 @@ app.get('/api/business/my-businesses', async (req, res) => {
     }
 });
 
+// =============================================================================
+// 📦 MERKEZI DEPO SİSTEMİ
+// =============================================================================
+
+// --- Depo Bilgilerini Getir ---
+app.get('/api/warehouse/info', async (req, res) => {
+    try {
+        const { username } = req.query;
+        if (!username) return res.json({ success: false, error: "Username gerekli!" });
+
+        const userSnap = await db.ref('users/' + username.toLowerCase()).once('value');
+        const user = userSnap.val();
+        if (!user) return res.json({ success: false, error: "Kullanıcı bulunamadı!" });
+
+        // Depo bilgileri (yoksa varsayılan)
+        const warehouse = user.warehouse || {
+            level: 1,
+            inventory: {}
+        };
+
+        const currentLevel = warehouse.level || 1;
+        const levelInfo = WAREHOUSE_LEVELS[currentLevel];
+        const nextLevel = currentLevel + 1;
+        const nextLevelInfo = WAREHOUSE_LEVELS[nextLevel];
+
+        // Toplam stok hesapla
+        const totalStock = Object.values(warehouse.inventory || {}).reduce((sum, item) => {
+            if (typeof item === 'number') return sum + item;
+            return sum + (item.amount || 0);
+        }, 0);
+
+        res.json({
+            success: true,
+            warehouse: {
+                level: currentLevel,
+                capacity: levelInfo.capacity,
+                currentStock: totalStock,
+                availableSpace: levelInfo.capacity - totalStock,
+                inventory: warehouse.inventory || {},
+                levelInfo: levelInfo,
+                nextLevelInfo: nextLevelInfo,
+                canUpgrade: nextLevelInfo && user.balance >= nextLevelInfo.cost
+            }
+        });
+    } catch (e) {
+        res.json({ success: false, error: e.message });
+    }
+});
+
+// --- Depo Yükselt ---
+app.post('/api/warehouse/upgrade', transactionLimiter, async (req, res) => {
+    try {
+        const { username } = req.body;
+        if (!username) return res.json({ success: false, error: "Username gerekli!" });
+
+        const userSnap = await db.ref('users/' + username.toLowerCase()).once('value');
+        const user = userSnap.val();
+        if (!user) return res.json({ success: false, error: "Kullanıcı bulunamadı!" });
+
+        const warehouse = user.warehouse || { level: 1, inventory: {} };
+        const currentLevel = warehouse.level || 1;
+        const nextLevel = currentLevel + 1;
+        const nextLevelInfo = WAREHOUSE_LEVELS[nextLevel];
+
+        if (!nextLevelInfo) {
+            return res.json({ success: false, error: "Maksimum seviyedesiniz!" });
+        }
+
+        if (user.balance < nextLevelInfo.cost) {
+            return res.json({ success: false, error: `Yetersiz bakiye! Gerekli: ${nextLevelInfo.cost.toLocaleString()} 💰` });
+        }
+
+        // Yükselt
+        await db.ref('users/' + username.toLowerCase()).update({
+            'warehouse/level': nextLevel,
+            'warehouse/last_upgrade': Date.now(),
+            balance: user.balance - nextLevelInfo.cost
+        });
+
+        res.json({
+            success: true,
+            message: `Depo ${nextLevelInfo.name} seviyesine yükseltildi! Yeni kapasite: ${nextLevelInfo.capacity.toLocaleString()}`,
+            newLevel: nextLevel,
+            newCapacity: nextLevelInfo.capacity,
+            cost: nextLevelInfo.cost
+        });
+    } catch (e) {
+        res.json({ success: false, error: e.message });
+    }
+});
+
+// --- Depodan Tezgaha Ürün Taşı ---
+app.post('/api/warehouse/transfer-to-counter', transactionLimiter, async (req, res) => {
+    try {
+        const { username, businessId, productCode, amount } = req.body;
+        if (!username || !businessId || !productCode || !amount) {
+            return res.json({ success: false, error: "Eksik bilgi!" });
+        }
+
+        const userSnap = await db.ref('users/' + username.toLowerCase()).once('value');
+        const user = userSnap.val();
+        if (!user) return res.json({ success: false, error: "Kullanıcı bulunamadı!" });
+
+        const bizSnap = await db.ref('businesses/' + businessId).once('value');
+        const biz = bizSnap.val();
+        if (!biz) return res.json({ success: false, error: "İşletme bulunamadı!" });
+        if (biz.owner !== username.toLowerCase()) return res.json({ success: false, error: "Bu işletme sana ait değil!" });
+
+        const bizType = BUSINESS_TYPES[biz.type];
+        if (bizType.category !== 'retail') {
+            return res.json({ success: false, error: "Sadece perakende işletmeleri tezgah kullanabilir!" });
+        }
+
+        // Depo kontrolü
+        const warehouse = user.warehouse || { level: 1, inventory: {} };
+        const inWarehouse = warehouse.inventory[productCode] || 0;
+        const stockAmount = typeof inWarehouse === 'number' ? inWarehouse : (inWarehouse.amount || 0);
+
+        if (stockAmount < amount) {
+            return res.json({ success: false, error: `Depoda yetersiz stok! Mevcut: ${stockAmount}` });
+        }
+
+        // Tezgah kontrolü
+        const counter = biz.counter || { items: {} };
+        const counterLevel = biz.level || 1;
+        const counterLimits = RETAIL_COUNTER_LEVELS[counterLevel];
+
+        const currentSlots = Object.keys(counter.items || {}).length;
+        const hasThisProduct = counter.items[productCode];
+
+        if (!hasThisProduct && currentSlots >= counterLimits.slots) {
+            return res.json({ success: false, error: `Tezgah dolu! Maksimum ${counterLimits.slots} çeşit ürün koyabilirsin.` });
+        }
+
+        const currentAmount = hasThisProduct ? (counter.items[productCode].amount || 0) : 0;
+        if (currentAmount + amount > counterLimits.itemsPerSlot) {
+            return res.json({ success: false, error: `Bu ürün için maksimum ${counterLimits.itemsPerSlot} adet koyabilirsin! Mevcut: ${currentAmount}` });
+        }
+
+        // Transfer yap
+        const newWarehouse = { ...warehouse.inventory };
+        if (typeof newWarehouse[productCode] === 'number') {
+            newWarehouse[productCode] -= amount;
+        } else {
+            newWarehouse[productCode].amount -= amount;
+        }
+        if (newWarehouse[productCode] <= 0) delete newWarehouse[productCode];
+
+        const newCounter = { ...counter.items };
+        if (!newCounter[productCode]) {
+            const quality = typeof inWarehouse === 'object' ? inWarehouse.quality : 50;
+            newCounter[productCode] = {
+                amount: amount,
+                quality: quality,
+                price: calculateProductPrice(productCode)
+            };
+        } else {
+            newCounter[productCode].amount += amount;
+        }
+
+        await db.ref('users/' + username.toLowerCase() + '/warehouse/inventory').set(newWarehouse);
+        await db.ref('businesses/' + businessId + '/counter/items').set(newCounter);
+
+        const product = PRODUCTS[productCode];
+        res.json({
+            success: true,
+            message: `${amount}x ${product?.name || productCode} tezgaha konuldu!`,
+            counter: newCounter
+        });
+    } catch (e) {
+        res.json({ success: false, error: e.message });
+    }
+});
+
+// --- Tezgahtan Depoya Geri Koy ---
+app.post('/api/warehouse/return-from-counter', transactionLimiter, async (req, res) => {
+    try {
+        const { username, businessId, productCode, amount } = req.body;
+        if (!username || !businessId || !productCode) {
+            return res.json({ success: false, error: "Eksik bilgi!" });
+        }
+
+        const userSnap = await db.ref('users/' + username.toLowerCase()).once('value');
+        const user = userSnap.val();
+        if (!user) return res.json({ success: false, error: "Kullanıcı bulunamadı!" });
+
+        const bizSnap = await db.ref('businesses/' + businessId).once('value');
+        const biz = bizSnap.val();
+        if (!biz) return res.json({ success: false, error: "İşletme bulunamadı!" });
+        if (biz.owner !== username.toLowerCase()) return res.json({ success: false, error: "Bu işletme sana ait değil!" });
+
+        const counter = biz.counter || { items: {} };
+        const item = counter.items[productCode];
+        if (!item) return res.json({ success: false, error: "Tezgahta bu ürün yok!" });
+
+        const returnAmount = amount || item.amount; // Belirtilmezse hepsini geri al
+        if (item.amount < returnAmount) {
+            return res.json({ success: false, error: `Tezgahta sadece ${item.amount} adet var!` });
+        }
+
+        // Depoya geri koy
+        const warehouse = user.warehouse || { level: 1, inventory: {} };
+        const levelInfo = WAREHOUSE_LEVELS[warehouse.level || 1];
+        const totalStock = Object.values(warehouse.inventory || {}).reduce((sum, val) => {
+            return sum + (typeof val === 'number' ? val : val.amount || 0);
+        }, 0);
+
+        if (totalStock + returnAmount > levelInfo.capacity) {
+            return res.json({ success: false, error: `Depo dolu! Kapasite: ${levelInfo.capacity}` });
+        }
+
+        const newWarehouse = { ...warehouse.inventory };
+        const existingItem = newWarehouse[productCode];
+        if (!existingItem) {
+            newWarehouse[productCode] = { amount: returnAmount, quality: item.quality || 50 };
+        } else if (typeof existingItem === 'number') {
+            newWarehouse[productCode] = returnAmount;
+        } else {
+            existingItem.amount += returnAmount;
+        }
+
+        const newCounter = { ...counter.items };
+        newCounter[productCode].amount -= returnAmount;
+        if (newCounter[productCode].amount <= 0) delete newCounter[productCode];
+
+        await db.ref('users/' + username.toLowerCase() + '/warehouse/inventory').set(newWarehouse);
+        await db.ref('businesses/' + businessId + '/counter/items').set(newCounter);
+
+        const product = PRODUCTS[productCode];
+        res.json({
+            success: true,
+            message: `${returnAmount}x ${product?.name || productCode} depoya geri konuldu!`
+        });
+    } catch (e) {
+        res.json({ success: false, error: e.message });
+    }
+});
+
+// =============================================================================
+// 🏭 ÜRETİM SİSTEMİ (Merkezi Depoya Bağlı)
+// =============================================================================
+
 // --- ÜRETİM YAP (Günlük tıklama) ---
 app.post('/api/business/produce', transactionLimiter, async (req, res) => {
     try {
-        const { username, businessId, selectedProduct } = req.body;
-        if (!username || !businessId) return res.json({ success: false, error: "Eksik bilgi!" });
+        let { username, businessId, selectedProduct } = req.body;
+
+        // GÜVENLİK: Username sanitization
+        username = sanitizeUsername(username);
+        if (!username) {
+            return res.json({ success: false, error: "Geçersiz kullanıcı adı!" });
+        }
+
+        // GÜVENLİK: BusinessId validation
+        businessId = (businessId || '').trim();
+        if (!businessId || !/^[a-zA-Z0-9_-]+$/.test(businessId)) {
+            return res.json({ success: false, error: "Geçersiz işletme ID!" });
+        }
+
+        // GÜVENLİK: Product code validation
+        if (selectedProduct) {
+            selectedProduct = (selectedProduct || '').toLowerCase().trim();
+            if (!/^[a-z0-9_]+$/.test(selectedProduct)) {
+                return res.json({ success: false, error: "Geçersiz ürün kodu!" });
+            }
+        }
 
         // İşletme kontrolü
         const bizSnap = await db.ref('businesses/' + businessId).once('value');
@@ -9428,26 +10249,67 @@ app.post('/api/business/produce', transactionLimiter, async (req, res) => {
             return res.json({ success: false, error: "İşletme çok yıpranmış! Önce bakım yap." });
         }
 
-        // Hammadde kontrolü (fabrikalar için)
+        // Hammadde kontrolü (fabrikalar için) - Merkezi depodan
+        const userSnap_materials = await db.ref('users/' + username.toLowerCase()).once('value');
+        const user_materials = userSnap_materials.val();
+        const warehouse_materials = user_materials.warehouse || { level: 1, inventory: {} };
+
         if (bizType.requires && bizType.requires.length > 0) {
             for (const reqProduct of bizType.requires) {
-                const inStock = (biz.inventory || {})[reqProduct] || 0;
-                if (inStock < 10) {
+                // Depodaki toplam hammaddeyi hesapla (tüm kalitelerde)
+                let totalInStock = 0;
+                for (const key in warehouse_materials.inventory) {
+                    const item = warehouse_materials.inventory[key];
+                    const itemProduct = typeof item === 'object' ? item.product : key;
+                    if (itemProduct === reqProduct) {
+                        totalInStock += typeof item === 'number' ? item : item.amount;
+                    }
+                }
+
+                if (totalInStock < 10) {
                     const prodInfo = PRODUCTS[reqProduct];
-                    return res.json({ success: false, error: `Yetersiz hammadde: ${prodInfo?.name || reqProduct}` });
+                    return res.json({ success: false, error: `Yetersiz hammadde: ${prodInfo?.name || reqProduct} (Depoda: ${totalInStock})` });
                 }
             }
 
-            // Hammaddeleri tüket
-            const newInventory = { ...biz.inventory };
+            // Hammaddeleri tüket (depodan)
+            const newWarehouseMaterials = { ...warehouse_materials.inventory };
             for (const reqProduct of bizType.requires) {
-                newInventory[reqProduct] = (newInventory[reqProduct] || 0) - 10;
+                let toConsume = 10;
+                // En düşük kaliteli ürünlerden başlayarak tüket
+                const keys = Object.keys(newWarehouseMaterials)
+                    .filter(k => {
+                        const item = newWarehouseMaterials[k];
+                        const itemProduct = typeof item === 'object' ? item.product : k;
+                        return itemProduct === reqProduct;
+                    })
+                    .sort((a, b) => {
+                        const qa = typeof newWarehouseMaterials[a] === 'object' ? newWarehouseMaterials[a].quality : 50;
+                        const qb = typeof newWarehouseMaterials[b] === 'object' ? newWarehouseMaterials[b].quality : 50;
+                        return qa - qb;
+                    });
+
+                for (const key of keys) {
+                    if (toConsume <= 0) break;
+                    const item = newWarehouseMaterials[key];
+                    const available = typeof item === 'number' ? item : item.amount;
+                    const consume = Math.min(toConsume, available);
+
+                    if (typeof item === 'number') {
+                        newWarehouseMaterials[key] -= consume;
+                        if (newWarehouseMaterials[key] <= 0) delete newWarehouseMaterials[key];
+                    } else {
+                        newWarehouseMaterials[key].amount -= consume;
+                        if (newWarehouseMaterials[key].amount <= 0) delete newWarehouseMaterials[key];
+                    }
+                    toConsume -= consume;
+                }
             }
-            biz.inventory = newInventory;
+
+            await db.ref('users/' + username.toLowerCase() + '/warehouse/inventory').set(newWarehouseMaterials);
         }
 
         // Üretim miktarı hesapla
-        const levelData = BUSINESS_LEVELS[biz.level] || BUSINESS_LEVELS[1];
         let productionMultiplier = 1.0;
 
         // Olayların etkisi
@@ -9465,9 +10327,16 @@ app.post('/api/business/produce', transactionLimiter, async (req, res) => {
         const rndBonus = biz.rnd_bonuses || {};
         if (rndBonus.productionSpeed) productionMultiplier *= rndBonus.productionSpeed;
 
-        // Depo kapasitesi
-        const maxStorage = Math.floor(bizType.baseStorage * levelData.storageMultiplier);
-        const currentStock = Object.values(biz.inventory || {}).reduce((a, b) => a + (typeof b === 'number' ? b : (b?.amount || 0)), 0);
+        // MERKEZI DEPO kapasitesi kontrolü
+        const userSnap = await db.ref('users/' + username.toLowerCase()).once('value');
+        const user = userSnap.val();
+        const warehouse = user.warehouse || { level: 1, inventory: {} };
+        const warehouseLevelInfo = WAREHOUSE_LEVELS[warehouse.level || 1];
+
+        const currentStock = Object.values(warehouse.inventory || {}).reduce((sum, item) => {
+            if (typeof item === 'number') return sum + item;
+            return sum + (item.amount || 0);
+        }, 0);
 
         // Kalite hesapla (Temel: %50, AR-GE bonuslarıyla artabilir)
         let baseQuality = 50;
@@ -9477,27 +10346,29 @@ app.post('/api/business/produce', transactionLimiter, async (req, res) => {
         const quality = Math.min(100, Math.max(10, baseQuality + qualityVariation));
 
         // Üret (SEÇİLEN ÜRÜN)
-        const newInventory = { ...biz.inventory };
         const baseAmount = 10 + (biz.level * 5);
         const amount = Math.floor(baseAmount * productionMultiplier);
 
-        if (currentStock + amount > maxStorage) {
-            return res.json({ success: false, error: `Depo dolu! Kapasite: ${maxStorage}, Mevcut: ${currentStock}` });
+        // Depo kapasitesi kontrolü
+        if (currentStock + amount > warehouseLevelInfo.capacity) {
+            return res.json({ success: false, error: `Merkezi depo dolu! Kapasite: ${warehouseLevelInfo.capacity}, Mevcut: ${currentStock}. Depo yükselt!` });
         }
 
-        // Kalite sistemli envanter - her ürün { amount, quality } formatında
+        // MERKEZI DEPOYA ekle - Kalite sistemli
+        const newWarehouse = { ...warehouse.inventory };
         const productKey = `${productToMake}_q${quality}`;
-        if (!newInventory[productKey]) {
-            newInventory[productKey] = { product: productToMake, amount: 0, quality };
+
+        if (!newWarehouse[productKey]) {
+            newWarehouse[productKey] = { product: productToMake, amount: 0, quality };
         }
-        newInventory[productKey].amount = (newInventory[productKey].amount || 0) + amount;
+        newWarehouse[productKey].amount = (newWarehouse[productKey].amount || 0) + amount;
 
         // Sağlık düşür (her üretim %2-5)
         const healthLoss = 2 + Math.random() * 3;
 
-        // Güncelle
+        // Güncelle - Depoyu ve işletmeyi
+        await db.ref('users/' + username.toLowerCase() + '/warehouse/inventory').set(newWarehouse);
         await db.ref('businesses/' + businessId).update({
-            inventory: newInventory,
             health: Math.max(0, (biz.health || 100) - healthLoss),
             last_production: now
         });
@@ -9507,7 +10378,7 @@ app.post('/api/business/produce', transactionLimiter, async (req, res) => {
         )[1].name;
 
         const producedText = `${PRODUCTS[productToMake]?.icon || ''} ${PRODUCTS[productToMake]?.name || productToMake}: +${amount} (Kalite: ${qualityName} %${quality})`;
-        res.json({ success: true, message: `Üretim tamamlandı! ${producedText}`, produced: { [productToMake]: amount }, quality });
+        res.json({ success: true, message: `Üretim tamamlandı! ${producedText} → Merkezi Depoya eklendi`, produced: { [productToMake]: amount }, quality });
     } catch (e) {
         res.json({ success: false, error: e.message });
     }
@@ -9529,7 +10400,28 @@ app.post('/api/business/sell', transactionLimiter, async (req, res) => {
         const product = PRODUCTS[productCode];
         if (!product) return res.json({ success: false, error: "Geçersiz ürün!" });
 
-        const inStock = (biz.inventory || {})[productCode] || 0;
+        const bizType = BUSINESS_TYPES[biz.type];
+
+        // Perakende işletmeler tezgahtan, üretim işletmeleri depodan satar
+        let inStock = 0;
+        const userSnap_sell = await db.ref('users/' + username.toLowerCase()).once('value');
+        const user_sell = userSnap_sell.val();
+
+        if (bizType.category === 'retail') {
+            // Perakende: Tezgahtan sat
+            inStock = (biz.inventory || {})[productCode] || 0;
+        } else {
+            // Üretim: Depodan sat (tüm kaliteleri topla)
+            const warehouse_sell = user_sell.warehouse || { level: 1, inventory: {} };
+            for (const key in warehouse_sell.inventory) {
+                const item = warehouse_sell.inventory[key];
+                const itemProduct = typeof item === 'object' ? item.product : key;
+                if (itemProduct === productCode) {
+                    inStock += typeof item === 'number' ? item : item.amount;
+                }
+            }
+        }
+
         if (inStock < amount) return res.json({ success: false, error: `Yetersiz stok! Mevcut: ${inStock}` });
 
         // Fiyat hesapla
@@ -9550,20 +10442,56 @@ app.post('/api/business/sell', transactionLimiter, async (req, res) => {
         const totalRevenue = Math.floor(price * amount);
 
         // Stoktan düş
-        const newInventory = { ...biz.inventory };
-        newInventory[productCode] = inStock - amount;
+        if (bizType.category === 'retail') {
+            // Perakende: Tezgahtan düş
+            const newInventory = { ...biz.inventory };
+            newInventory[productCode] = (biz.inventory[productCode] || 0) - amount;
+            if (newInventory[productCode] <= 0) delete newInventory[productCode];
+            await db.ref('businesses/' + businessId + '/inventory').set(newInventory);
+        } else {
+            // Üretim: Depodan düş (en düşük kaliteden başlayarak)
+            const warehouse_sell = user_sell.warehouse || { level: 1, inventory: {} };
+            const newWarehouseSell = { ...warehouse_sell.inventory };
+            let toSell = amount;
+
+            const keys = Object.keys(newWarehouseSell)
+                .filter(k => {
+                    const item = newWarehouseSell[k];
+                    const itemProduct = typeof item === 'object' ? item.product : k;
+                    return itemProduct === productCode;
+                })
+                .sort((a, b) => {
+                    const qa = typeof newWarehouseSell[a] === 'object' ? newWarehouseSell[a].quality : 50;
+                    const qb = typeof newWarehouseSell[b] === 'object' ? newWarehouseSell[b].quality : 50;
+                    return qa - qb;
+                });
+
+            for (const key of keys) {
+                if (toSell <= 0) break;
+                const item = newWarehouseSell[key];
+                const available = typeof item === 'number' ? item : item.amount;
+                const sellAmount = Math.min(toSell, available);
+
+                if (typeof item === 'number') {
+                    newWarehouseSell[key] -= sellAmount;
+                    if (newWarehouseSell[key] <= 0) delete newWarehouseSell[key];
+                } else {
+                    newWarehouseSell[key].amount -= sellAmount;
+                    if (newWarehouseSell[key].amount <= 0) delete newWarehouseSell[key];
+                }
+                toSell -= sellAmount;
+            }
+
+            await db.ref('users/' + username.toLowerCase() + '/warehouse/inventory').set(newWarehouseSell);
+        }
 
         // Kullanıcıya para ekle
-        const userSnap = await db.ref('users/' + username.toLowerCase()).once('value');
-        const user = userSnap.val() || {};
-
         await db.ref('users/' + username.toLowerCase()).update({
-            balance: (user.balance || 0) + totalRevenue
+            balance: (user_sell.balance || 0) + totalRevenue
         });
 
         // İşletme istatistiklerini güncelle
         await db.ref('businesses/' + businessId).update({
-            inventory: newInventory,
             total_sales: (biz.total_sales || 0) + amount,
             total_revenue: (biz.total_revenue || 0) + totalRevenue
         });
@@ -9610,26 +10538,33 @@ app.post('/api/business/buy-materials', transactionLimiter, async (req, res) => 
             return res.json({ success: false, error: `Yetersiz bakiye! Gerekli: ${totalCost.toLocaleString()} 💰` });
         }
 
-        // Depo kapasitesi kontrolü
-        const bizType = BUSINESS_TYPES[biz.type];
-        const levelData = BUSINESS_LEVELS[biz.level] || BUSINESS_LEVELS[1];
-        const maxStorage = Math.floor(bizType.baseStorage * levelData.storageMultiplier);
-        const currentStock = Object.values(biz.inventory || {}).reduce((a, b) => a + b, 0);
+        // Merkezi depo kapasitesi kontrolü
+        const warehouse = user.warehouse || { level: 1, inventory: {} };
+        const warehouseLevelInfo = WAREHOUSE_LEVELS[warehouse.level || 1];
+        const currentStock = Object.values(warehouse.inventory || {}).reduce((sum, item) => {
+            if (typeof item === 'number') return sum + item;
+            return sum + (item.amount || 0);
+        }, 0);
 
-        if (currentStock + amount > maxStorage) {
-            return res.json({ success: false, error: `Depo dolu! Kapasite: ${maxStorage}, Mevcut: ${currentStock}` });
+        if (currentStock + amount > warehouseLevelInfo.capacity) {
+            return res.json({ success: false, error: `Merkezi depo dolu! Kapasite: ${warehouseLevelInfo.capacity}, Mevcut: ${currentStock}` });
         }
 
-        // İşlemi yap
-        const newInventory = { ...biz.inventory };
-        newInventory[productCode] = (newInventory[productCode] || 0) + amount;
+        // İşlemi yap - malzemeleri merkezi depoya ekle
+        const newWarehouse = { ...warehouse.inventory };
+        if (newWarehouse[productCode]) {
+            if (typeof newWarehouse[productCode] === 'number') {
+                newWarehouse[productCode] += amount;
+            } else {
+                newWarehouse[productCode].amount = (newWarehouse[productCode].amount || 0) + amount;
+            }
+        } else {
+            newWarehouse[productCode] = amount;
+        }
 
         await db.ref('users/' + username.toLowerCase()).update({
-            balance: (user.balance || 0) - totalCost
-        });
-
-        await db.ref('businesses/' + businessId).update({
-            inventory: newInventory
+            balance: (user.balance || 0) - totalCost,
+            'warehouse/inventory': newWarehouse
         });
 
         const logText = logisticsCost > 0 ? ` (Kargo: ${logisticsCost.toLocaleString()})` : '';
@@ -9710,28 +10645,59 @@ app.post('/api/marketplace/list', transactionLimiter, async (req, res) => {
         if (!biz) return res.json({ success: false, error: "İşletme bulunamadı!" });
         if (biz.owner !== username.toLowerCase()) return res.json({ success: false, error: "Bu işletme sana ait değil!" });
 
-        const inventoryItem = biz.inventory?.[inventoryKey];
-        if (!inventoryItem) return res.json({ success: false, error: "Bu ürün stokta yok!" });
+        const bizType = BUSINESS_TYPES[biz.type];
+
+        // Perakende işletmeler için tezgahtan, üretim işletmeleri için depodan al
+        let inventoryItem, productCode, quality;
+
+        if (bizType.category === 'retail') {
+            // Perakende: Tezgahtan (counter) al
+            inventoryItem = biz.inventory?.[inventoryKey];
+            if (!inventoryItem) return res.json({ success: false, error: "Bu ürün tezgahta yok!" });
+        } else {
+            // Üretim: Kullanıcının deposundan al
+            const userSnap = await db.ref('users/' + username.toLowerCase()).once('value');
+            const user = userSnap.val();
+            const warehouse = user.warehouse || { level: 1, inventory: {} };
+            inventoryItem = warehouse.inventory?.[inventoryKey];
+            if (!inventoryItem) return res.json({ success: false, error: "Bu ürün depoda yok!" });
+        }
 
         const availableAmount = typeof inventoryItem === 'number' ? inventoryItem : inventoryItem.amount;
         if (availableAmount < amount) {
             return res.json({ success: false, error: `Yetersiz stok! Mevcut: ${availableAmount}` });
         }
 
-        const productCode = typeof inventoryItem === 'object' ? inventoryItem.product : inventoryKey;
-        const quality = typeof inventoryItem === 'object' ? inventoryItem.quality : 50;
+        productCode = typeof inventoryItem === 'object' ? inventoryItem.product : inventoryKey;
+        quality = typeof inventoryItem === 'object' ? inventoryItem.quality : 50;
 
         // Stoktan düş
-        const newInventory = { ...biz.inventory };
-        if (typeof inventoryItem === 'number') {
-            newInventory[inventoryKey] = inventoryItem - amount;
-            if (newInventory[inventoryKey] <= 0) delete newInventory[inventoryKey];
+        if (bizType.category === 'retail') {
+            // Perakende: Tezgahtan düş
+            const newInventory = { ...biz.inventory };
+            if (typeof inventoryItem === 'number') {
+                newInventory[inventoryKey] = inventoryItem - amount;
+                if (newInventory[inventoryKey] <= 0) delete newInventory[inventoryKey];
+            } else {
+                newInventory[inventoryKey].amount = inventoryItem.amount - amount;
+                if (newInventory[inventoryKey].amount <= 0) delete newInventory[inventoryKey];
+            }
+            await db.ref('businesses/' + businessId + '/inventory').set(newInventory);
         } else {
-            newInventory[inventoryKey].amount = inventoryItem.amount - amount;
-            if (newInventory[inventoryKey].amount <= 0) delete newInventory[inventoryKey];
+            // Üretim: Depodan düş
+            const userSnap = await db.ref('users/' + username.toLowerCase()).once('value');
+            const user = userSnap.val();
+            const warehouse = user.warehouse || { level: 1, inventory: {} };
+            const newWarehouse = { ...warehouse.inventory };
+            if (typeof inventoryItem === 'number') {
+                newWarehouse[inventoryKey] = inventoryItem - amount;
+                if (newWarehouse[inventoryKey] <= 0) delete newWarehouse[inventoryKey];
+            } else {
+                newWarehouse[inventoryKey].amount = inventoryItem.amount - amount;
+                if (newWarehouse[inventoryKey].amount <= 0) delete newWarehouse[inventoryKey];
+            }
+            await db.ref('users/' + username.toLowerCase() + '/warehouse/inventory').set(newWarehouse);
         }
-
-        await db.ref('businesses/' + businessId + '/inventory').set(newInventory);
 
         // Pazara ekle
         const listingId = 'list_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
@@ -9755,7 +10721,7 @@ app.post('/api/marketplace/list', transactionLimiter, async (req, res) => {
 // --- PAZARDAN SATIN AL ---
 app.post('/api/marketplace/buy', transactionLimiter, async (req, res) => {
     try {
-        const { username, listingId, amount, targetBusinessId } = req.body;
+        const { username, listingId, amount } = req.body;
         if (!username || !listingId || !amount) {
             return res.json({ success: false, error: "Eksik bilgi!" });
         }
@@ -9778,24 +10744,26 @@ app.post('/api/marketplace/buy', transactionLimiter, async (req, res) => {
             return res.json({ success: false, error: `Yetersiz bakiye! Gerekli: ${totalCost.toLocaleString()} 💰` });
         }
 
-        // Hedef işletme kontrolü (eğer verilmişse)
-        if (targetBusinessId) {
-            const targetBizSnap = await db.ref('businesses/' + targetBusinessId).once('value');
-            const targetBiz = targetBizSnap.val();
-            if (!targetBiz || targetBiz.owner !== username.toLowerCase()) {
-                return res.json({ success: false, error: "Hedef işletme sana ait değil!" });
-            }
+        // Ürünü kullanıcının merkezi deposuna ekle
+        const warehouse = user.warehouse || { level: 1, inventory: {} };
+        const warehouseLevelInfo = WAREHOUSE_LEVELS[warehouse.level || 1];
+        const currentStock = Object.values(warehouse.inventory || {}).reduce((sum, item) => {
+            if (typeof item === 'number') return sum + item;
+            return sum + (item.amount || 0);
+        }, 0);
 
-            // Ürünü işletme deposuna ekle
-            const productKey = `${listing.productCode}_q${listing.quality}`;
-            const targetInventory = targetBiz.inventory || {};
-            if (!targetInventory[productKey]) {
-                targetInventory[productKey] = { product: listing.productCode, amount: 0, quality: listing.quality };
-            }
-            targetInventory[productKey].amount = (targetInventory[productKey].amount || 0) + amount;
-
-            await db.ref('businesses/' + targetBusinessId + '/inventory').set(targetInventory);
+        if (currentStock + amount > warehouseLevelInfo.capacity) {
+            return res.json({ success: false, error: `Merkezi depo dolu! Kapasite: ${warehouseLevelInfo.capacity}` });
         }
+
+        const productKey = `${listing.productCode}_q${listing.quality}`;
+        const warehouseInventory = { ...warehouse.inventory };
+        if (!warehouseInventory[productKey]) {
+            warehouseInventory[productKey] = { product: listing.productCode, amount: 0, quality: listing.quality };
+        }
+        warehouseInventory[productKey].amount = (warehouseInventory[productKey].amount || 0) + amount;
+
+        await db.ref('users/' + username.toLowerCase() + '/warehouse/inventory').set(warehouseInventory);
 
         // Alıcıdan para düş
         await db.ref('users/' + username.toLowerCase() + '/balance').set((user?.balance || 0) - totalCost);
@@ -9822,7 +10790,7 @@ app.post('/api/marketplace/buy', transactionLimiter, async (req, res) => {
 // --- SİSTEMDEN SATIN AL (Kalite %10) ---
 app.post('/api/marketplace/buy-system', transactionLimiter, async (req, res) => {
     try {
-        const { username, productCode, amount, targetBusinessId } = req.body;
+        const { username, productCode, amount } = req.body;
         if (!username || !productCode || !amount) {
             return res.json({ success: false, error: "Eksik bilgi!" });
         }
@@ -9845,24 +10813,26 @@ app.post('/api/marketplace/buy-system', transactionLimiter, async (req, res) => 
             return res.json({ success: false, error: `Yetersiz bakiye! Gerekli: ${totalCost.toLocaleString()} 💰` });
         }
 
-        // Hedef işletme kontrolü (eğer verilmişse)
-        if (targetBusinessId) {
-            const targetBizSnap = await db.ref('businesses/' + targetBusinessId).once('value');
-            const targetBiz = targetBizSnap.val();
-            if (!targetBiz || targetBiz.owner !== username.toLowerCase()) {
-                return res.json({ success: false, error: "Hedef işletme sana ait değil!" });
-            }
+        // Ürünü kullanıcının merkezi deposuna ekle (kalite %10)
+        const warehouse = user.warehouse || { level: 1, inventory: {} };
+        const warehouseLevelInfo = WAREHOUSE_LEVELS[warehouse.level || 1];
+        const currentStock = Object.values(warehouse.inventory || {}).reduce((sum, item) => {
+            if (typeof item === 'number') return sum + item;
+            return sum + (item.amount || 0);
+        }, 0);
 
-            // Ürünü işletme deposuna ekle (kalite %10)
-            const productKey = `${productCode}_q10`;
-            const targetInventory = targetBiz.inventory || {};
-            if (!targetInventory[productKey]) {
-                targetInventory[productKey] = { product: productCode, amount: 0, quality: 10 };
-            }
-            targetInventory[productKey].amount = (targetInventory[productKey].amount || 0) + amount;
-
-            await db.ref('businesses/' + targetBusinessId + '/inventory').set(targetInventory);
+        if (currentStock + amount > warehouseLevelInfo.capacity) {
+            return res.json({ success: false, error: `Merkezi depo dolu! Kapasite: ${warehouseLevelInfo.capacity}` });
         }
+
+        const productKey = `${productCode}_q10`;
+        const warehouseInventory = { ...warehouse.inventory };
+        if (!warehouseInventory[productKey]) {
+            warehouseInventory[productKey] = { product: productCode, amount: 0, quality: 10 };
+        }
+        warehouseInventory[productKey].amount = (warehouseInventory[productKey].amount || 0) + amount;
+
+        await db.ref('users/' + username.toLowerCase() + '/warehouse/inventory').set(warehouseInventory);
 
         // Alıcıdan para düş
         await db.ref('users/' + username.toLowerCase() + '/balance').set((user?.balance || 0) - totalCost);

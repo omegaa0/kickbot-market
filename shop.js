@@ -3493,7 +3493,7 @@ function switchBusinessTab(tabName) {
     else if (tabName === 'market-prices') renderMarketPrices();
 }
 
-// Kullanıcının işletmelerini yükle
+// Kullanıcının işletmelerini yükle (Kategorilere Göre Gruplu)
 async function loadMyBusinesses() {
     if (!currentUser) return;
 
@@ -3514,24 +3514,56 @@ async function loadMyBusinesses() {
         }
 
         userLicenses = data.licenses || [];
+
+        // Kategorilere göre grupla
+        const categories = {
+            'retail': { name: '🛒 Perakende İşletmeler', businesses: [], icon: '🏪' },
+            'production': { name: '🏭 Üretim Tesisleri', businesses: [], icon: '🏭' },
+            'farming': { name: '🌾 Tarım İşletmeleri', businesses: [], icon: '🌾' },
+            'livestock': { name: '🐄 Hayvancılık İşletmeleri', businesses: [], icon: '🐄' },
+            'special': { name: '⭐ Özel İşletmeler', businesses: [], icon: '⚡' }
+        };
+
+        // İşletmeleri kategorilere ayır
+        for (const biz of data.businesses) {
+            const category = biz.typeData?.category || 'retail';
+            if (categories[category]) {
+                categories[category].businesses.push(biz);
+            }
+        }
+
         container.innerHTML = '';
 
-        for (const biz of data.businesses) {
-            const card = document.createElement('div');
-            card.className = 'glass-panel';
-            card.style.cssText = 'padding:20px; border-radius:16px;';
+        // Her kategoriyi render et
+        for (const [catKey, cat] of Object.entries(categories)) {
+            if (cat.businesses.length === 0) continue;
 
-            const healthColor = biz.health > 70 ? '#00ff88' : biz.health > 30 ? '#ffaa00' : '#ff4444';
-            const typeInfo = biz.typeData || {};
-            const lvlInfo = biz.levelData || {};
+            // Kategori başlığı
+            const categoryHeader = document.createElement('div');
+            categoryHeader.style.cssText = 'grid-column: 1/-1; margin:30px 0 15px 0; padding:15px 20px; background:linear-gradient(90deg, rgba(0,255,136,0.1), transparent); border-left:4px solid var(--primary); border-radius:8px;';
+            categoryHeader.innerHTML = `
+                <h3 style="margin:0; font-size:1.3rem; font-weight:800;">${cat.name}</h3>
+                <div style="font-size:0.85rem; color:#888; margin-top:5px;">${cat.businesses.length} işletme</div>
+            `;
+            container.appendChild(categoryHeader);
 
-            // Stok özeti
-            const inventoryItems = Object.entries(biz.inventory || {})
-                .filter(([k, v]) => v > 0)
-                .map(([k, v]) => `${productData[k]?.icon || ''} ${v}`)
-                .slice(0, 5).join(' ');
+            // Kategori işletmeleri
+            for (const biz of cat.businesses) {
+                const card = document.createElement('div');
+                card.className = 'glass-panel';
+                card.style.cssText = 'padding:20px; border-radius:16px;';
 
-            card.innerHTML = `
+                const healthColor = biz.health > 70 ? '#00ff88' : biz.health > 30 ? '#ffaa00' : '#ff4444';
+                const typeInfo = biz.typeData || {};
+                const lvlInfo = biz.levelData || {};
+
+                // Stok özeti
+                const inventoryItems = Object.entries(biz.inventory || {})
+                    .filter(([k, v]) => v > 0)
+                    .map(([k, v]) => `${productData[k]?.icon || ''} ${v}`)
+                    .slice(0, 5).join(' ');
+
+                card.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:15px;">
                     <div>
                         <div style="font-size:2rem; margin-bottom:5px;">${typeInfo.icon || '🏪'}</div>
@@ -3570,11 +3602,36 @@ async function loadMyBusinesses() {
                 </div>
             `;
 
-            container.appendChild(card);
+                container.appendChild(card);
+            }
         }
     } catch (e) {
+        console.error('My businesses load error:', e);
         container.innerHTML = '<div style="text-align:center; padding:40px; color:#ff4444;">İşletmeler yüklenemedi.</div>';
     }
+}
+
+// Filtre fonksiyonu
+let currentBusinessFilter = 'all';
+
+function filterBusinessTypes(category, buttonEl) {
+    currentBusinessFilter = category;
+
+    // Buton stillerini güncelle
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('active');
+        btn.style.background = 'rgba(255,255,255,0.05)';
+        btn.style.color = '#aaa';
+    });
+
+    if (buttonEl) {
+        buttonEl.classList.add('active');
+        buttonEl.style.background = 'rgba(255,255,255,0.1)';
+        buttonEl.style.color = '#fff';
+    }
+
+    // İşletme türlerini tekrar render et
+    renderBusinessTypes();
 }
 
 // İşletme türlerini göster
@@ -3591,6 +3648,9 @@ function renderBusinessTypes() {
     };
 
     for (const [code, type] of Object.entries(businessTypes)) {
+        // Filtre kontrolü
+        if (currentBusinessFilter !== 'all' && type.category !== currentBusinessFilter) continue;
+
         if (categories[type.category]) {
             categories[type.category].items.push({ code, ...type });
         }
@@ -3662,7 +3722,7 @@ function renderLicenses() {
     container.innerHTML = html || '<div style="text-align:center; padding:40px; opacity:0.5;">Lisans bulunamadı.</div>';
 }
 
-// Piyasa fiyatlarını göster
+// Piyasa DURUMLARINI göster (Fiyat yerine)
 function renderMarketPrices() {
     const container = document.getElementById('product-prices-table');
     if (!container) return;
@@ -3676,6 +3736,15 @@ function renderMarketPrices() {
         'ready': '🍽️ Hazır'
     };
 
+    // Piyasa durumu etiketleri
+    const conditionLabels = {
+        1: { name: 'Çok Düşük', color: '#ff4444' },
+        2: { name: 'Düşük', color: '#ff9944' },
+        3: { name: 'Orta', color: '#ffdd44' },
+        4: { name: 'Yüksek', color: '#99ff44' },
+        5: { name: 'Çok Yüksek', color: '#00ff88' }
+    };
+
     let html = '';
     for (const [catKey, catName] of Object.entries(categories)) {
         const catProducts = Object.entries(productData).filter(([k, v]) => v.category === catKey);
@@ -3685,20 +3754,32 @@ function renderMarketPrices() {
 
         for (const [code, prod] of catProducts) {
             const price = marketPrices[code] || prod.basePrice;
-            const priceChange = price > prod.basePrice ? '+' : (price < prod.basePrice ? '-' : '');
-            const priceColor = price > prod.basePrice ? '#00ff88' : (price < prod.basePrice ? '#ff4444' : '#888');
+            const basePrice = prod.basePrice;
+
+            // Fiyata göre durum seviyesi hesapla (1-5)
+            let conditionLevel = 3; // Varsayılan: Orta
+            const priceRatio = price / basePrice;
+
+            if (priceRatio <= 0.6) conditionLevel = 1; // Çok Düşük
+            else if (priceRatio <= 0.85) conditionLevel = 2; // Düşük
+            else if (priceRatio <= 1.15) conditionLevel = 3; // Orta
+            else if (priceRatio <= 1.4) conditionLevel = 4; // Yüksek
+            else conditionLevel = 5; // Çok Yüksek
+
+            const condition = conditionLabels[conditionLevel];
 
             html += `
-                <div style="background:rgba(0,0,0,0.3); padding:10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+                <div style="background:rgba(0,0,0,0.3); padding:12px 15px; border-radius:10px; display:flex; justify-content:space-between; align-items:center; border-left:3px solid ${condition.color};">
                     <span>${prod.icon} ${prod.name}</span>
-                    <span style="font-weight:bold; color:${priceColor};">${priceChange}${price.toLocaleString()} / ${prod.unit}</span>
+                    <span style="font-weight:800; color:${condition.color}; font-size:0.95rem;">${condition.name}</span>
                 </div>
             `;
         }
     }
 
-    container.innerHTML = html;
+    container.innerHTML = html || '<div style="text-align:center; padding:40px; opacity:0.5;">Piyasa verileri yükleniyor...</div>';
 }
+
 
 // İşletme kur modal
 function showCreateBusinessModal(typeCode) {
