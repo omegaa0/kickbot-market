@@ -178,26 +178,49 @@
     </div>
 
     <script>
-        // AdBlock Detection Logic
+        // Enhanced AdBlock Detection
         window.onload = function () {
+            // Localhost check
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') return;
+
             setTimeout(() => {
-                const bait = document.getElementById('ad-bait');
-                const baitStyle = getComputedStyle(bait);
+                const head = document.getElementsByTagName('head')[0];
+                const bait = document.createElement('div');
 
-                if (bait.offsetParent === null ||
+                // Common adblock bait classes
+                bait.className = 'pub_300x250 pub_300x250m pub_728x90 text-ad textAd text_ad text_ads text-ads text-ad-links';
+                bait.setAttribute('style', 'width: 1px !important; height: 1px !important; position: absolute !important; left: -10000px !important; top: -1000px !important;');
+
+                document.body.appendChild(bait);
+
+                // Check functionality
+                const isBlocked = (
+                    window.getComputedStyle(bait).display === 'none' ||
+                    window.getComputedStyle(bait).visibility === 'hidden' ||
+                    bait.offsetParent === null ||
                     bait.offsetHeight === 0 ||
-                    bait.offsetLeft === 0 ||
-                    baitStyle.display === 'none' ||
-                    baitStyle.visibility === 'hidden') {
+                    bait.clientHeight === 0
+                );
 
-                    // AdBlock Detected!
-                    // Localhost exception: Don't block dev environment
-                    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-                        document.getElementById('adblock-overlay').style.display = 'flex';
-                        document.body.style.overflow = 'hidden'; // Prevent scrolling
-                    }
+                if (isBlocked) {
+                    document.getElementById('adblock-overlay').style.display = 'flex';
+                    document.body.style.overflow = 'hidden';
                 }
-            }, 2000); // Wait 2s for extensions to kick in
+
+                // Cleanup
+                // bait.remove(); // Keep it to prevent erratic behavior if blockers seek removal
+            }, 2000);
+
+            // Network Request Check (Optional but effective)
+            fetch('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js', { mode: 'no-cors' })
+                .then(() => {
+                    // Loaded successfully (likely no adblocker blocking this domain)
+                })
+                .catch(() => {
+                    // Failed to load - Likely blocked
+                    document.getElementById('adblock-overlay').style.display = 'flex';
+                    document.body.style.overflow = 'hidden';
+                });
         };
     </script>
 
