@@ -14,6 +14,7 @@ require('firebase/compat/auth'); // Auth modülü eklendi
 const bcrypt = require('bcryptjs');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const { v4: uuidv4 } = require('uuid'); // FakeYou TTS için
 
 // ===== TOKEN ŞİFRELEME YARDIMCILARI =====
 const ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex').slice(0, 32);
@@ -4059,106 +4060,112 @@ const verifySession = async (req, res, next) => {
 };
 
 // --- TTS PREVIEW API ---
+// --- FAKEYOU TTS HELPER FUNCTION ---
+// FakeYou API ile ses oluşturma (async job-based system)
+async function generateFakeYouTTS(modelToken, text) {
+
+    // 1. TTS inference başlat
+    const inferenceResp = await axios.post('https://api.fakeyou.com/tts/inference', {
+        tts_model_token: modelToken,
+        uuid_idempotency_token: uuidv4(),
+        inference_text: text
+    }, {
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+    });
+
+    if (!inferenceResp.data.success) {
+        throw new Error(inferenceResp.data.error_reason || 'TTS inference başlatılamadı');
+    }
+
+    const jobToken = inferenceResp.data.inference_job_token;
+
+    // 2. Job tamamlanana kadar poll et (max 60 saniye)
+    const maxAttempts = 30;
+    const pollInterval = 2000; // 2 saniye
+
+    for (let i = 0; i < maxAttempts; i++) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+        const statusResp = await axios.get(`https://api.fakeyou.com/tts/job/${jobToken}`, {
+            headers: { 'Accept': 'application/json' }
+        });
+
+        if (!statusResp.data.success) continue;
+
+        const status = statusResp.data.state?.status;
+
+        if (status === 'complete_success') {
+            const audioPath = statusResp.data.state.maybe_public_bucket_wav_audio_path;
+            if (audioPath) {
+                return `https://storage.googleapis.com/vocodes-public${audioPath}`;
+            }
+            throw new Error('Audio path bulunamadı');
+        } else if (status === 'attempt_failed' || status === 'dead') {
+            throw new Error('TTS oluşturma başarısız oldu');
+        }
+        // pending veya started ise devam et
+    }
+
+    throw new Error('TTS zaman aşımına uğradı (60 saniye)');
+}
+
+// --- FAKEYOU VOICE CONFIG ---
+// FakeYou.com'dan popüler AI sesleri
+const FAKEYOU_VOICES = {
+    // Ünlü Sesler
+    'trump': { token: 'TM:7wbtjphx8h8v', name: 'Donald Trump', preview: 'Make America great again!' },
+    'biden': { token: 'TM:4e2xqpwqaggr', name: 'Joe Biden', preview: 'Come on man, this is a test.' },
+    'obama': { token: 'TM:afp9n8r2sth4', name: 'Barack Obama', preview: 'Yes we can, this is a test message.' },
+    'morgan': { token: 'TM:pf7t0adwezrh', name: 'Morgan Freeman', preview: 'Let me tell you a story.' },
+    'elon': { token: 'TM:mhkf4s7er9mq', name: 'Elon Musk', preview: 'To the moon!' },
+
+    // Cartoon / Animasyon
+    'spongebob': { token: 'TM:d0s0cqxndq49', name: 'SpongeBob', preview: 'I am ready!' },
+    'patrick': { token: 'TM:9j0gwffytr89', name: 'Patrick Star', preview: 'Is mayonnaise an instrument?' },
+    'squidward': { token: 'TM:1m38vqtey9xn', name: 'Squidward', preview: 'How original.' },
+    'homer': { token: 'TM:hn1c2pcq5hcr', name: 'Homer Simpson', preview: 'Doh!' },
+    'peter': { token: 'TM:t8srvnv96a3d', name: 'Peter Griffin', preview: 'Hey Lois!' },
+
+    // Oyun Karakterleri
+    'mario': { token: 'TM:cdmfwv7a6xh0', name: 'Mario', preview: 'Its a me, Mario!' },
+    'goku': { token: 'TM:scxb3w1tpbd1', name: 'Goku', preview: 'Kamehameha!' },
+    'vegeta': { token: 'TM:n77krhnmjxz3', name: 'Vegeta', preview: 'Over nine thousand!' },
+
+    // Türk Sesleri (Varsa)
+    'recep': { token: 'TM:6kvet7bfrz3h', name: 'Recep Ivedik', preview: 'Naber lan!' },
+
+    // Varsayılan
+    'default': { token: 'TM:7wbtjphx8h8v', name: 'Donald Trump', preview: 'This is a test.' }
+};
+
+// --- TTS PREVIEW API (FakeYou) ---
 app.get('/api/tts/preview', async (req, res) => {
     const { voice } = req.query;
     if (!voice) return res.json({ success: false, error: "Ses seçilmedi!" });
 
-    // ELEVENLABS V3 - Ses ve Dil Konfigürasyonu
-    // eleven_v3 modeli 70+ dil destekler (Azerbaycanca dahil)
-    // Varsayılan sesler kullanılıyor - kendi sesleriniz için ElevenLabs panelinden Voice ID alın
-    const voiceConfig = {
-        'azeri': {
-            voiceId: 'pNInz6obpgDQGcFmaJgB',  // Adam - multilingual
-            lang: 'aze',                        // Azerbaycan dili kodu
-            text: 'Salam dostlar, necəsiniz? Bu mənim səsimdir.'
-        },
-        'hasan': {
-            voiceId: 'ErXwobaYiN019PkySvjV',   // Antoni
-            lang: 'tr',                         // Türkçe
-            text: 'Merhaba arkadaşlar, yayınımıza hoş geldiniz!'
-        },
-        'selim': {
-            voiceId: 'VR6AewLTigWG4xSOukaG',   // Arnold
-            lang: 'tr',
-            text: 'Selam millet, keyifler nasıl? Bomba gibiyiz!'
-        },
-        'irem': {
-            voiceId: 'EXAVITQu4vr4xnSDxMaL',   // Bella
-            lang: 'tr',
-            text: 'Merhaba, umarım harika bir gün geçiriyorsundur.'
-        },
-        'aleyna': {
-            voiceId: 'MF3mGyEYCl7XYWbV9V6O',  // Elli
-            lang: 'tr',
-            text: 'Merhaba, ben Aleyna. Bu bir örnek ses kaydıdır.'
-        },
-        'riza': {
-            voiceId: 'TxGEqnHWrfWFTfGW9XjX',   // Josh
-            lang: 'tr',
-            text: 'Dikkat dikkat! Bu bir test anonsudur.'
-        }
-    };
-
-    const config = voiceConfig[voice];
-    if (!config) return res.json({ success: false, error: "Geçersiz ses seçimi!" });
+    const config = FAKEYOU_VOICES[voice] || FAKEYOU_VOICES['default'];
 
     try {
-        const elevenKey = process.env.ELEVENLABS_API_KEY;
-        if (!elevenKey) return res.json({ success: false, error: "API anahtarı eksik!" });
+        console.log(`[FakeYou] Preview başlatılıyor: ${config.name}`);
+        const audioUrl = await generateFakeYouTTS(config.token, config.preview);
+        console.log(`[FakeYou] Preview tamamlandı: ${audioUrl}`);
 
-        // ElevenLabs V3 API - Azeri ve Türkçe dil desteği ile
-        const ttsResp = await axios.post(
-            `https://api.elevenlabs.io/v1/text-to-speech/${config.voiceId}`,
-            {
-                text: config.text,
-                model_id: "eleven_v3",           // En yeni model - 70+ dil desteği
-                language_code: config.lang,      // Dil kodu (aze=Azerbaycanca, tr=Türkçe)
-                voice_settings: {
-                    stability: 0.5,
-                    similarity_boost: 0.75,
-                    style: 0,
-                    use_speaker_boost: true
-                }
-            },
-            {
-                headers: {
-                    'xi-api-key': elevenKey,
-                    'Content-Type': 'application/json'
-                },
-                responseType: 'arraybuffer'
-            }
-        );
-
-        const base64Audio = Buffer.from(ttsResp.data).toString('base64');
-        const audioUrl = `data:audio/mpeg;base64,${base64Audio}`;
-
-        res.json({ success: true, audioUrl });
+        res.json({ success: true, audioUrl, voiceName: config.name });
 
     } catch (e) {
-        console.error("TTS Preview Error:", e.message);
-        if (e.response) {
-            console.error("TTS API Response Status:", e.response.status);
-            try {
-                const errorData = JSON.parse(e.response.data.toString());
-                console.error("TTS API Error Detail:", errorData);
-            } catch {
-                console.error("TTS API Response Data:", e.response.data?.toString());
-            }
-        }
-
-        let errorMsg = "Ses oluşturulamadı!";
-        if (e.response?.status === 400) {
-            errorMsg = "Geçersiz istek - Model veya ses ayarları kontrol edilmeli.";
-        } else if (e.response?.status === 401) {
-            errorMsg = "API anahtarı geçersiz!";
-        } else if (e.response?.status === 429) {
-            errorMsg = "API limit aşıldı, daha sonra deneyin.";
-        } else if (e.response?.status === 422) {
-            errorMsg = "Voice ID veya model desteklenmiyor.";
-        }
-
-        res.json({ success: false, error: errorMsg });
+        console.error("FakeYou TTS Preview Error:", e.message);
+        res.json({ success: false, error: `Ses oluşturulamadı: ${e.message}` });
     }
+});
+
+// --- TTS VOICES LIST API ---
+app.get('/api/tts/voices', (req, res) => {
+    const voices = Object.entries(FAKEYOU_VOICES).map(([key, val]) => ({
+        id: key,
+        name: val.name,
+        preview: val.preview
+    }));
+    res.json({ success: true, voices });
 });
 
 // --- GENERIC MARKET BUY (TTS, SOUND, MUTE, SR) ---
@@ -4187,95 +4194,28 @@ app.post('/api/market/buy', transactionLimiter, verifySession, async (req, res) 
 
             eventPath = "tts";
 
-            // ELEVENLABS V3 - Ses ve Dil Konfigürasyonu
-            // eleven_v3 modeli 70+ dil destekler (Azerbaycanca dahil)
-            const voiceConfig = {
-                'azeri': { voiceId: 'pNInz6obpgDQGcFmaJgB', lang: 'aze' },   // Azerbaycanca
-                'hasan': { voiceId: 'ErXwobaYiN019PkySvjV', lang: 'tr' },    // Türkçe
-                'selim': { voiceId: 'VR6AewLTigWG4xSOukaG', lang: 'tr' },
-                'irem': { voiceId: 'EXAVITQu4vr4xnSDxMaL', lang: 'tr' },
-                'aleyna': { voiceId: 'MF3mGyEYCl7XYWbV9V6O', lang: 'tr' },
-                'riza': { voiceId: 'TxGEqnHWrfWFTfGW9XjX', lang: 'tr' }
-            };
-
+            // FakeYou AI TTS - Ünlü sesleri kullan
+            const voiceConfig = FAKEYOU_VOICES[voice] || FAKEYOU_VOICES['default'];
             let audioUrl = null;
-            let isEleven = false;
+            let isFakeYou = false;
 
-            const vConfig = voiceConfig[voice];
-            if (vConfig) {
-                isEleven = true;
-
-                // --- ABONELİK KONTROLÜ (ELEVENLABS İÇİN) ---
-                const uSnap = await db.ref(`users/${username.toLowerCase()}`).once('value');
-                const uData = uSnap.val() || {};
-                const badges = uData.badges || [];
-
-                // Badge yapısını esnek kontrol et (obje veya string olabilir)
-                const isSubscriber = badges.some(b => {
-                    const badgeType = typeof b === 'string' ? b : (b.type || b.badge_type || '');
-                    return ['subscriber', 'founder', 'vip', 'moderator', 'broadcaster', 'sub_gifter', 'og', 'abone'].includes(badgeType.toLowerCase());
-                }) || uData.is_subscriber === true || uData.isSubscriber === true;
-
-                // Ayrıca admin veya is_infinite olanlar da kullanabilsin
-                const canUseElevenLabs = isSubscriber || uData.is_admin === true || uData.is_infinite === true || username.toLowerCase() === 'omegacyr';
-
-                if (!canUseElevenLabs) {
-                    return res.json({ success: false, error: "Bu ses sadece ABONELERE özeldir! 💎" });
-                }
-
-                try {
-                    // ElevenLabs V3 API Call
-                    const elevenKey = process.env.ELEVENLABS_API_KEY;
-
-                    if (!elevenKey || elevenKey.includes('sk_73928')) {
-                        console.error("ElevenLabs API Key Hatası: Anahtar eksik veya varsayılan değerde!");
-                        throw new Error("Anahtar bulunamadı.");
-                    }
-
-                    const ttsResp = await axios.post(
-                        `https://api.elevenlabs.io/v1/text-to-speech/${vConfig.voiceId}`,
-                        {
-                            text: text,
-                            model_id: "eleven_v3",            // V3 model - 70+ dil desteği
-                            language_code: vConfig.lang,      // Dil kodu (aze=Azerbaycanca, tr=Türkçe)
-                            voice_settings: {
-                                stability: 0.5,
-                                similarity_boost: 0.75,
-                                style: 0,
-                                use_speaker_boost: true
-                            }
-                        },
-                        {
-                            headers: {
-                                'xi-api-key': elevenKey,
-                                'Content-Type': 'application/json'
-                            },
-                            responseType: 'arraybuffer'
-                        }
-                    );
-
-                    // Convert to Base64 to serve directly via Firebase
-                    const base64Audio = Buffer.from(ttsResp.data).toString('base64');
-                    audioUrl = `data:audio/mpeg;base64,${base64Audio}`;
-                } catch (err) {
-                    console.error(`ElevenLabs V3 Error [Voice: ${voice}, Lang: ${vConfig.lang}]:`, err.message);
-                    if (err.response) {
-                        try {
-                            const errorData = JSON.parse(err.response.data.toString());
-                            console.error("ElevenLabs API Error Detail:", errorData);
-                        } catch {
-                            console.error("ElevenLabs API Response:", err.response.data?.toString());
-                        }
-                    }
-                    isEleven = false;
-                }
+            try {
+                console.log(`[FakeYou] TTS başlatılıyor: ${voiceConfig.name} - "${text.substring(0, 50)}..."`);
+                audioUrl = await generateFakeYouTTS(voiceConfig.token, text);
+                isFakeYou = true;
+                console.log(`[FakeYou] TTS tamamlandı: ${audioUrl}`);
+            } catch (err) {
+                console.error(`[FakeYou] TTS Error [Voice: ${voice}]:`, err.message);
+                // Hata olursa standart TTS'e fallback yap
+                isFakeYou = false;
             }
 
             eventPayload = {
                 text: `@${username} diyor ki: ${text}`,
-                voice: voice || "standart",
-                audioUrl: audioUrl, // New field for ElevenLabs
-                isEleven: isEleven,
+                voice: voice || "trump",
+                voiceName: voiceConfig.name,
+                audioUrl: audioUrl,
+                isFakeYou: isFakeYou,
                 played: false, notified: false, source: "market", timestamp: Date.now(), broadcasterId: channelId
             };
         }
