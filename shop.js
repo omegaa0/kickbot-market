@@ -3868,33 +3868,127 @@ function renderBusinessTypes() {
     container.innerHTML = html;
 }
 
-// Lisansları göster
-function renderLicenses() {
+// Lisansları göster - LEVEL SİSTEMİNE GÖRE GÜNCELLENDİ
+async function renderLicenses() {
     const container = document.getElementById('licenses-grid');
     if (!container) return;
 
-    let html = '';
-    for (const [code, lic] of Object.entries(licenseData)) {
-        const owned = userLicenses.includes(code);
+    container.innerHTML = '<div class="loader"></div>';
 
-        html += `
-            <div class="glass-panel" style="padding:20px; border-radius:16px; ${owned ? 'border: 2px solid var(--primary);' : ''}">
-                <div style="font-size:2rem; margin-bottom:10px;">${lic.icon || '📜'}</div>
-                <h4 style="margin:0 0 5px 0;">${lic.name}</h4>
-                <div style="font-size:0.85rem; color:var(--primary); font-weight:bold; margin-bottom:10px;">
-                    ${lic.price.toLocaleString()} 💰
+    try {
+        // Tüm lisans bilgilerini paralel çek
+        const [bizRes, farmRes, liveRes, specRes] = await Promise.all([
+            fetch(`/api/business-license/info?username=${encodeURIComponent(currentUser)}`).then(r => r.json()),
+            fetch(`/api/farming-license/info?username=${encodeURIComponent(currentUser)}`).then(r => r.json()),
+            fetch(`/api/livestock-license/info?username=${encodeURIComponent(currentUser)}`).then(r => r.json()),
+            fetch(`/api/special-license/info?username=${encodeURIComponent(currentUser)}`).then(r => r.json())
+        ]);
+
+        let html = '';
+
+        // Helper func to render card
+        const renderCard = (title, icon, data, typePrefix) => {
+            const level = data.level || 1;
+            const max = data.maxBusinesses || data.maxFarms || data.maxLivestock || data.maxSpecial || 0;
+            const current = data.currentBusinesses || 0;
+            const nextCost = data.nextLevelCost;
+            const isMax = !nextCost;
+
+            return `
+            <div class="glass-panel" style="padding:20px; border-radius:16px; position:relative; overflow:hidden;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:15px;">
+                    <div>
+                        <div style="font-size:2rem; margin-bottom:5px;">${icon}</div>
+                        <h3 style="margin:0; font-size:1.1rem;">${title}</h3>
+                        <div style="font-size:0.8rem; color:#aaa;">Seviye ${level}: ${data.levelData?.name || 'Bilinmiyor'}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:0.7rem; color:#888; font-weight:700;">LİMİT</div>
+                        <div style="font-size:1.4rem; font-weight:800; color:white;">${current} / ${max}</div>
+                    </div>
                 </div>
-                ${lic.requiresEdu ? `<div style="font-size:0.75rem; color:#888; margin-bottom:10px;">📚 Eğitim ${lic.requiresEdu}+ gerekli</div>` : ''}
-                
-                ${owned ?
-                `<div style="text-align:center; color:var(--primary); font-weight:bold;">✅ Sahipsin</div>` :
-                `<button onclick="buyLicense('${code}')" class="buy-btn" style="width:100%;">Satın Al</button>`
-            }
+
+                <div class="progress-bar" style="height:6px; background:rgba(255,255,255,0.1); margin-bottom:15px;">
+                    <div class="progress-fill" style="width:${Math.min((current / max) * 100, 100)}%;"></div>
+                </div>
+
+                ${isMax ?
+                    `<button disabled class="buy-btn" style="opacity:0.5; background:#333; color:#aaa;">MAKSİMUM SEVİYE</button>` :
+                    `<button onclick="upgradeLicense('${typePrefix}', ${nextCost})" class="buy-btn" style="background:linear-gradient(45deg, var(--primary), #00cc66);">
+                        YÜKSELT <br> <span style="font-size:0.8em; opacity:0.9;">${nextCost.toLocaleString()} 💰</span>
+                    </button>`
+                }
+            </div>
+            `;
+        };
+
+        html += renderCard('İşletme Lisansı', '🏢', bizRes, 'business');
+        html += renderCard('Tarım Lisansı', '🌾', farmRes, 'farming');
+        html += renderCard('Hayvancılık Lisansı', '🐄', liveRes, 'livestock');
+        html += renderCard('Özel Üretim İzni', '⚡', specRes, 'special');
+
+        // BÖLÜM 2: MESLEKİ BELGELER & RUHSATLAR (Tekil Satın Alım)
+        html += `
+            <div style="grid-column: 1/-1; margin-top:30px; margin-bottom:15px; border-top:1px solid rgba(255,255,255,0.1); padding-top:20px;">
+                <h3 style="margin:0; font-size:1.2rem; color:var(--primary);">📜 Mesleki Belgeler & Ruhsatlar</h3>
+                <p style="font-size:0.85rem; color:#aaa;">Belirli işletmeleri açmak için gereken zorunlu sertifikalar.</p>
             </div>
         `;
-    }
 
-    container.innerHTML = html || '<div style="text-align:center; padding:40px; opacity:0.5;">Lisans bulunamadı.</div>';
+        for (const [code, lic] of Object.entries(licenseData)) {
+            const owned = userLicenses.includes(code);
+            const requiresEdu = lic.requiresEdu ? `📚 Eğitim: ${lic.requiresEdu}. Seviye` : '';
+
+            html += `
+                <div class="glass-panel" style="padding:15px; border-radius:12px; display:flex; flex-direction:column; justify-content:space-between; ${owned ? 'border:1px solid rgba(0,255,136,0.3); background:rgba(0,255,136,0.05);' : ''}">
+                    <div>
+                        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                            <div style="font-size:1.8rem;">${lic.icon || '📄'}</div>
+                            <div>
+                                <h4 style="margin:0; font-size:1rem;">${lic.name}</h4>
+                                <div style="font-size:0.75rem; color:#888;">${requiresEdu}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    ${owned ?
+                    `<button disabled class="buy-btn" style="background:transparent; border:1px solid var(--primary); color:var(--primary); cursor:default; width:100%;">✅ SAHİPSİN</button>` :
+                    `<button onclick="buyLicense('${code}')" class="buy-btn" style="width:100%;">
+                            SATIN AL <br> <span style="font-size:0.9em; opacity:0.8;">${lic.price.toLocaleString()} 💰</span>
+                        </button>`
+                }
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+
+    } catch (e) {
+        console.error("Lisans yükleme hatası:", e);
+        container.innerHTML = '<div style="color:red; text-align:center;">Lisans bilgileri yüklenemedi!</div>';
+    }
+}
+
+// Lisans Yükseltme
+async function upgradeLicense(type, cost) {
+    showConfirm('Lisans Yükseltme', `Lisans seviyesini yükseltmek için ${cost.toLocaleString()} 💰 ödemeyi onaylıyor musun?`).then(async (confirmed) => {
+        if (!confirmed) return;
+        try {
+            const res = await fetch(`/api/${type}-license/upgrade`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: currentUser })
+            });
+            const data = await res.json();
+            showToast(data.message || data.error, data.success ? 'success' : 'error');
+            if (data.success) {
+                renderLicenses(); // Yenile
+                renderBusinessTypes(); // Kilitleri güncellemek için
+            }
+        } catch (e) {
+            showToast('Hata: ' + e.message, 'error');
+        }
+    });
 }
 
 // Piyasa DURUMLARINI göster (Fiyat yerine)
@@ -4310,7 +4404,29 @@ function switchMarketTab(tab) {
     if (tab === 'create') loadUserInventoryForListing();
 }
 
+// Şehirleri doldur
+function populateMarketCities() {
+    const filterSelect = document.getElementById('market-city-filter');
+    const createSelect = document.getElementById('new-listing-city');
+
+    // EMLAK_CITIES'i alfabetik sırala
+    const sortedCities = EMLAK_CITIES.sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+
+    const options = sortedCities.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+
+    if (filterSelect && filterSelect.children.length <= 2) { // Sadece "Tüm" ve defaultlar varsa
+        filterSelect.innerHTML = `<option value="">Tüm Şehirler</option>` + options;
+    }
+
+    if (createSelect && createSelect.children.length <= 1) {
+        createSelect.innerHTML = `<option value="" disabled selected>Şehir Seç</option>` + options;
+    }
+}
+
+// İlanları yükle
 async function loadMarketListings(page = 1) {
+    populateMarketCities(); // Şehirleri yükle
+
     try {
         const query = document.getElementById('market-search').value;
         const category = document.getElementById('market-category-filter').value;

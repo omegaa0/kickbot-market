@@ -1549,7 +1549,7 @@ function calculateQualityUpgradeDuration(currentQuality) {
 
 // --- İŞLETME LİSANSI SİSTEMİ (Perakende + Üretim) ---
 const BUSINESS_LICENSE_LEVELS = {
-    1: { name: "Lisans Yok", maxBusinesses: 0, cost: 0 },
+    1: { name: "Başlangıç İzni", maxBusinesses: 1, cost: 0 },
     2: { name: "Temel Lisans", maxBusinesses: 2, cost: 500000 },
     3: { name: "Genişletilmiş Lisans", maxBusinesses: 4, cost: 2000000 },
     4: { name: "Profesyonel Lisans", maxBusinesses: 6, cost: 10000000 },
@@ -1560,7 +1560,7 @@ const BUSINESS_LICENSE_LEVELS = {
 
 // --- TARIM LİSANSI SİSTEMİ ---
 const FARMING_LICENSE_LEVELS = {
-    1: { name: "Çiftçi Belgesi", maxFarms: 1, cost: 0 },
+    1: { name: "Küçük Çiftçi", maxFarms: 1, cost: 0 },
     2: { name: "Tarım Ruhsatı", maxFarms: 3, cost: 500000 },
     3: { name: "Büyük Çiftçi", maxFarms: 5, cost: 2000000 },
     4: { name: "Tarım Şirketi", maxFarms: 8, cost: 10000000 },
@@ -1570,7 +1570,7 @@ const FARMING_LICENSE_LEVELS = {
 
 // --- HAYVANCILIK LİSANSI SİSTEMİ ---
 const LIVESTOCK_LICENSE_LEVELS = {
-    1: { name: "Hayvancı Belgesi", maxLivestock: 1, cost: 0 },
+    1: { name: "Küçük Hayvancı", maxLivestock: 1, cost: 0 },
     2: { name: "Hayvancılık Ruhsatı", maxLivestock: 3, cost: 800000 },
     3: { name: "Büyük Hayvancı", maxLivestock: 5, cost: 3000000 },
     4: { name: "Hayvancılık Şirketi", maxLivestock: 8, cost: 15000000 },
@@ -1580,10 +1580,10 @@ const LIVESTOCK_LICENSE_LEVELS = {
 
 // --- ÖZEL İŞLETME LİSANSI SİSTEMİ ---
 const SPECIAL_LICENSE_LEVELS = {
-    1: { name: "Yok", maxSpecial: 0, cost: 0 },
-    2: { name: "Özel İşletme İzni", maxSpecial: 1, cost: 50000000 },
-    3: { name: "Stratejik İşletme Ruhsatı", maxSpecial: 2, cost: 200000000 },
-    4: { name: "Mega İşletme Lisansı", maxSpecial: 3, cost: 500000000 },
+    1: { name: "Temel İzin", maxSpecial: 1, cost: 0 },
+    2: { name: "Özel İşletme İzni", maxSpecial: 2, cost: 50000000 },
+    3: { name: "Stratejik İşletme Ruhsatı", maxSpecial: 3, cost: 200000000 },
+    4: { name: "Mega İşletme Lisansı", maxSpecial: 5, cost: 500000000 },
     5: { name: "Sınırsız Özel Lisans", maxSpecial: 999, cost: 2000000000 }
 };
 
@@ -1831,7 +1831,7 @@ const LICENSES = {
     "eczaci_diplomasi": { name: "Eczacılık Diploması", price: 1000000, duration: null, requiresEdu: 5, icon: "💊" },
     "kuyumcu_belgesi": { name: "Kuyumculuk Belgesi", price: 500000, duration: null, icon: "💎" },
     "galeri_ruhsati": { name: "Galeri Ruhsatı", price: 2000000, duration: null, icon: "🚗" },
-    "isletme_ruhsati": { name: "İşletme Ruhsatı", price: 150000, duration: null, icon: "📜" },
+    "isletme_ruhsati": { name: "Restoran İşletme Ruhsatı", price: 150000, duration: null, icon: "📜" },
     "uretim_izni": { name: "Üretim İzni", price: 300000, duration: null, icon: "🏭" },
     "sanayi_ruhsati": { name: "Sanayi Ruhsatı", price: 5000000, duration: null, icon: "🔧" },
     "saglik_uretim_izni": { name: "Sağlık Üretim İzni", price: 3000000, duration: null, requiresEdu: 4, icon: "💉" },
@@ -2658,8 +2658,8 @@ async function getCityMarket(cityId) {
 
         if (!data) {
             data = [];
-            // Toplam hedef: 75 ile 250 arası
-            const targetCount = Math.floor(Math.random() * (250 - 75 + 1)) + 75;
+            // Toplam hedef: 200 ile 500 arası (Artırıldı)
+            const targetCount = Math.floor(Math.random() * (500 - 200 + 1)) + 200;
 
             // Minimum kotalar
             const minLand = 10;
@@ -11080,10 +11080,17 @@ app.get('/api/business-license/info', async (req, res) => {
         const userSnap = await db.ref('users/' + username.toLowerCase()).once('value');
         const user = userSnap.val() || {};
 
-        // Kullanıcının işletme sayısını hesapla
         const bizSnap = await db.ref('businesses').orderByChild('owner').equalTo(username.toLowerCase()).once('value');
         const businesses = bizSnap.val() || {};
-        const businessCount = Object.keys(businesses).length;
+
+        // Sadece Perakende ve Üretim işletmelerini say
+        let businessCount = 0;
+        Object.values(businesses).forEach(b => {
+            const type = BUSINESS_TYPES[b.type];
+            if (type && (type.category === 'retail' || type.category === 'production')) {
+                businessCount++;
+            }
+        });
 
         const licenseLevel = user.business_license_level || 1;
         const licenseLevelData = BUSINESS_LICENSE_LEVELS[licenseLevel];
@@ -11101,6 +11108,108 @@ app.get('/api/business-license/info', async (req, res) => {
     } catch (e) {
         res.json({ success: false, error: e.message });
     }
+});
+
+// --- TARIM LİSANSI BİLGİSİ ---
+app.get('/api/farming-license/info', async (req, res) => {
+    try {
+        const { username } = req.query;
+        if (!username) return res.json({ success: false, error: "Kullanıcı adı gerekli!" });
+
+        const userSnap = await db.ref('users/' + username.toLowerCase()).once('value');
+        const user = userSnap.val() || {};
+
+        const bizSnap = await db.ref('businesses').orderByChild('owner').equalTo(username.toLowerCase()).once('value');
+        const businesses = bizSnap.val() || {};
+
+        let count = 0;
+        Object.values(businesses).forEach(b => {
+            const type = BUSINESS_TYPES[b.type];
+            if (type && type.category === 'farming') count++;
+        });
+
+        const level = user.farming_license_level || 1;
+        const levelData = FARMING_LICENSE_LEVELS[level];
+
+        res.json({
+            success: true,
+            level: level,
+            levelData: levelData,
+            maxFarms: levelData.maxFarms,
+            currentBusinesses: count, // Frontend generic isim kullanıyor olabilir, ya da spesifik
+            canCreateMore: count < levelData.maxFarms,
+            nextLevelCost: FARMING_LICENSE_LEVELS[level + 1]?.cost || null,
+            nextLevelMax: FARMING_LICENSE_LEVELS[level + 1]?.maxFarms || null
+        });
+    } catch (e) { res.json({ success: false, error: e.message }); }
+});
+
+// --- HAYVANCILIK LİSANSI BİLGİSİ ---
+app.get('/api/livestock-license/info', async (req, res) => {
+    try {
+        const { username } = req.query;
+        if (!username) return res.json({ success: false, error: "Kullanıcı adı gerekli!" });
+
+        const userSnap = await db.ref('users/' + username.toLowerCase()).once('value');
+        const user = userSnap.val() || {};
+
+        const bizSnap = await db.ref('businesses').orderByChild('owner').equalTo(username.toLowerCase()).once('value');
+        const businesses = bizSnap.val() || {};
+
+        let count = 0;
+        Object.values(businesses).forEach(b => {
+            const type = BUSINESS_TYPES[b.type];
+            if (type && type.category === 'livestock') count++;
+        });
+
+        const level = user.livestock_license_level || 1;
+        const levelData = LIVESTOCK_LICENSE_LEVELS[level];
+
+        res.json({
+            success: true,
+            level: level,
+            levelData: levelData,
+            maxLivestock: levelData.maxLivestock,
+            currentBusinesses: count,
+            canCreateMore: count < levelData.maxLivestock,
+            nextLevelCost: LIVESTOCK_LICENSE_LEVELS[level + 1]?.cost || null,
+            nextLevelMax: LIVESTOCK_LICENSE_LEVELS[level + 1]?.maxLivestock || null
+        });
+    } catch (e) { res.json({ success: false, error: e.message }); }
+});
+
+// --- ÖZEL İŞLETME LİSANSI BİLGİSİ ---
+app.get('/api/special-license/info', async (req, res) => {
+    try {
+        const { username } = req.query;
+        if (!username) return res.json({ success: false, error: "Kullanıcı adı gerekli!" });
+
+        const userSnap = await db.ref('users/' + username.toLowerCase()).once('value');
+        const user = userSnap.val() || {};
+
+        const bizSnap = await db.ref('businesses').orderByChild('owner').equalTo(username.toLowerCase()).once('value');
+        const businesses = bizSnap.val() || {};
+
+        let count = 0;
+        Object.values(businesses).forEach(b => {
+            const type = BUSINESS_TYPES[b.type];
+            if (type && type.category === 'special') count++;
+        });
+
+        const level = user.special_license_level || 1;
+        const levelData = SPECIAL_LICENSE_LEVELS[level];
+
+        res.json({
+            success: true,
+            level: level,
+            levelData: levelData,
+            maxSpecial: levelData.maxSpecial,
+            currentBusinesses: count,
+            canCreateMore: count < levelData.maxSpecial,
+            nextLevelCost: SPECIAL_LICENSE_LEVELS[level + 1]?.cost || null,
+            nextLevelMax: SPECIAL_LICENSE_LEVELS[level + 1]?.maxSpecial || null
+        });
+    } catch (e) { res.json({ success: false, error: e.message }); }
 });
 
 // --- İŞLETME LİSANSI YÜKSELT ---
@@ -11687,7 +11796,8 @@ app.get('/api/warehouse/info', async (req, res) => {
         const warehouseLevel = user.warehouseLevel || 0;
         const capacity = 5000 + (warehouseLevel * 500); // 5000'den başlar, +500 artar
 
-        res.json({ success: true, level: warehouseLevel, capacity });
+        const baseCity = user.warehouse?.baseCity || null;
+        res.json({ success: true, level: warehouseLevel, capacity, baseCity });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
