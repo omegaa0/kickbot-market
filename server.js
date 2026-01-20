@@ -4063,14 +4063,15 @@ app.get('/api/tts/preview', async (req, res) => {
     const { voice } = req.query;
     if (!voice) return res.json({ success: false, error: "Ses seçilmedi!" });
 
-    // ELEVENLABS VOICE MAPPING (Güncel ID'ler - Ocak 2024)
+    // ELEVENLABS VOICE MAPPING (Güncel varsayılan sesler)
+    // Not: Kendi sesleriniz için ElevenLabs panelinden Voice ID'leri alın
     const elevenVoices = {
-        'azeri': '3VkFsBHdRPqWKsitgYhJ',
-        'hasan': 'POvfnkx8xWcYRJLdfIkT',
-        'selim': '8ng6vvUHRpznlJL92xmU',
-        'irem': 'aPCKC8Vne5EV4tLALma5',
-        'aleyna': 'EXAVITQu4vr4xnSDxMaL',
-        'riza': 'ErXwobaYiN019PkySvjV'
+        'azeri': 'pNInz6obpgDQGcFmaJgB',    // Adam - multilingual erkek
+        'hasan': 'ErXwobaYiN019PkySvjV',     // Antoni - erkek
+        'selim': 'VR6AewLTigWG4xSOukaG',     // Arnold - erkek
+        'irem': 'EXAVITQu4vr4xnSDxMaL',      // Bella - kadın
+        'aleyna': 'MF3mGyEYCl7XYWbV9V6O',    // Elli - kadın
+        'riza': 'TxGEqnHWrfWFTfGW9XjX'       // Josh - erkek
     };
 
     const voiceId = elevenVoices[voice];
@@ -4115,7 +4116,21 @@ app.get('/api/tts/preview', async (req, res) => {
 
     } catch (e) {
         console.error("TTS Preview Error:", e.message);
-        res.json({ success: false, error: "Ses oluşturulamadı! (API Hatası)" });
+        if (e.response) {
+            console.error("TTS API Response Status:", e.response.status);
+            console.error("TTS API Response Data:", e.response.data ? e.response.data.toString() : 'No data');
+        }
+
+        let errorMsg = "Ses oluşturulamadı!";
+        if (e.response?.status === 400) {
+            errorMsg = "Geçersiz istek - Voice ID veya model hatası olabilir.";
+        } else if (e.response?.status === 401) {
+            errorMsg = "API anahtarı geçersiz!";
+        } else if (e.response?.status === 429) {
+            errorMsg = "API limit aşıldı, daha sonra deneyin.";
+        }
+
+        res.json({ success: false, error: errorMsg });
     }
 });
 
@@ -4145,17 +4160,15 @@ app.post('/api/market/buy', transactionLimiter, verifySession, async (req, res) 
 
             eventPath = "tts";
 
-            // ELEVENLABS VOICE MAPPING (Güncel ID'ler - Ocak 2024)
+            // ELEVENLABS VOICE MAPPING (Güncel varsayılan sesler)
+            // Not: Kendi sesleriniz için ElevenLabs panelinden Voice ID'leri alın
             const elevenVoices = {
-                // Türkçe/Azerbaycan Sesler
-                'azeri': '3VkFsBHdRPqWKsitgYhJ',   // Azerbaycanca - 22 yaş erkek
-                'hasan': 'POvfnkx8xWcYRJLdfIkT',  // Hasan - Türk erkek, dinamik
-                'selim': '8ng6vvUHRpznlJL92xmU',  // Selim - Türk erkek, espritüel
-                'irem': 'aPCKC8Vne5EV4tLALma5',   // Irem - Türk kadın, fısıltılı
-
-                // İngilizce Varsayılan Sesler
-                'aleyna': 'EXAVITQu4vr4xnSDxMaL', // Sarah - Kadın
-                'riza': 'ErXwobaYiN019PkySvjV'    // Antoni - Erkek
+                'azeri': 'pNInz6obpgDQGcFmaJgB',    // Adam - multilingual erkek
+                'hasan': 'ErXwobaYiN019PkySvjV',     // Antoni - erkek
+                'selim': 'VR6AewLTigWG4xSOukaG',     // Arnold - erkek
+                'irem': 'EXAVITQu4vr4xnSDxMaL',      // Bella - kadın
+                'aleyna': 'MF3mGyEYCl7XYWbV9V6O',    // Elli - kadın
+                'riza': 'TxGEqnHWrfWFTfGW9XjX'       // Josh - erkek
             };
 
             let audioUrl = null;
