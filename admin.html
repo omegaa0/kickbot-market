@@ -1177,6 +1177,29 @@
             const COMMANDS = ['slot', 'yazitura', 'kutu', 'duello', 'soygun', 'fal', 'ship', 'hava', 'zenginler', 'tts', 'ses', 'atyarisi', 'sr', 'ai', 'gundem'];
             let JOBS = [];
 
+            // Modern clipboard kopyalama fonksiyonu
+            async function copyToClipboard(text, successMsg) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    alert(successMsg || 'Kopyalandı!');
+                } catch (err) {
+                    // Fallback: eski yöntem
+                    const textarea = document.createElement('textarea');
+                    textarea.value = text;
+                    textarea.style.position = 'fixed';
+                    textarea.style.opacity = '0';
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    try {
+                        document.execCommand('copy');
+                        alert(successMsg || 'Kopyalandı!');
+                    } catch (e) {
+                        alert('Kopyalama başarısız! Manuel olarak kopyalayın.');
+                    }
+                    document.body.removeChild(textarea);
+                }
+            }
+
             let logInterval = null;
 
             async function uploadAdminImage(input, targetId, channelId, settingKey) {
@@ -1410,10 +1433,10 @@
                         <div id="sub-genel-${id}" class="sub-section active">
                             <div style="background:#000; padding:12px; border-radius:10px; border:1px solid #222; margin-bottom:12px;">
                                 <label style="font-size:0.7rem; color:var(--primary);">OVERLAY BAĞLANTISI</label>
-                                <input type="text" readonly value="${overlayUrl}" class="inp" style="height:32px; font-size:0.7rem; margin:5px 0;" onclick="this.select(); document.execCommand('copy'); alert('Overlay linki kopyalandı!')">
+                                <input type="text" readonly value="${overlayUrl}" class="inp" style="height:32px; font-size:0.7rem; margin:5px 0;" onclick="copyToClipboard(this.value, 'Overlay linki kopyalandı!')">
                                 
                                 <label style="font-size:0.7rem; color:#f1c40f; margin-top:10px; display:block;">AT YARIŞI BAĞLANTISI</label>
-                                <input type="text" readonly value="${horseRaceUrl}" class="inp" style="height:32px; font-size:0.7rem; margin:5px 0; border-color:#f1c40f; color:#f1c40f;" onclick="this.select(); document.execCommand('copy'); alert('At Yarışı linki kopyalandı!')">
+                                <input type="text" readonly value="${horseRaceUrl}" class="inp" style="height:32px; font-size:0.7rem; margin:5px 0; border-color:#f1c40f; color:#f1c40f;" onclick="copyToClipboard(this.value, 'At Yarışı linki kopyalandı!')">
 
                                 <label style="font-size:0.7rem; color:#5865F2; margin-top:10px; display:block;">DISCORD LIVE BİLDİRİM WEBHOOK</label>
                                 <input type="text" value="${getVal(s.discord_live_webhook, '')}" class="inp" style="height:32px; font-size:0.7rem; margin:5px 0; border-color:#5865F2;" onchange="toggleCmd('${id}','discord_live_webhook',this.value)" placeholder="https://discord.com/api/webhooks/...">
