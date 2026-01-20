@@ -896,6 +896,33 @@ async function finalizeTTSPurchase(price) {
     }
 }
 
+async function previewTTS() {
+    const voice = document.getElementById('tts-voice-select').value;
+    if (voice === 'standart') {
+        // Standart tarayıcı sesi ile test et
+        const msg = new SpeechSynthesisUtterance("Merhaba, bu standart sistem sesidir.");
+        msg.lang = 'tr-TR';
+        window.speechSynthesis.speak(msg);
+        return;
+    }
+
+    showToast('Ses örneği yükleniyor... ⏳', 'info');
+
+    try {
+        const res = await fetch(`/api/tts/preview?voice=${voice}`);
+        const data = await res.json();
+
+        if (data.success && data.audioUrl) {
+            const audio = new Audio(data.audioUrl);
+            audio.play();
+        } else {
+            showToast(data.error || 'Örnek ses yüklenemedi!', 'error');
+        }
+    } catch (e) {
+        showToast('Bağlantı hatası!', 'error');
+    }
+}
+
 function logout() {
     // 1. Local Storage
     localStorage.removeItem('aloskegang_user');
@@ -4232,47 +4259,158 @@ async function doProductionRequest(bizId, productCode) {
 
 // Bakım yap
 async function businessMaintain(bizId) {
-    showConfirm('İşletme bakımı yapmak istiyor musun?', async () => {
-        try {
-            const res = await fetch('/api/business/maintain', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: currentUser, businessId: bizId })
-            });
-            const data = await res.json();
-            showToast(data.message || data.error, data.success ? 'success' : 'error');
-            if (data.success) loadMyBusinesses();
-        } catch (e) {
-            showToast('Hata: ' + e.message, 'error');
+    try {
+        // Önce işletme bilgisini al (maliyet hesabı için)
+        const res = await fetch(`/api/business/my-businesses?username=${encodeURIComponent(currentUser)}`);
+        const data = await res.json();
+
+        if (!data.success) {
+            return showToast('İşletme bilgisi alınamadı!', 'error');
         }
-    });
+
+        const biz = data.businesses.find(b => b.id === bizId);
+        if (!biz) {
+            return showToast('İşletme bulunamadı!', 'error');
+        }
+
+        const typeInfo = businessTypes[biz.type] || {};
+        const repairNeeded = 100 - (biz.health || 100);
+
+        if (repairNeeded <= 0) {
+            return showToast('İşletme zaten tam sağlıklı!', 'info');
+        }
+
+        const costPerPoint = (typeInfo.baseMaintenance || 5000) / 10;
+        const totalCost = Math.floor(costPerPoint * repairNeeded);
+
+        const confirmed = await showConfirm('🔧 İşletme Bakımı', `
+            <div style="text-align:left;">
+                <p><b>${typeInfo.name || biz.type}</b></p>
+                <p>Mevcut Sağlık: <span style="color:${biz.health < 50 ? '#ff4444' : '#44ff44'}">%${biz.health || 100}</span></p>
+                <p>Onarım: <b>%${repairNeeded}</b></p>
+                <hr style="border-color:rgba(255,255,255,0.1); margin:10px 0;">
+                <p style="font-size:1.2rem; color:var(--primary);">💰 Maliyet: <b>${totalCost.toLocaleString()}</b></p>
+            </div>
+        `);
+
+        if (!confirmed) return;
+
+        const maintainRes = await fetch('/api/business/maintain', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser, businessId: bizId })
+        });
+        const maintainData = await maintainRes.json();
+        showToast(maintainData.message || maintainData.error, maintainData.success ? 'success' : 'error');
+        if (maintainData.success) loadMyBusinesses();
+    } catch (e) {
+        showToast('Hata: ' + e.message, 'error');
+    }
 }
 
 // Yükselt
 async function businessUpgrade(bizId) {
-    showConfirm('İşletmeyi yükseltmek istiyor musun?', async () => {
-        try {
-            const res = await fetch('/api/business/upgrade', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: currentUser, businessId: bizId })
-            });
-            const data = await res.json();
-            showToast(data.message || data.error, data.success ? 'success' : 'error');
-            if (data.success) loadMyBusinesses();
-        } catch (e) {
-            showToast('Hata: ' + e.message, 'error');
+    try {
+        // Önce işletme bilgisini al (maliyet hesabı için)
+        const res = await fetch(`/api/business/my-businesses?username=${encodeURIComponent(currentUser)}`);
+        const data = await res.json();
+
+        if (!data.success) {
+            return showToast('İşletme bilgisi alınamadı!', 'error');
         }
-    });
+
+        const biz = data.businesses.find(b => b.id === bizId);
+        if (!biz) {
+            return showToast('İşletme bulunamadı!', 'error');
+        }
+
+        const typeInfo = businessTypes[biz.type] || {};
+        const currentLevel = biz.level || 1;
+        const nextLevel = currentLevel + 1;
+
+        // BUSINESS_LEVELS'dan yükseltme çarpanı (varsayılan değerler)
+        const levelMultipliers = {
+            2: 0.5, 3: 1.0, 4: 2.0, 5: 4.0, 6: 8.0, 7: 16.0, 8: 32.0
+        };
+
+        const upgradeMultiplier = levelMultipliers[nextLevel];
+        if (!upgradeMultiplier) {
+            return showToast('Maksimum seviyeye ulaştın!', 'info');
+        }
+
+        const upgradeCost = Math.floor((typeInfo.setupCost || 500000) * upgradeMultiplier);
+
+        const confirmed = await showConfirm('⬆️ İşletme Yükseltme', `
+            <div style="text-align:left;">
+                <p><b>${typeInfo.name || biz.type}</b></p>
+                <p>Mevcut Seviye: <span style="color:var(--secondary);">${currentLevel}</span></p>
+                <p>Yeni Seviye: <span style="color:var(--primary);">${nextLevel}</span></p>
+                <hr style="border-color:rgba(255,255,255,0.1); margin:10px 0;">
+                <p style="font-size:0.85rem; color:#aaa;">+%${Math.round((upgradeMultiplier) * 10)} Üretim Bonusu</p>
+                <p style="font-size:1.2rem; color:var(--primary);">💰 Maliyet: <b>${upgradeCost.toLocaleString()}</b></p>
+            </div>
+        `);
+
+        if (!confirmed) return;
+
+        const upgradeRes = await fetch('/api/business/upgrade', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser, businessId: bizId })
+        });
+        const upgradeData = await upgradeRes.json();
+        showToast(upgradeData.message || upgradeData.error, upgradeData.success ? 'success' : 'error');
+        if (upgradeData.success) loadMyBusinesses();
+    } catch (e) {
+        showToast('Hata: ' + e.message, 'error');
+    }
 }
 
 // Satış modal
-function showBusinessSellModal(bizId) {
-    showConfirm('İşletmeyi Sat', 'İşletmeyi yarı fiyatına satmak istediğine emin misin? (Yükseltme maliyetleri dahildir)').then(async (confirmed) => {
-        if (confirmed) {
-            sellBusiness(bizId);
+async function showBusinessSellModal(bizId) {
+    try {
+        // Önce işletme bilgisini al (satış fiyatı hesabı için)
+        const res = await fetch(`/api/business/my-businesses?username=${encodeURIComponent(currentUser)}`);
+        const data = await res.json();
+
+        if (!data.success) {
+            return showToast('İşletme bilgisi alınamadı!', 'error');
         }
-    });
+
+        const biz = data.businesses.find(b => b.id === bizId);
+        if (!biz) {
+            return showToast('İşletme bulunamadı!', 'error');
+        }
+
+        const typeInfo = businessTypes[biz.type] || {};
+        const setupCost = typeInfo.setupCost || 500000;
+
+        // Toplam yatırım hesapla (kurulum + yükseltmeler)
+        const levelMultipliers = { 2: 0.5, 3: 1.0, 4: 2.0, 5: 4.0, 6: 8.0, 7: 16.0, 8: 32.0 };
+        let totalInvestment = setupCost;
+        for (let i = 2; i <= (biz.level || 1); i++) {
+            totalInvestment += setupCost * (levelMultipliers[i] || 0);
+        }
+
+        const sellPrice = Math.floor(totalInvestment * 0.5);
+
+        const confirmed = await showConfirm('🏷️ İşletmeyi Sat', `
+            <div style="text-align:left;">
+                <p><b>${typeInfo.name || biz.type}</b> (Seviye ${biz.level || 1})</p>
+                <p>Şehir: ${biz.city}</p>
+                <hr style="border-color:rgba(255,255,255,0.1); margin:10px 0;">
+                <p style="color:#888;">Toplam Yatırım: ${totalInvestment.toLocaleString()} 💰</p>
+                <p style="font-size:1.2rem; color:var(--secondary);">💵 Satış Fiyatı: <b>${sellPrice.toLocaleString()}</b> (%50)</p>
+                <p style="font-size:0.8rem; color:#ff6666; margin-top:10px;">⚠️ Bu işlem geri alınamaz!</p>
+            </div>
+        `);
+
+        if (!confirmed) return;
+
+        sellBusiness(bizId);
+    } catch (e) {
+        showToast('Hata: ' + e.message, 'error');
+    }
 }
 
 async function sellBusiness(bizId) {
@@ -4483,11 +4621,19 @@ async function loadMarketListings(page = 1) {
                 continue;
             }
 
+            // Kalite gösterimi
+            const quality = isSystem ? 10 : (listing.quality || 50);
+            const qualityColor = quality >= 75 ? '#00ff88' : quality >= 50 ? '#ffaa00' : quality >= 25 ? '#ff8800' : '#ff4444';
+            const qualityName = quality >= 90 ? 'Mükemmel' : quality >= 75 ? 'İyi' : quality >= 50 ? 'Orta' : quality >= 25 ? 'Düşük' : 'Çok Düşük';
+
             html += `
                 <div class="glass-panel" style="padding:20px; border-radius:16px; border:1px solid ${isSystem ? 'var(--primary)' : 'rgba(255,255,255,0.1)'};">
                     <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:15px;">
                         <div style="font-size:2rem;">${product.icon}</div>
-                        ${isSystem ? '<span style="background:var(--primary); color:black; font-size:0.6rem; padding:3px 8px; border-radius:10px; font-weight:900;">SİSTEM</span>' : ''}
+                        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:5px;">
+                            ${isSystem ? '<span style="background:var(--primary); color:black; font-size:0.6rem; padding:3px 8px; border-radius:10px; font-weight:900;">SİSTEM</span>' : ''}
+                            <span style="background:${qualityColor}22; color:${qualityColor}; font-size:0.6rem; padding:3px 8px; border-radius:10px; font-weight:700;">%${quality} ${qualityName}</span>
+                        </div>
                     </div>
                     <h4 style="margin:0 0 5px 0;">${product.name}</h4>
                     <div style="font-size:0.8rem; color:#888; margin-bottom:12px;">
@@ -4971,9 +5117,17 @@ async function loadRnDUpgrades() {
 
         for (const [code, qty] of inventoryItems) {
             const product = productData[code] || { name: code, icon: '📦' };
-            const currentQuality = productQualities[code] || 0;
+            const currentQuality = productQualities[code] || 50;
             const upgradeStep = 5;
-            const nextCost = 25000 * ((currentQuality / upgradeStep) + 1);
+
+            // Maliyet ve süre hesaplama (server ile senkron olmalı)
+            const baseCost = 50000 + (currentQuality * 2000);
+            const baseDuration = 30 * 60 * 1000 + (currentQuality * 10 * 60 * 1000); // ms cinsinden
+
+            const durationHours = Math.floor(baseDuration / (1000 * 60 * 60));
+            const durationMins = Math.floor((baseDuration % (1000 * 60 * 60)) / (1000 * 60));
+            const durationText = durationHours > 0 ? `${durationHours}s ${durationMins}dk` : `${durationMins} dk`;
+
             const maxed = currentQuality >= 100;
 
             html += `
@@ -4987,7 +5141,10 @@ async function loadRnDUpgrades() {
                     </div>
                     ${maxed ?
                     '<div style="text-align:center; color:var(--primary); font-weight:700;">✅ MAKSİMUM</div>' :
-                    `<button onclick="buyRnDUpgrade('${code}')" class="buy-btn" style="width:100%;">🧬 %${currentQuality + upgradeStep} Yap (💰 ${nextCost.toLocaleString()})</button>`
+                    `<div style="text-align:center; margin-bottom:10px;">
+                        <span style="font-size:0.75rem; color:#888;">⏱️ Süre: <b style="color:#fff;">${durationText}</b></span>
+                    </div>
+                    <button onclick="buyRnDUpgrade('${code}', ${baseCost}, '${durationText}')" class="buy-btn" style="width:100%;">🧬 %${currentQuality + upgradeStep} Yap (💰 ${baseCost.toLocaleString()})</button>`
                 }
                 </div>
             `;
@@ -5000,21 +5157,30 @@ async function loadRnDUpgrades() {
     }
 }
 
-async function buyRnDUpgrade(upgradeType) {
-    showConfirm('AR-GE Yükseltme', 'Bu yükseltmeyi satın almak istediğine emin misin?').then(async (confirmed) => {
-        if (!confirmed) return;
-        try {
-            const res = await fetch('/api/rnd/buy-upgrade', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: currentUser, upgradeType })
-            });
-            const data = await res.json();
+async function buyRnDUpgrade(productCode, cost, duration) {
+    const confirmed = await showConfirm('🧬 AR-GE Araştırması', `
+        <div style="text-align:left;">
+            <p>Bu ürünün kalitesini <b>%5</b> artırmak istiyorsun.</p>
+            <hr style="border-color:rgba(255,255,255,0.1); margin:10px 0;">
+            <p>💰 Maliyet: <b>${cost?.toLocaleString() || '?'}</b></p>
+            <p>⏱️ Süre: <b>${duration || '?'}</b></p>
+            <p style="font-size:0.8rem; color:#888; margin-top:10px;">Araştırma süresi boyunca başka araştırma başlatamazsın.</p>
+        </div>
+    `);
 
-            showToast(data.message || data.error, data.success ? 'success' : 'error');
-            if (data.success) loadRnDUpgrades();
-        } catch (e) {
-            showToast('Hata: ' + e.message, 'error');
-        }
-    });
+    if (!confirmed) return;
+
+    try {
+        const res = await fetch('/api/arge/upgrade-quality', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser, productCode })
+        });
+        const data = await res.json();
+
+        showToast(data.message || data.error, data.success ? 'success' : 'error');
+        if (data.success) loadRnDUpgrades();
+    } catch (e) {
+        showToast('Hata: ' + e.message, 'error');
+    }
 }

@@ -966,17 +966,23 @@
 
             <label style="display:block; margin-bottom:10px; font-weight:600; font-size:0.9rem; color:#aaa;">Ses
                 Seçimi</label>
-            <select id="tts-voice-select"
-                style="width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:12px; padding:12px; color:white; font-size:1rem; margin-bottom:30px; cursor:pointer;">
-                <option value="standart">Standart</option>
-                <option disabled style="background:#333; color:#aaa;">--- ElevenLabs (Yapay Zeka) ---</option>
-                <option value="aleyna">Selin 👩</option>
-                <option value="riza">Mert 👮‍♂️</option>
-                <option value="czn">Burak 😺</option>
-                <option value="polat">Emre 🕶️</option>
-                <option value="ezel">Kenan 🎭</option>
-                <option value="azeri">Aygün 🇦🇿</option>
-            </select>
+            <div style="display:flex; gap:10px; margin-bottom:30px;">
+                <select id="tts-voice-select"
+                    style="flex:1; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:12px; padding:12px; color:white; font-size:1rem; cursor:pointer;">
+                    <option value="standart">Standart</option>
+                    <option disabled style="background:#333; color:#aaa;">--- ElevenLabs (Yapay Zeka) ---</option>
+                    <option value="aleyna">Sarah 👩 (Türkçe/İngilizce)</option>
+                    <option value="riza">Antoni 👮‍♂️ (Türkçe/İngilizce)</option>
+                    <option value="azeri">Enes 🇦🇿 (Azeri/Türk)</option>
+                    <option value="hasan">Hasan 🧔 (Türk)</option>
+                    <option value="selim">Selim 🎭 (Türk)</option>
+                    <option value="irem">İrem 👩 (Türk)</option>
+                </select>
+                <button onclick="previewTTS()" class="btn"
+                    style="width:auto; padding:0 20px; background:var(--secondary); color:#000;">
+                    <i class="fas fa-play"></i> Dinle
+                </button>
+            </div>
 
             <div style="display:flex; gap:15px;">
                 <button onclick="closeTTSModal()" class="secondary-btn" style="flex:1;">İptal</button>
@@ -1064,7 +1070,7 @@
     <div id="toast" class="toast hidden"></div>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
-    <script src="shop.js"></script>
+    <script src="shop.min.js"></script>
 </body>
 
 </html>

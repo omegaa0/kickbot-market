@@ -1078,11 +1078,34 @@
 
         <!-- SHOP NAV MANAGEMENT -->
         <div id="shop-nav" class="section">
-            <div
-                style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:300px; text-align:center;">
-                <h1 style="font-size:4rem; margin-bottom:10px;">🚧</h1>
-                <h2 style="color:var(--primary); margin-bottom:10px;">Yakında!</h2>
-                <p style="color:#888;">Bu özellik şu anda bakım çalışmasında.</p>
+            <h2 style="margin-bottom:20px;">🏪 Mağaza Sekme Yönetimi</h2>
+            <p style="color:#888; margin-bottom:20px;">Market sayfasındaki sekmeleri buradan yönetebilirsin. Sekmeleri
+                açıp kapatabilir, sıralarını değiştirebilirsin.</p>
+
+            <div class="card">
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:60px;">Sıra</th>
+                                <th>Sekme Adı</th>
+                                <th>ID</th>
+                                <th style="width:80px;">Aktif</th>
+                                <th style="width:80px;">Yeni</th>
+                                <th style="width:80px;">Kilitli</th>
+                            </tr>
+                        </thead>
+                        <tbody id="shop-tabs-tbody">
+                            <tr>
+                                <td colspan="6" style="text-align:center; color:var(--muted);">Yükleniyor...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div style="display:flex; gap:10px; margin-top:20px;">
+                    <button class="btn" onclick="saveShopTabSettings()">💾 DEĞİŞİKLİKLERİ KAYDET</button>
+                    <button class="btn" style="background:#333;" onclick="loadShopSettings()">🔄 YENİLE</button>
+                </div>
             </div>
         </div>
 
@@ -3040,6 +3063,98 @@
                         if (e.key === 'Escape') newCancel.click();
                     };
                 });
+            }
+
+            // ========== MAĞAZA SEKME YÖNETİMİ ==========
+            async function loadShopSettings() {
+                try {
+                    const res = await fetch('/api/shop-tabs');
+                    const data = await res.json();
+
+                    if (!data.success) {
+                        showToast('Sekme ayarları yüklenemedi!');
+                        return;
+                    }
+
+                    const tbody = document.getElementById('shop-tabs-tbody');
+                    tbody.innerHTML = '';
+
+                    const tabs = Object.entries(data.tabs).sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
+
+                    tabs.forEach(([id, config]) => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td><input type="number" class="inp shop-tab-order" data-id="${id}" value="${config.order || 0}" style="width:60px; margin:0; text-align:center;"></td>
+                            <td><input type="text" class="inp shop-tab-text" data-id="${id}" value="${config.text || id}" style="margin:0;"></td>
+                            <td style="font-family:monospace; color:var(--muted);">${id}</td>
+                            <td>
+                                <label class="switch">
+                                    <input type="checkbox" class="shop-tab-enabled" data-id="${id}" ${config.enabled ? 'checked' : ''}>
+                                    <span class="slider"></span>
+                                </label>
+                            </td>
+                            <td>
+                                <label class="switch">
+                                    <input type="checkbox" class="shop-tab-new" data-id="${id}" ${config.showNew ? 'checked' : ''}>
+                                    <span class="slider"></span>
+                                </label>
+                            </td>
+                            <td>
+                                <label class="switch">
+                                    <input type="checkbox" class="shop-tab-locked" data-id="${id}" ${config.locked ? 'checked' : ''}>
+                                    <span class="slider" style="background-color: ${config.locked ? '#ff4444' : '#ccc'}"></span>
+                                </label>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } catch (e) {
+                    showToast('Sekme ayarları yüklenemedi!');
+                }
+            }
+
+            async function saveShopTabSettings() {
+                const rows = document.querySelectorAll('#shop-tabs-tbody tr');
+                const tabs = {};
+
+                rows.forEach(row => {
+                    const orderInput = row.querySelector('.shop-tab-order');
+                    const textInput = row.querySelector('.shop-tab-text');
+                    const enabledInput = row.querySelector('.shop-tab-enabled');
+                    const newInput = row.querySelector('.shop-tab-new');
+                    const lockedInput = row.querySelector('.shop-tab-locked');
+
+                    if (orderInput && textInput && enabledInput) {
+                        const id = orderInput.dataset.id;
+                        tabs[id] = {
+                            order: parseInt(orderInput.value) || 0,
+                            text: textInput.value,
+                            enabled: enabledInput.checked,
+                            showNew: newInput ? newInput.checked : false,
+                            locked: lockedInput ? lockedInput.checked : false
+                        };
+                    }
+                });
+
+                try {
+                    const res = await fetch('/admin-api/shop-tabs/update', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': sessionKey
+                        },
+                        body: JSON.stringify({ key: sessionKey, tabs })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        showToast('Ayarlar kaydedildi!');
+                        loadShopSettings();
+                    } else {
+                        showToast('Hata: ' + (data.error || 'Bilinmeyen hata'));
+                    }
+                } catch (e) {
+                    showToast('Kaydetme hatası!');
+                }
             }
 
             window.onload = () => {

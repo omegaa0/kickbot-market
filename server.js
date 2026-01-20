@@ -1894,16 +1894,50 @@ const ADVERTISING_LEVELS = {
     5: { name: "Viral Kampanya", costPerDay: 250000, salesBonus: 0.90, icon: "🚀" }
 };
 
-// --- LOJİSTİK MALİYETLERİ (Şehir bazlı mesafe) ---
-const CITY_DISTANCES = {
-    "İstanbul": { "Ankara": 450, "İzmir": 480, "Bursa": 150, "Antalya": 700, "Amasya": 650 },
-    "Ankara": { "İstanbul": 450, "İzmir": 580, "Bursa": 380, "Antalya": 480, "Amasya": 330 },
-    "İzmir": { "İstanbul": 480, "Ankara": 580, "Bursa": 330, "Antalya": 450, "Amasya": 780 },
-    "Amasya": { "İstanbul": 650, "Ankara": 330, "İzmir": 780, "Bursa": 580, "Antalya": 730 },
-    "Bursa": { "İstanbul": 150, "Ankara": 380, "İzmir": 330, "Amasya": 580, "Antalya": 550 },
-    "Antalya": { "İstanbul": 700, "Ankara": 480, "İzmir": 450, "Amasya": 730, "Bursa": 550 }
-};
+// --- LOJİSTİK MALİYETLERİ (Dinamik şehir mesafe hesaplaması) ---
 const LOGISTICS_COST_PER_KM = 5; // Birim başına km başına maliyet
+
+// Dinamik mesafe hesaplama fonksiyonu (EMLAK_CITIES koordinatlarından)
+function calculateCityDistance(city1, city2) {
+    if (!city1 || !city2) return 500; // Varsayılan mesafe
+    if (city1 === city2) return 0;
+
+    // EMLAK_CITIES'dan koordinatları bul (lazy load - tanımlandıktan sonra çalışır)
+    const findCity = (name) => {
+        if (typeof EMLAK_CITIES === 'undefined') return null;
+        return EMLAK_CITIES.find(c =>
+            c.name === name ||
+            c.id === name.toUpperCase() ||
+            c.name.toLowerCase() === name.toLowerCase()
+        );
+    };
+
+    const c1 = findCity(city1);
+    const c2 = findCity(city2);
+
+    if (!c1 || !c2) return 500; // Şehir bulunamazsa varsayılan
+
+    // Harita koordinatlarından yaklaşık km hesapla (Türkiye haritası ölçeği)
+    // Harita x:0-100, y:0-100 - Türkiye yaklaşık 1600km x 600km
+    const xScale = 16; // 1 birim = 16 km
+    const yScale = 6;  // 1 birim = 6 km
+
+    const dx = (c2.x - c1.x) * xScale;
+    const dy = (c2.y - c1.y) * yScale;
+
+    return Math.round(Math.sqrt(dx * dx + dy * dy));
+}
+
+// Geriye uyumluluk için CITY_DISTANCES proxy objesi
+const CITY_DISTANCES = new Proxy({}, {
+    get: function (target, city1) {
+        return new Proxy({}, {
+            get: function (t, city2) {
+                return calculateCityDistance(city1, city2);
+            }
+        });
+    }
+});
 
 // --- AKTİF PİYASA DURUMU (Haftalık değişir) ---
 let currentMarketConditions = {
@@ -4024,6 +4058,67 @@ const verifySession = async (req, res, next) => {
     }
 };
 
+// --- TTS PREVIEW API ---
+app.get('/api/tts/preview', async (req, res) => {
+    const { voice } = req.query;
+    if (!voice) return res.json({ success: false, error: "Ses seçilmedi!" });
+
+    // ELEVENLABS VOICE MAPPING (Güncel ID'ler - Ocak 2024)
+    const elevenVoices = {
+        'azeri': '3VkFsBHdRPqWKsitgYhJ',
+        'hasan': 'POvfnkx8xWcYRJLdfIkT',
+        'selim': '8ng6vvUHRpznlJL92xmU',
+        'irem': 'aPCKC8Vne5EV4tLALma5',
+        'aleyna': 'EXAVITQu4vr4xnSDxMaL',
+        'riza': 'ErXwobaYiN019PkySvjV'
+    };
+
+    const voiceId = elevenVoices[voice];
+    if (!voiceId) return res.json({ success: false, error: "Geçersiz ses seçimi!" });
+
+    try {
+        const elevenKey = process.env.ELEVENLABS_API_KEY;
+        if (!elevenKey) return res.json({ success: false, error: "API anahtarı eksik!" });
+
+        // Örnek metinler
+        const sampleTexts = {
+            'azeri': 'Salam dostlar, necəsiniz? Bu mənim səsimdir.',
+            'hasan': 'Merhaba arkadaşlar, yayınımıza hoş geldiniz!',
+            'selim': 'Selam millet, keyifler nasıl? Bomba gibiyiz!',
+            'irem': 'Merhaba, umarım harika bir gün geçiriyorsundur.',
+            'aleyna': 'Merhaba, ben Aleyna. Bu bir örnek ses kaydıdır.',
+            'riza': 'Dikkat dikkat! Bu bir test anonsudur.'
+        };
+
+        const text = sampleTexts[voice] || "Merhaba, bu bir test sesidir.";
+
+        const ttsResp = await axios.post(
+            `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+            {
+                text: text,
+                model_id: "eleven_multilingual_v2",
+                voice_settings: { stability: 0.5, similarity_boost: 0.8 }
+            },
+            {
+                headers: {
+                    'xi-api-key': elevenKey,
+                    'Content-Type': 'application/json'
+                },
+                responseType: 'arraybuffer'
+            }
+        );
+
+        const base64Audio = Buffer.from(ttsResp.data).toString('base64');
+        const audioUrl = `data:audio/mpeg;base64,${base64Audio}`;
+
+        res.json({ success: true, audioUrl });
+
+    } catch (e) {
+        console.error("TTS Preview Error:", e.message);
+        res.json({ success: false, error: "Ses oluşturulamadı! (API Hatası)" });
+    }
+});
+
 // --- GENERIC MARKET BUY (TTS, SOUND, MUTE, SR) ---
 app.post('/api/market/buy', transactionLimiter, verifySession, async (req, res) => {
     const { username, channelId, type, data } = req.body;
@@ -4050,14 +4145,17 @@ app.post('/api/market/buy', transactionLimiter, verifySession, async (req, res) 
 
             eventPath = "tts";
 
-            // ELEVENLABS VOICE MAPPING
+            // ELEVENLABS VOICE MAPPING (Güncel ID'ler - Ocak 2024)
             const elevenVoices = {
-                'aleyna': 'EXAVITQu4vr4xnSDxMaL', // Bella (Sample)
-                'riza': 'ErXwobaYiN019PkySvjV', // Antoni (Sample)
-                'czn': 'TxGEqnHWrfWFTfGW9XjX', // Josh (Sample)
-                'polat': 'ODq5zmih8GrVes37Dizd', // Patrick (Sample)
-                'ezel': 'VR6AewGX3KQ9Gs3uJ1G5',  // Adam (Sample)
-                'azeri': 'Lcf765pS20Ga8unf7fXf'   // Domi (Multilingual Support)
+                // Türkçe/Azerbaycan Sesler
+                'azeri': '3VkFsBHdRPqWKsitgYhJ',   // Azerbaycanca - 22 yaş erkek
+                'hasan': 'POvfnkx8xWcYRJLdfIkT',  // Hasan - Türk erkek, dinamik
+                'selim': '8ng6vvUHRpznlJL92xmU',  // Selim - Türk erkek, espritüel
+                'irem': 'aPCKC8Vne5EV4tLALma5',   // Irem - Türk kadın, fısıltılı
+
+                // İngilizce Varsayılan Sesler
+                'aleyna': 'EXAVITQu4vr4xnSDxMaL', // Sarah - Kadın
+                'riza': 'ErXwobaYiN019PkySvjV'    // Antoni - Erkek
             };
 
             let audioUrl = null;
@@ -5124,7 +5222,7 @@ app.post('/webhook/kick', async (req, res) => {
                 const thumbnail = livestream.thumbnail?.url || "";
 
                 // Discord Webhook Belirle (Kanal Ayarı > Global Env)
-                const targetWebhook = (channelData.settings && channelData.settings.discord_webhook_url) || process.env.DISCORD_WEBHOOK;
+                const targetWebhook = (channelData.settings && channelData.settings.discord_live_webhook) || process.env.DISCORD_WEBHOOK;
 
                 if (targetWebhook) {
                     try {
@@ -10851,6 +10949,54 @@ app.post('/api/business/maintain', transactionLimiter, async (req, res) => {
         });
 
         res.json({ success: true, message: `Bakım tamamlandı! -${totalCost.toLocaleString()} 💰🔧` });
+    } catch (e) {
+        res.json({ success: false, error: e.message });
+    }
+});
+
+// --- İŞLETME YÜKSELT ---
+app.post('/api/business/upgrade', transactionLimiter, async (req, res) => {
+    try {
+        const { username, businessId } = req.body;
+        if (!username || !businessId) return res.json({ success: false, error: "Eksik bilgi!" });
+
+        const bizSnap = await db.ref('businesses/' + businessId).once('value');
+        const biz = bizSnap.val();
+        if (!biz) return res.json({ success: false, error: "İşletme bulunamadı!" });
+        if (biz.owner !== username.toLowerCase()) return res.json({ success: false, error: "Bu işletme sana ait değil!" });
+
+        const currentLevel = biz.level || 1;
+        const nextLevel = currentLevel + 1;
+        const nextLevelData = BUSINESS_LEVELS[nextLevel];
+
+        if (!nextLevelData) {
+            return res.json({ success: false, error: "Maksimum seviyeye ulaştın!" });
+        }
+
+        const bizType = BUSINESS_TYPES[biz.type];
+        const upgradeCost = Math.floor(bizType.setupCost * nextLevelData.upgradeMultiplier);
+
+        // Bakiye kontrolü
+        const userSnap = await db.ref('users/' + username.toLowerCase()).once('value');
+        const user = userSnap.val();
+        if ((user.balance || 0) < upgradeCost) {
+            return res.json({ success: false, error: `Yetersiz bakiye! Yükseltme ücreti: ${upgradeCost.toLocaleString()} 💰` });
+        }
+
+        // İşlemi yap
+        await db.ref('users/' + username.toLowerCase()).update({
+            balance: (user.balance || 0) - upgradeCost
+        });
+
+        await db.ref('businesses/' + businessId).update({
+            level: nextLevel
+        });
+
+        res.json({
+            success: true,
+            message: `İşletme Seviye ${nextLevel}'e yükseltildi! -${upgradeCost.toLocaleString()} 💰⬆️`,
+            newLevel: nextLevel
+        });
     } catch (e) {
         res.json({ success: false, error: e.message });
     }
