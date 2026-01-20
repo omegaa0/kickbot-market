@@ -4124,14 +4124,12 @@ async function generateFakeYouTTS(modelToken, text) {
     // Auth Headers
     if (auth) {
         if (auth.type === 'token') {
-            // API key hem cookie olarak (session=...) hem de Authorization header olarak dene
-            // Not: FakeYou dokümantasyonuna göre token genelde session cookie olarak geçer
-            headers['Cookie'] = `session=${auth.value}`;
+            // API Token kullanımı (Authorization header)
             headers['Authorization'] = auth.value;
             console.log('[FakeYou] API Token kullanılıyor');
         } else {
+            // Session Cookie kullanımı (Login sonrası)
             headers['Cookie'] = `session=${auth.value}`;
-            headers['credentials'] = 'include';
             console.log('[FakeYou] Session Cookie kullanılıyor');
         }
     }
