@@ -4022,6 +4022,9 @@ function renderMarketPrices() {
         html += `<div style="grid-column: 1/-1; margin-top:15px; font-weight:bold; color:var(--primary);">${catName}</div>`;
 
         for (const [code, prod] of catProducts) {
+            // Jenerik ürünleri liseden kaldır
+            if (code === 'sebze' || code === 'meyve') continue;
+
             const price = marketPrices[code] || prod.basePrice;
 
             // Fiyata göre "Piyasa Durumu" belirle (Base fiyata oranla)
@@ -4265,8 +4268,31 @@ async function businessUpgrade(bizId) {
 
 // Satış modal
 function showBusinessSellModal(bizId) {
-    // TODO: Implement product selection and amount input for selling
-    showToast('Satış fonksiyonu yakında!', 'info');
+    showConfirm('İşletmeyi Sat', 'İşletmeyi yarı fiyatına satmak istediğine emin misin? (Yükseltme maliyetleri dahildir)').then(async (confirmed) => {
+        if (confirmed) {
+            sellBusiness(bizId);
+        }
+    });
+}
+
+async function sellBusiness(bizId) {
+    try {
+        const res = await fetch('/api/business/sell', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser, bizId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message, 'success');
+            loadMyBusinesses();
+            loadProfile();
+        } else {
+            showToast(data.error || 'Hata oluştu', 'error');
+        }
+    } catch (e) {
+        showToast('Bağlantı hatası', 'error');
+    }
 }
 
 // Tab değişince çağrılacak
@@ -4431,8 +4457,9 @@ async function loadMarketListings(page = 1) {
         const query = document.getElementById('market-search').value;
         const category = document.getElementById('market-category-filter').value;
         const cityFilter = document.getElementById('market-city-filter').value;
+        const shopType = document.getElementById('market-shop-filter')?.value || 'all';
 
-        const url = `/api/marketplace/listings?page=${page}&q=${query}&category=${category}&city=${cityFilter}`;
+        const url = `/api/marketplace/listings?page=${page}&q=${query}&category=${category}&city=${cityFilter}&shopType=${shopType}`;
         const res = await fetch(url);
         const data = await res.json();
 
@@ -4650,63 +4677,59 @@ async function createMarketListing() {
     }
 }
 
-async function buyMarketListing(listingId) {
+async function buyMarketListing(listingId, listingCity, pricePerUnit, buyQty, prodName, prodUnit) {
+    if (!currentUser) return showToast("Giriş yapmalısın!", "error");
+
+    const qty = parseInt(buyQty);
+    if (isNaN(qty) || qty <= 0) return showToast("Geçersiz miktar!", "error");
+
     try {
-        // İlan detaylarını bul (lokasyon bilgisi için)
-        const resList = await fetch('/api/marketplace/listings');
-        const dataList = await resList.json();
-        const listing = dataList.listings.find(l => l.id === listingId);
-        if (!listing) return showToast("İlan bulunamadı!", "error");
+        // Warehouse bilgisini al (Base City için)
+        const whRes = await fetch(`/api/warehouse/info?username=${currentUser}`);
+        const whData = await whRes.json();
 
-        // Alıcının sahip olduğu işletme şehirlerini al (Taşıma ücreti için)
-        const bizRes = await fetch('/api/business/my/' + currentUser);
-        const bizData = await bizRes.json();
-        const myBusinesses = Object.values(bizData.businesses || {});
-        const myCities = [...new Set(myBusinesses.map(b => b.city))];
-
-        if (myCities.length === 0) {
-            return showToast("Ürünü koyacak bir işletmen (depo) olmalı!", "error");
+        if (!whData.success || !whData.baseCity) {
+            return showToast("Satın alım yapabilmek için önce DEPO sekmesinden bir ANA ÜS (Şehir) seçmelisin!", "error");
         }
 
-        let targetCity = myCities[0]; // Varsayılan ilk şehir
+        const userBaseCity = whData.baseCity;
+        const totalItemCost = pricePerUnit * qty;
 
-        const fee = (targetCity.toUpperCase() !== (listing.city || "").toUpperCase()) ? Math.ceil(listing.totalPrice * 0.1) : 0;
-
-        // Eğer birden fazla şehri varsa seçtir
-        if (myCities.length > 1) {
-            const cityOptions = myCities.map(c => `<option value="${c}">${c}</option>`).join('');
-            const html = `
-                <div style="margin-top:15px; text-align:left;">
-                    <p style="font-size:0.9rem; margin-bottom:10px;"><b>${listing.quantity} adet ${listing.productCode}</b> (${listing.city || 'Bilinmiyor'})</p>
-                    <label style="display:block; font-size:0.8rem; color:#aaa; margin-bottom:5px;">Hangi şehrinizdeki deponuza gelsin?</label>
-                    <select id="buy-target-city" class="borsa-input" style="width:100%; margin-bottom:10px;">
-                        ${cityOptions}
-                    </select>
-                    <p style="font-size:0.75rem; color:#888;">* Şehirler arası nakliyede %10 lojistik ücreti alınır.</p>
-                </div>
-            `;
-            const confirmed = await showConfirm(`🛒 Satın Alma Onayı`, html);
-            if (!confirmed) return;
-            targetCity = document.getElementById('buy-target-city').value;
-        } else {
-            const msg = fee > 0
-                ? `<b>${listing.quantity} adet ${listing.productCode}</b> satın almak istiyor musunuz?<br><span style="color:#ffa500; font-size:0.8rem;">⚠️ ${listing.city} -> ${targetCity} arası %10 (+${fee} 💰) lojistik ücreti uygulanacaktır.</span>`
-                : `<b>${listing.quantity} adet ${listing.productCode}</b> satın almayı onaylıyor musunuz?`;
-
-            const confirmed = await showConfirm(`🛒 Satın Alma`, msg);
-            if (!confirmed) return;
+        // Kargo hesapla (Basit ön gösterim için, server asıl hesaplayacak)
+        let shippingMsg = "";
+        if (listingCity !== userBaseCity) {
+            shippingMsg = `<br><span style="color:#ffa500; font-size:0.8rem;">⚠️ ${listingCity} -> ${userBaseCity} arası nakliye ücreti uygulanacaktır.</span>`;
         }
+
+        const confirmed = await showConfirm(`🛒 Satın Alma Onayı`, `
+            <div style="text-align:left;">
+                <p><b>${qty} ${prodUnit} ${prodName}</b></p>
+                <p>Birim Fiyat: ${pricePerUnit.toLocaleString()} 💰</p>
+                <p>Toplam Ürün: <b>${totalItemCost.toLocaleString()} 💰</b></p>
+                ${shippingMsg}
+            </div>
+        `);
+
+        if (!confirmed) return;
 
         const res = await fetch('/api/marketplace/buy-listing', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: currentUser, listingId, targetCity })
+            body: JSON.stringify({
+                username: currentUser,
+                listingId,
+                targetCity: userBaseCity,
+                buyQty: qty
+            })
         });
         const data = await res.json();
-        showToast(data.message || data.error, data.success ? 'success' : 'error');
+
         if (data.success) {
+            showToast(data.message || "Satın alma başarılı!", "success");
             loadMarketListings();
             loadProfile();
+        } else {
+            showToast(data.error || "Hata oluştu!", "error");
         }
     } catch (e) {
         showToast('Hata: ' + e.message, 'error');

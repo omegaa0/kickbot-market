@@ -1561,30 +1561,30 @@ const BUSINESS_LICENSE_LEVELS = {
 // --- TARIM LİSANSI SİSTEMİ ---
 const FARMING_LICENSE_LEVELS = {
     1: { name: "Küçük Çiftçi", maxFarms: 1, cost: 0 },
-    2: { name: "Tarım Ruhsatı", maxFarms: 3, cost: 500000 },
-    3: { name: "Büyük Çiftçi", maxFarms: 5, cost: 2000000 },
-    4: { name: "Tarım Şirketi", maxFarms: 8, cost: 10000000 },
-    5: { name: "Tarım Holdingu", maxFarms: 15, cost: 50000000 },
-    6: { name: "Tarım İmparatorluğu", maxFarms: 999, cost: 200000000 }
+    2: { name: "Tarım Ruhsatı", maxFarms: 3, cost: 1000000 },
+    3: { name: "Büyük Çiftçi", maxFarms: 5, cost: 4000000 },
+    4: { name: "Tarım Şirketi", maxFarms: 8, cost: 20000000 },
+    5: { name: "Tarım Holdingu", maxFarms: 15, cost: 100000000 },
+    6: { name: "Tarım İmparatorluğu", maxFarms: 999, cost: 500000000 }
 };
 
 // --- HAYVANCILIK LİSANSI SİSTEMİ ---
 const LIVESTOCK_LICENSE_LEVELS = {
     1: { name: "Küçük Hayvancı", maxLivestock: 1, cost: 0 },
-    2: { name: "Hayvancılık Ruhsatı", maxLivestock: 3, cost: 800000 },
-    3: { name: "Büyük Hayvancı", maxLivestock: 5, cost: 3000000 },
-    4: { name: "Hayvancılık Şirketi", maxLivestock: 8, cost: 15000000 },
-    5: { name: "Hayvancılık Holdingu", maxLivestock: 15, cost: 75000000 },
-    6: { name: "Hayvancılık İmparatorluğu", maxLivestock: 999, cost: 300000000 }
+    2: { name: "Hayvancılık Ruhsatı", maxLivestock: 3, cost: 5000000 },
+    3: { name: "Büyük Hayvancı", maxLivestock: 5, cost: 20000000 },
+    4: { name: "Hayvancılık Şirketi", maxLivestock: 8, cost: 100000000 },
+    5: { name: "Hayvancılık Holdingu", maxLivestock: 15, cost: 500000000 },
+    6: { name: "Hayvancılık İmparatorluğu", maxLivestock: 999, cost: 2000000000 }
 };
 
 // --- ÖZEL İŞLETME LİSANSI SİSTEMİ ---
 const SPECIAL_LICENSE_LEVELS = {
     1: { name: "Temel İzin", maxSpecial: 1, cost: 0 },
-    2: { name: "Özel İşletme İzni", maxSpecial: 2, cost: 50000000 },
-    3: { name: "Stratejik İşletme Ruhsatı", maxSpecial: 3, cost: 200000000 },
-    4: { name: "Mega İşletme Lisansı", maxSpecial: 5, cost: 500000000 },
-    5: { name: "Sınırsız Özel Lisans", maxSpecial: 999, cost: 2000000000 }
+    2: { name: "Özel İşletme İzni", maxSpecial: 2, cost: 100000000 },
+    3: { name: "Stratejik İşletme Ruhsatı", maxSpecial: 3, cost: 500000000 },
+    4: { name: "Mega İşletme Lisansı", maxSpecial: 5, cost: 2000000000 },
+    5: { name: "Sınırsız Özel Lisans", maxSpecial: 999, cost: 5000000000 }
 };
 
 // --- ÜRÜN VERİLERİ ---
@@ -1674,8 +1674,6 @@ const PRODUCTS = {
     "meyve_suyu": { name: "Meyve Suyu", basePrice: 40, category: "processed", unit: "kutu", icon: "🧃" },
 
     // ==================== TAZE ÜRÜNLER ====================
-    "sebze": { name: "Sebze", basePrice: 40, category: "fresh", unit: "kg", icon: "🥬" },
-    "meyve": { name: "Meyve", basePrice: 60, category: "fresh", unit: "kg", icon: "🍎" },
     "domates": { name: "Domates", basePrice: 35, category: "fresh", unit: "kg", icon: "🍅" },
     "biber": { name: "Biber", basePrice: 45, category: "fresh", unit: "kg", icon: "🌶️" },
     "salatalik": { name: "Salatalık", basePrice: 30, category: "fresh", unit: "kg", icon: "🥒" },
@@ -11467,7 +11465,7 @@ async function collectBusinessTaxes() {
 // Pazar yerindeki tüm ilanları getir
 app.get('/api/marketplace/listings', async (req, res) => {
     try {
-        const { category, city, q, page = 1, limit = 20 } = req.query;
+        const { category, city, q, page = 1, limit = 20, shopType } = req.query;
         const snap = await db.ref('marketplace').once('value');
         const allListings = snap.val() || {};
 
@@ -11478,13 +11476,9 @@ app.get('/api/marketplace/listings', async (req, res) => {
             }
         }
 
-        // --- SABİT SİSTEM ÜRÜNLERİ ---
         // --- SABİT SİSTEM ÜRÜNLERİ (OTOMATİK TÜM ÜRÜNLER) ---
         const SYSTEM_BASE = [];
-
-        // Tüm PRODUCTS listesini gezerek sisteme ekle
         for (const [code, product] of Object.entries(PRODUCTS)) {
-            // Şehir başına stok ve fiyat
             SYSTEM_BASE.push({
                 code: code,
                 qty: 100000,
@@ -11492,11 +11486,11 @@ app.get('/api/marketplace/listings', async (req, res) => {
             });
         }
 
-        const CITIES = ['İstanbul', 'Ankara', 'İzmir', 'Amasya', 'Bursa', 'Antalya'];
+        const ALL_CITIES_LIST = EMLAK_CITIES.map(c => c.name);
 
-        // Her şehir için sistem ilanlarını ekle (Stabil olması için random değil)
+        // Her şehir için sistem ilanlarını ekle
         SYSTEM_BASE.forEach(p => {
-            CITIES.forEach(c => {
+            ALL_CITIES_LIST.forEach(c => {
                 listings.push({
                     id: `system_${p.code}_${c}`,
                     seller: 'SYSTEM',
@@ -11513,14 +11507,21 @@ app.get('/api/marketplace/listings', async (req, res) => {
         });
 
         // Filtreleme
-        if (category) {
+        if (category && category !== 'all') {
             listings = listings.filter(l => {
                 const prod = PRODUCTS[l.productCode];
                 return prod && prod.category === category;
             });
         }
-        if (city) {
+        if (city && city !== 'all') {
             listings = listings.filter(l => l.city === city);
+        }
+        if (shopType && shopType !== 'all') {
+            listings = listings.filter(l => {
+                if (l.isSystem) return true; // Sistem ilanları her yere uyar (veya belki belli dükkanlara?)
+                // Normal ilanlar için satıcı dükkan tipini kontrol et
+                return l.shopType === shopType;
+            });
         }
         if (q) {
             const query = q.toLowerCase();
@@ -11786,6 +11787,41 @@ app.post('/api/marketplace/cancel-listing', async (req, res) => {
 });
 
 // ==================== WAREHOUSE (DEPO) API ====================
+// --- İŞLETME SATIŞ ---
+app.post('/api/business/sell', transactionLimiter, async (req, res) => {
+    try {
+        const { username, bizId } = req.body;
+        const userSnap = await db.ref('users/' + username).once('value');
+        const user = userSnap.val();
+        if (!user) return res.json({ success: false, error: 'Kullanıcı bulunamadı!' });
+
+        const bizSnap = await db.ref(`businesses/${bizId}`).once('value');
+        const biz = bizSnap.val();
+        if (!biz || biz.owner !== username) return res.json({ success: false, error: 'İşletme bulunamadı veya size ait değil!' });
+
+        const typeData = BUSINESS_TYPES[biz.type];
+        if (!typeData) return res.json({ success: false, error: 'İşletme türü geçersiz!' });
+
+        // Satış bedeli: (Kurulum Maliyeti + Seviye Maliyetleri Toplamı) * 0.5
+        let totalInvestment = typeData.setupCost;
+        for (let i = 2; i <= biz.level; i++) {
+            totalInvestment += (levelData[i]?.cost || 0);
+        }
+
+        const sellPrice = Math.floor(totalInvestment * 0.5);
+
+        // İşletmeyi sil ve bakiye ekle
+        await db.ref(`businesses/${bizId}`).remove();
+        await db.ref(`users/${username}`).update({
+            balance: (user.balance || 0) + sellPrice
+        });
+
+        res.json({ success: true, message: `İşletme ${sellPrice.toLocaleString()} 💰 karşılığında satıldı!` });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 app.get('/api/warehouse/info', async (req, res) => {
     try {
         const { username } = req.query;
@@ -11793,11 +11829,17 @@ app.get('/api/warehouse/info', async (req, res) => {
         const user = userSnap.val();
         if (!user) return res.json({ success: false, error: 'Kullanıcı bulunamadı!' });
 
-        const warehouseLevel = user.warehouseLevel || 0;
-        const capacity = 5000 + (warehouseLevel * 500); // 5000'den başlar, +500 artar
+        const warehouseLevel = user.warehouse?.level || 1;
+        const warehouseData = WAREHOUSE_LEVELS[warehouseLevel] || WAREHOUSE_LEVELS[1];
+        const capacity = warehouseData.capacity;
+
+        const nextLevelData = WAREHOUSE_LEVELS[warehouseLevel + 1];
+        const nextLevelCost = nextLevelData ? nextLevelData.cost : 0;
 
         const baseCity = user.warehouse?.baseCity || null;
-        res.json({ success: true, level: warehouseLevel, capacity, baseCity });
+        const currentUsage = user.warehouse?.currentUsage || 0;
+
+        res.json({ success: true, level: warehouseLevel, capacity, baseCity, currentUsage, nextLevelCost });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
