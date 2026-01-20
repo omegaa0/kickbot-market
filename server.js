@@ -4063,15 +4063,25 @@ const verifySession = async (req, res, next) => {
 // --- FAKEYOU TTS HELPER FUNCTION ---
 // FakeYou API ile ses oluşturma (async job-based system)
 async function generateFakeYouTTS(modelToken, text) {
+    const fakeYouToken = process.env.FAKEYOU_API_TOKEN;
+
+    // Headers - API token varsa ekle (rate limit artırır)
+    const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    };
+
+    if (fakeYouToken) {
+        headers['Authorization'] = `Bearer ${fakeYouToken}`;
+        console.log('[FakeYou] API Token kullanılıyor - öncelikli kuyruk');
+    }
 
     // 1. TTS inference başlat
     const inferenceResp = await axios.post('https://api.fakeyou.com/tts/inference', {
         tts_model_token: modelToken,
         uuid_idempotency_token: uuidv4(),
         inference_text: text
-    }, {
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-    });
+    }, { headers });
 
     if (!inferenceResp.data.success) {
         throw new Error(inferenceResp.data.error_reason || 'TTS inference başlatılamadı');
@@ -4079,16 +4089,14 @@ async function generateFakeYouTTS(modelToken, text) {
 
     const jobToken = inferenceResp.data.inference_job_token;
 
-    // 2. Job tamamlanana kadar poll et (max 60 saniye)
-    const maxAttempts = 30;
+    // 2. Job tamamlanana kadar poll et (max 90 saniye)
+    const maxAttempts = 45;
     const pollInterval = 2000; // 2 saniye
 
     for (let i = 0; i < maxAttempts; i++) {
         await new Promise(resolve => setTimeout(resolve, pollInterval));
 
-        const statusResp = await axios.get(`https://api.fakeyou.com/tts/job/${jobToken}`, {
-            headers: { 'Accept': 'application/json' }
-        });
+        const statusResp = await axios.get(`https://api.fakeyou.com/tts/job/${jobToken}`, { headers });
 
         if (!statusResp.data.success) continue;
 
@@ -4106,7 +4114,7 @@ async function generateFakeYouTTS(modelToken, text) {
         // pending veya started ise devam et
     }
 
-    throw new Error('TTS zaman aşımına uğradı (60 saniye)');
+    throw new Error('TTS zaman aşımına uğradı (90 saniye)');
 }
 
 // --- FAKEYOU VOICE CONFIG ---
