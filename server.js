@@ -4136,7 +4136,7 @@ async function generateFakeYouTTS(modelToken, text) {
 
     // 1. TTS inference başlat (Retry mekanizmalı)
     let jobToken = null;
-    const maxRetries = 3;
+    const maxRetries = 5; // Daha fazla deneme
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
@@ -4160,14 +4160,15 @@ async function generateFakeYouTTS(modelToken, text) {
             const isRateLimit = e.message.includes('rate limited') || (e.response && e.response.status === 429);
 
             if (isRateLimit && attempt < maxRetries) {
-                const waitTime = attempt * 2000;
-                console.log(`[FakeYou] Rate limit! ${waitTime}ms bekleniyor... (Deneme ${attempt}/${maxRetries})`);
+                const waitTime = attempt * 4000; // 4, 8, 12, 16 saniye bekle
+                console.log(`[FakeYou] Rate limit! ${waitTime / 1000}sn bekleniyor... (Deneme ${attempt}/${maxRetries})`);
                 await new Promise(r => setTimeout(r, waitTime));
                 continue;
             }
 
             if (attempt === maxRetries) {
-                throw new Error(isRateLimit ? 'FakeYou Sunucuları çok yoğun (Rate Limit)' : e.message);
+                const authMsg = auth ? '' : ' (Giriş yapılmamış - .env dosyasını kontrol et)';
+                throw new Error(isRateLimit ? `FakeYou Sunucuları çok yoğun!${authMsg}` : e.message);
             }
         }
     }
