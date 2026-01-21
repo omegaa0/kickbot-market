@@ -1305,7 +1305,7 @@ function getRandomStockNews(name, type) {
 // HELPER: Günlük Limit Kontrolü (%25-50)
 function applyDailyLimit(code, newPrice, dailyStartPrice) {
     if (!dailyStartPrice || dailyStartPrice <= 0) return newPrice;
-    const maxChangeLimit = 15; // Sabit %15 (Kullanıcı isteği)
+    const maxChangeLimit = 3; // Sabit %3 (Kullanıcı isteği)
     const maxPrice = Math.floor(dailyStartPrice * (1 + maxChangeLimit / 100));
     const minPrice = Math.ceil(dailyStartPrice * (1 - maxChangeLimit / 100));
 
@@ -2283,14 +2283,14 @@ async function updateGlobalStocks() {
         cycleDuration--;
         await metaRef.update({ cycle: currentMarketCycle, duration: cycleDuration });
 
-        // VOLATILITY REDUCED (Daha sakin piyasa)
+        // VOLATILITY REDUCED (Daha sakin piyasa - %3 limitine uygun)
         const cycleMultipliers = {
-            "BULLISH": { drift: 0.0001, vol: 0.5 },
-            "BEARISH": { drift: -0.0003, vol: 0.8 },
-            "VOLATILE": { drift: 0, vol: 1.5 },
-            "STAGNANT": { drift: 0, vol: 0.1 },
-            "CRASH": { drift: -0.002, vol: 2.0 },
-            "NORMAL": { drift: 0.00002, vol: 0.4 }
+            "BULLISH": { drift: 0.0001, vol: 0.2 },
+            "BEARISH": { drift: -0.0003, vol: 0.3 },
+            "VOLATILE": { drift: 0, vol: 0.8 },
+            "STAGNANT": { drift: 0, vol: 0.05 },
+            "CRASH": { drift: -0.002, vol: 1.0 },
+            "NORMAL": { drift: 0.00002, vol: 0.15 }
         };
 
         const effects = cycleMultipliers[currentMarketCycle] || cycleMultipliers["NORMAL"];
@@ -3018,8 +3018,24 @@ app.post('/api/borsa/buy', transactionLimiter, async (req, res) => {
             return res.status(400).json({ success: false, error: "İşlem tutarı çok yüksek!" });
         }
 
-        // 2. Kullanıcı Bakiyesini Kontrol Et
+        // 2. Kullanıcı Bakiyesini ve Limitini Kontrol Et
         const userRef = db.ref(`users/${username}`);
+
+        // Önce okuma yapıp limit kontrolü (UX için) - Transaction içinde de tekrar kontrol edilecek
+        const preSnap = await userRef.once('value');
+        const preUser = preSnap.val() || {};
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        let dailyCount = preUser.stock_limit_count || 0;
+
+        if (preUser.stock_limit_date !== todayStr) {
+            dailyCount = 0;
+        }
+
+        if (!preUser.is_admin && !preUser.is_infinite && dailyCount >= 2) {
+            return res.json({ success: false, error: "Günlük borsa işlem limitin doldu! (Max 2 işlem)" });
+        }
+
         await userRef.transaction(user => {
             if (user) {
                 if (!user.is_infinite && (user.balance || 0) < totalCost) {
@@ -3029,6 +3045,14 @@ app.post('/api/borsa/buy', transactionLimiter, async (req, res) => {
                 if (!user.is_infinite) {
                     user.balance = (user.balance || 0) - totalCost;
                 }
+
+                // GÜNLÜK İŞLEM LİMİTİ GÜNCELLEME
+                const tDate = new Date().toISOString().split('T')[0];
+                if (user.stock_limit_date !== tDate) {
+                    user.stock_limit_date = tDate;
+                    user.stock_limit_count = 0;
+                }
+                user.stock_limit_count = (user.stock_limit_count || 0) + 1;
 
                 if (!user.stocks) user.stocks = {};
                 if (!user.stock_costs) user.stock_costs = {};
@@ -3119,6 +3143,18 @@ app.post('/api/borsa/sell', transactionLimiter, async (req, res) => {
 
         // 2. Kullanıcı İşlemi
         const userRef = db.ref(`users/${username}`);
+
+        // Limit check
+        const preSnap = await userRef.once('value');
+        const preUser = preSnap.val() || {};
+        const todayStr = new Date().toISOString().split('T')[0];
+        let dailyCount = preUser.stock_limit_count || 0;
+
+        if (preUser.stock_limit_date !== todayStr) { dailyCount = 0; }
+        if (!preUser.is_admin && !preUser.is_infinite && dailyCount >= 2) {
+            return res.json({ success: false, error: "Günlük borsa işlem limitin doldu! (Max 2 işlem)" });
+        }
+
         await userRef.transaction(user => {
             if (user) {
                 if (!user.stocks || (user.stocks[code] || 0) < amount) {
@@ -3129,6 +3165,14 @@ app.post('/api/borsa/sell', transactionLimiter, async (req, res) => {
                 const newQty = oldQty - amount;
 
                 user.balance = (user.balance || 0) + netTotal;
+
+                // GÜNLÜK İŞLEM LİMİTİ GÜNCELLEME
+                const tDate = new Date().toISOString().split('T')[0];
+                if (user.stock_limit_date !== tDate) {
+                    user.stock_limit_date = tDate;
+                    user.stock_limit_count = 0;
+                }
+                user.stock_limit_count = (user.stock_limit_count || 0) + 1;
 
                 if (!user.stock_costs) user.stock_costs = {};
                 const oldCost = user.stock_costs[code] || 0;
