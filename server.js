@@ -11702,6 +11702,19 @@ app.get('/api/marketplace/listings', async (req, res) => {
                     quality: 10, // Sistem ürünleri %10 kalite
                     qualityName: "Çok Düşük",
                     city: c,
+                    shopType: (() => {
+                        const prod = PRODUCTS[p.code];
+                        const cat = prod?.category;
+                        if (cat === 'food' || cat === 'fresh') return 'manav';
+                        if (cat === 'meat' || cat === 'animal') return 'kasap';
+                        if (cat === 'drink' || cat === 'market') return 'market';
+                        if (cat === 'tech' || cat === 'energy') return 'elektronik';
+                        if (cat === 'clothing') return 'tekstil';
+                        if (cat === 'mining' || cat === 'industry' || cat === 'raw') return 'hirdavat';
+                        if (cat === 'home') return 'mobilya';
+                        if (cat === 'care') return 'kozmetik';
+                        return 'market'; // Default fallback
+                    })(),
                     isSystem: true,
                     createdAt: 0
                 });
@@ -12087,7 +12100,8 @@ app.get('/api/warehouse/info', async (req, res) => {
         const inventoryList = [];
 
         for (const key in inventory) {
-            const amount = inventory[key] || 0;
+            const item = inventory[key];
+            const amount = (typeof item === 'object' && item !== null && item.amount !== undefined) ? item.amount : (item || 0);
             if (amount <= 0) continue;
 
             // Kaliteyi inventoryQualities'den çek, yoksa (eski ürünse) 0 varsay veya 50
