@@ -4362,8 +4362,8 @@ app.post('/api/market/buy', transactionLimiter, verifySession, async (req, res) 
                 console.log(`[Market Buy - Sound] ❌ Ses bulunamadı! Trigger: ${trigger}`);
                 return res.json({ success: false, error: "Ses bulunamadı!" });
             }
-
-            price = parseInt(sound.price || 100);
+            // Fiyat: Firebase'de "cost" olarak kaydediliyor
+            price = parseInt(sound.cost || sound.price || 100);
             console.log(`[Market Buy - Sound] ✅ Ses bulundu: ${trigger}, Fiyat: ${price}, URL: ${sound.url}`);
 
             eventPath = "sound";
