@@ -737,12 +737,15 @@
                             <th>Şehir</th>
                             <th>Seviye</th>
                             <th>Sağlık</th>
+                            <th>Bakiye</th>
+                            <th>Envanter</th>
+                            <th>Kâr/Zarar</th>
                             <th>Son Üretim</th>
                             <th>İşlemler</th>
                         </tr>
                     </thead>
                     <tbody id="businesses-list">
-                        <tr><td colspan="8" style="text-align:center; padding:40px;">Yükleniyor...</td></tr>
+                        <tr><td colspan="11" style="text-align:center; padding:40px;">Yükleniyor...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1192,6 +1195,49 @@
                 <div id="detail-modal-content" style="margin-top:20px;"></div>
                 <button class="btn btn-danger" onclick="closeModal('detailModal')"
                     style="margin-top:20px;">KAPAT</button>
+            </div>
+        </div>
+
+        <!-- BUSINESS EDIT MODAL -->
+        <div id="businessModal" class="modal">
+            <div class="card" style="width:600px; max-height:80vh; overflow-y:auto;">
+                <h3 id="biz-modal-title">🏢 İşletme Düzenle</h3>
+                <div id="biz-modal-content" style="margin-top:20px;">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
+                        <div>
+                            <label>Sahip</label>
+                            <input type="text" id="bizOwner" class="inp" placeholder="Kullanıcı adı">
+                        </div>
+                        <div>
+                            <label>Şehir</label>
+                            <input type="text" id="bizCity" class="inp" placeholder="Şehir">
+                        </div>
+                        <div>
+                            <label>Seviye (1-5)</label>
+                            <input type="number" id="bizLevel" class="inp" min="1" max="5" value="1">
+                        </div>
+                        <div>
+                            <label>Sağlık (0-100%)</label>
+                            <input type="number" id="bizHealth" class="inp" min="0" max="100" value="100">
+                        </div>
+                        <div>
+                            <label>Bakiye (💰)</label>
+                            <input type="number" id="bizBalance" class="inp" value="0">
+                        </div>
+                        <div>
+                            <label>Toplam Kâr/Zarar</label>
+                            <input type="number" id="bizProfit" class="inp" value="0">
+                        </div>
+                    </div>
+                    <div style="margin-top:20px;">
+                        <label>Envanter (JSON format: {"APPLE":50, "BREAD":30})</label>
+                        <textarea id="bizInventory" class="inp" style="min-height:80px; font-family:monospace; font-size:0.85rem;" placeholder='{"APPLE":50}'></textarea>
+                    </div>
+                </div>
+                <div style="display:flex; gap:10px; margin-top:20px;">
+                    <button class="btn" id="saveBizBtn">💾 KAYDET</button>
+                    <button class="btn btn-danger" onclick="closeModal('businessModal')">❌ İPTAL</button>
+                </div>
             </div>
         </div>
 
@@ -2016,6 +2062,20 @@
                         const health = biz.health || 100;
                         const healthColor = health >= 80 ? '#4ade80' : health >= 50 ? '#fbbf24' : '#ef4444';
 
+                        // Bakiye
+                        const balance = (biz.balance || 0).toLocaleString();
+
+                        // Envanter özeti
+                        const inventory = biz.inventory || {};
+                        const invCount = Object.keys(inventory).length;
+                        const invTotal = Object.values(inventory).reduce((sum, val) => sum + (val || 0), 0);
+                        const invText = invCount > 0 ? `${invCount} ürün (${invTotal} adet)` : 'Boş';
+
+                        // Kâr/Zarar
+                        const profit = biz.total_profit || 0;
+                        const profitColor = profit >= 0 ? '#4ade80' : '#ef4444';
+                        const profitText = profit >= 0 ? `+${profit.toLocaleString()}` : profit.toLocaleString();
+
                         return `
                             <tr>
                                 <td><small>${biz.id}</small></td>
@@ -2024,9 +2084,12 @@
                                 <td>${biz.city || 'N/A'}</td>
                                 <td>${biz.level || 1}</td>
                                 <td style="color:${healthColor}"><b>${health}%</b></td>
+                                <td><b>${balance} 💰</b></td>
+                                <td><small>${invText}</small></td>
+                                <td style="color:${profitColor}"><b>${profitText} 💰</b></td>
                                 <td><small>${lastProd}</small></td>
                                 <td>
-                                    <button class="btn btn-small" onclick="editBusiness('${biz.id}')">✏️</button>
+                                    <button class="btn btn-small" onclick="openBusinessModal('${biz.id}')">✏️ Düzenle</button>
                                     <button class="btn btn-small btn-danger" onclick="deleteBusiness('${biz.id}')">🗑️</button>
                                 </td>
                             </tr>
@@ -2057,30 +2120,119 @@
                 }
             }
 
-            async function editBusiness(bizId) {
-                const health = prompt('Yeni sağlık değeri (0-100):');
-                if (health === null) return;
+            let currentBusinessId = null;
 
-                const healthNum = parseInt(health);
-                if (isNaN(healthNum) || healthNum < 0 || healthNum > 100) {
-                    alert('Geçersiz değer!');
-                    return;
-                }
+            async function openBusinessModal(bizId) {
+                currentBusinessId = bizId;
 
-                const res = await fetch('/admin-api/businesses/update', {
+                // İşletme verilerini çek
+                const res = await fetch('/admin-api/businesses/get', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ key: sessionKey, businessId: bizId, health: healthNum })
+                    body: JSON.stringify({ key: sessionKey, businessId: bizId })
                 });
 
                 const data = await res.json();
-                if (data.success) {
-                    await showAdminAlert('İşletme güncellendi', '✅ Başarılı');
-                    loadAllBusinesses();
-                } else {
-                    await showAdminAlert('Hata: ' + (data.error || 'Bilinmeyen hata'), '❌ Hata');
+                if (!data.success || !data.business) {
+                    await showAdminAlert('İşletme bulunamadı!', '❌ Hata');
+                    return;
+                }
+
+                const biz = data.business;
+
+                // Form alanlarını doldur
+                document.getElementById('bizOwner').value = biz.owner || '';
+                document.getElementById('bizCity').value = biz.city || '';
+                document.getElementById('bizLevel').value = biz.level || 1;
+                document.getElementById('bizHealth').value = biz.health || 100;
+                document.getElementById('bizBalance').value = biz.balance || 0;
+                document.getElementById('bizProfit').value = biz.total_profit || 0;
+                document.getElementById('bizInventory').value = JSON.stringify(biz.inventory || {}, null, 2);
+
+                document.getElementById('biz-modal-title').innerText = `🏢 ${biz.type || 'İşletme'} - ${bizId}`;
+
+                // Modal'ı aç
+                document.getElementById('businessModal').style.display = 'flex';
+            }
+
+            async function saveBusinessChanges() {
+                if (!currentBusinessId) return;
+
+                try {
+                    // Form verilerini al
+                    const owner = document.getElementById('bizOwner').value.trim();
+                    const city = document.getElementById('bizCity').value.trim();
+                    const level = parseInt(document.getElementById('bizLevel').value);
+                    const health = parseInt(document.getElementById('bizHealth').value);
+                    const balance = parseFloat(document.getElementById('bizBalance').value);
+                    const profit = parseFloat(document.getElementById('bizProfit').value);
+                    const inventoryText = document.getElementById('bizInventory').value.trim();
+
+                    // Validasyon
+                    if (!owner) {
+                        await showAdminAlert('Sahip adı boş olamaz!', '⚠️ Uyarı');
+                        return;
+                    }
+
+                    if (level < 1 || level > 5) {
+                        await showAdminAlert('Seviye 1-5 arasında olmalı!', '⚠️ Uyarı');
+                        return;
+                    }
+
+                    if (health < 0 || health > 100) {
+                        await showAdminAlert('Sağlık 0-100 arasında olmalı!', '⚠️ Uyarı');
+                        return;
+                    }
+
+                    // Envanter JSON parse
+                    let inventory = {};
+                    if (inventoryText) {
+                        try {
+                            inventory = JSON.parse(inventoryText);
+                        } catch (e) {
+                            await showAdminAlert('Geçersiz JSON formatı!', '❌ Hata');
+                            return;
+                        }
+                    }
+
+                    // API'ye gönder
+                    const res = await fetch('/admin-api/businesses/update-full', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            key: sessionKey,
+                            businessId: currentBusinessId,
+                            owner,
+                            city,
+                            level,
+                            health,
+                            balance,
+                            total_profit: profit,
+                            inventory
+                        })
+                    });
+
+                    const result = await res.json();
+                    if (result.success) {
+                        await showAdminAlert('İşletme güncellendi!', '✅ Başarılı');
+                        closeModal('businessModal');
+                        loadAllBusinesses();
+                    } else {
+                        await showAdminAlert('Hata: ' + (result.error || 'Bilinmeyen hata'), '❌ Hata');
+                    }
+                } catch (e) {
+                    console.error('Save business error:', e);
+                    await showAdminAlert('Bir hata oluştu!', '❌ Hata');
                 }
             }
+
+            // Modal kaydet butonuna event ekle
+            document.addEventListener('DOMContentLoaded', () => {
+                const saveBizBtn = document.getElementById('saveBizBtn');
+                if (saveBizBtn) {
+                    saveBizBtn.onclick = saveBusinessChanges;
+                }
+            });
 
             // Pazar yeri yönetimi fonksiyonları
             async function loadAllListings() {

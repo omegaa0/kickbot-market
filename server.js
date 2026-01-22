@@ -9871,6 +9871,56 @@ app.post('/admin-api/businesses/update', authAdmin, async (req, res) => {
     }
 });
 
+// Admin - İşletme detay getir
+app.post('/admin-api/businesses/get', authAdmin, async (req, res) => {
+    const { businessId } = req.body;
+    if (!businessId) {
+        return res.status(400).json({ success: false, error: 'Eksik bilgi' });
+    }
+
+    try {
+        const bizSnap = await db.ref(`businesses/${businessId}`).once('value');
+        const business = bizSnap.val();
+
+        if (!business) {
+            return res.status(404).json({ success: false, error: 'İşletme bulunamadı' });
+        }
+
+        res.json({ success: true, business: { id: businessId, ...business } });
+    } catch (e) {
+        console.error('Business get error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// Admin - İşletme tam güncelleme
+app.post('/admin-api/businesses/update-full', authAdmin, async (req, res) => {
+    const { businessId, owner, city, level, health, balance, total_profit, inventory } = req.body;
+
+    if (!businessId) {
+        return res.status(400).json({ success: false, error: 'Eksik bilgi' });
+    }
+
+    try {
+        const updates = {};
+        if (owner !== undefined) updates.owner = owner;
+        if (city !== undefined) updates.city = city;
+        if (level !== undefined) updates.level = parseInt(level);
+        if (health !== undefined) updates.health = parseInt(health);
+        if (balance !== undefined) updates.balance = parseFloat(balance);
+        if (total_profit !== undefined) updates.total_profit = parseFloat(total_profit);
+        if (inventory !== undefined) updates.inventory = inventory;
+
+        await db.ref(`businesses/${businessId}`).update(updates);
+
+        addLog('İşletme Tam Güncelleme', `İşletme ${businessId} güncellendi (Sahip: ${owner}, Seviye: ${level}, Sağlık: ${health}%)`);
+        res.json({ success: true });
+    } catch (e) {
+        console.error('Business full update error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 // Admin - Pazar yeri yönetimi API'leri
 app.post('/admin-api/marketplace/all', authAdmin, async (req, res) => {
     const { search, type } = req.body;
