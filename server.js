@@ -4269,6 +4269,8 @@ app.get('/api/tts/voices', (req, res) => {
 // --- GENERIC MARKET BUY (TTS, SOUND, MUTE, SR) ---
 app.post('/api/market/buy', transactionLimiter, verifySession, async (req, res) => {
     const { username, channelId, type, data } = req.body;
+    console.log(`[Market Buy] İstek: User=${username}, Channel=${channelId}, Type=${type}, Data=`, data);
+
     if (!username || !channelId || !type) return res.json({ success: false, error: "Eksik bilgi!" });
 
     try {
@@ -4352,10 +4354,18 @@ app.post('/api/market/buy', transactionLimiter, verifySession, async (req, res) 
         }
         else if (type === 'sound') {
             const { trigger } = data || {};
+            console.log(`[Market Buy - Sound] Trigger: ${trigger}`);
+            console.log(`[Market Buy - Sound] Custom sounds:`, settings.custom_sounds);
+
             const sound = settings.custom_sounds?.[trigger];
-            if (!sound) return res.json({ success: false, error: "Ses bulunamadı!" });
+            if (!sound) {
+                console.log(`[Market Buy - Sound] ❌ Ses bulunamadı! Trigger: ${trigger}`);
+                return res.json({ success: false, error: "Ses bulunamadı!" });
+            }
 
             price = parseInt(sound.price || 100);
+            console.log(`[Market Buy - Sound] ✅ Ses bulundu: ${trigger}, Fiyat: ${price}, URL: ${sound.url}`);
+
             eventPath = "sound";
             eventPayload = {
                 soundId: trigger, url: sound.url, volume: sound.volume || 100, duration: sound.duration || 0,
@@ -4398,26 +4408,44 @@ app.post('/api/market/buy', transactionLimiter, verifySession, async (req, res) 
         const userRef = db.ref(`users/${username.toLowerCase()}`);
         let errorMsg = null;
 
+        console.log(`[Market Buy] Bakiye kontrolü yapılıyor: User=${username}, Fiyat=${price}`);
+
         await userRef.transaction(u => {
             if (!u) return u;
             if (!u.is_infinite && (u.balance || 0) < price) {
                 // Yetersiz bakiye - Abort
+                console.log(`[Market Buy] ❌ Bakiye yetersiz: ${u.balance} < ${price}`);
                 return;
             }
-            if (!u.is_infinite) u.balance -= price;
+            if (!u.is_infinite) {
+                const oldBalance = u.balance || 0;
+                u.balance -= price;
+                console.log(`[Market Buy] ✅ Bakiye düşüldü: ${oldBalance} -> ${u.balance}`);
+            } else {
+                console.log(`[Market Buy] 🔓 Sınırsız bakiye aktif, düşülmedi`);
+            }
             return u;
         }, (error, committed, snapshot) => {
-            if (error) errorMsg = "Sunucu hatası";
-            else if (!committed) errorMsg = "Bakiye yetersiz! ❌";
+            if (error) {
+                console.log(`[Market Buy] ❌ Transaction error:`, error);
+                errorMsg = "Sunucu hatası";
+            } else if (!committed) {
+                console.log(`[Market Buy] ❌ Transaction not committed (bakiye yetersiz)`);
+                errorMsg = "Bakiye yetersiz! ❌";
+            } else {
+                console.log(`[Market Buy] ✅ Transaction başarılı`);
+            }
         });
 
         if (errorMsg) return res.json({ success: false, error: errorMsg });
 
         // 3. Event Push
         if (eventPath) {
-            await db.ref(`channels/${channelId}/stream_events/${eventPath}`).push(eventPayload);
+            const eventRef = db.ref(`channels/${channelId}/stream_events/${eventPath}`).push(eventPayload);
+            console.log(`[Market Buy] ✅ Event kaydedildi: ${eventPath}, Key: ${eventRef.key}`);
         }
 
+        console.log(`[Market Buy] ✅ İşlem tamamlandı!`);
         res.json({ success: true, message: "İşlem Başarılı! 🚀" });
 
     } catch (e) {

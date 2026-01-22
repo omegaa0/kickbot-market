@@ -826,7 +826,7 @@ async function loadChannelMarket(channelId) {
 
     // 4. SOUNDS
     Object.entries(sounds).forEach(([name, data]) => {
-        renderItem(`🎵 Ses: !ses ${name}`, "Kanalda özel ses efekti çalar.", data.cost, "sound", name, data.url, data.duration || 0, !isEnabled('ses'));
+        renderItem(`🎵 Ses: !ses ${name}`, "Kanalda özel ses efekti çalar.", data.price || data.cost || 100, "sound", name, data.url, data.duration || 0, !isEnabled('ses'));
     });
 }
 
@@ -930,6 +930,8 @@ async function executePurchase(type, trigger, price) {
         if (type === 'mute') payload.data = { target: userInput };
         if (type === 'sr') payload.data = { url: userInput };
 
+        console.log('[Market] Satın alma isteği gönderiliyor:', payload);
+
         const res = await fetch('/api/market/buy', {
             method: 'POST',
             headers: {
@@ -940,6 +942,7 @@ async function executePurchase(type, trigger, price) {
         });
 
         const data = await res.json();
+        console.log('[Market] Sunucu yanıtı:', data);
 
         if (data.success) {
             showToast(data.message, "success");
@@ -948,7 +951,7 @@ async function executePurchase(type, trigger, price) {
             showToast(data.error || "Hata oluştu!", "error");
         }
     } catch (e) {
-        console.error(e);
+        console.error('[Market] Hata:', e);
         showToast("Sunucu ile iletişim hatası.", "error");
     }
 }
