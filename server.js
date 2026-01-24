@@ -3383,7 +3383,7 @@ app.get('/api/real-estate/properties/:cityId', async (req, res) => {
 });
 
 // EMLAK SATIN ALMA ENDPOINT
-app.post('/api/real-estate/buy', async (req, res) => {
+app.post('/api/real-estate/buy', transactionLimiter, async (req, res) => {
     try {
         const { username, cityId, propertyId } = req.body;
 
@@ -3922,7 +3922,7 @@ app.post('/api/real-estate/buy', async (req, res) => {
 });
 
 // --- RPG MARKET API ---
-app.post('/api/rpg/buy', async (req, res) => {
+app.post('/api/rpg/buy', transactionLimiter, async (req, res) => {
     const { username, type, code } = req.body;
     if (!username || !type || !code) return res.json({ success: false, error: "Eksik bilgi!" });
 
@@ -3990,7 +3990,7 @@ app.post('/api/rpg/buy', async (req, res) => {
 });
 
 // --- PROFILE CUSTOMIZATION API ---
-app.post('/api/customization/buy', async (req, res) => {
+app.post('/api/customization/buy', transactionLimiter, async (req, res) => {
     const { username, type, id } = req.body;
     if (!username || !type || !id) return res.json({ success: false, error: "Eksik bilgi!" });
 
@@ -9325,7 +9325,7 @@ const VALID_CITIES = new Set([
 ]);
 
 // 1. CREATE GANG
-app.post('/api/gang/create', async (req, res) => {
+app.post('/api/gang/create', transactionLimiter, async (req, res) => {
     try {
         const { username, name, tag, baseCity } = req.body;
         // Validation
@@ -9574,7 +9574,7 @@ app.post('/api/gang/process-request', async (req, res) => {
 });
 
 // 6. GANG BANK & UPGRADE
-app.post('/api/gang/deposit', async (req, res) => {
+app.post('/api/gang/deposit', transactionLimiter, async (req, res) => {
     try {
         const { username, amount, gangId } = req.body;
         const amt = parseInt(amount);
@@ -9602,7 +9602,7 @@ app.post('/api/gang/deposit', async (req, res) => {
     }
 });
 
-app.post('/api/gang/upgrade', async (req, res) => {
+app.post('/api/gang/upgrade', transactionLimiter, async (req, res) => {
     try {
         const { username, gangId } = req.body;
         const gangRef = db.ref('gangs/' + gangId);
@@ -9706,7 +9706,7 @@ app.post('/api/gang/info', async (req, res) => {
 });
 
 // 3. GANG ACTION: DONATE (Kasa)
-app.post('/api/gang/donate', async (req, res) => {
+app.post('/api/gang/donate', transactionLimiter, async (req, res) => {
     try {
         const { username, amount } = req.body;
         const amt = parseInt(amount);
@@ -12317,7 +12317,7 @@ app.get('/api/marketplace/listings', async (req, res) => {
 });
 
 // Yeni ilan oluştur
-app.post('/api/marketplace/create-listing', async (req, res) => {
+app.post('/api/marketplace/create-listing', transactionLimiter, async (req, res) => {
     try {
         const { username, productCode, quantity, pricePerUnit, city } = req.body;
 
