@@ -8581,24 +8581,80 @@ async function trackWatchTime() {
                             // Yayın bilgilerini al
                             let streamTitle = "Yayındayım!";
                             let streamGame = "Just Chatting";
+                            let viewerCount = 0;
+                            let thumbnailUrl = null;
+                            let profilePic = null;
+                            let followerCount = 0;
 
                             // V2 API'den yayın detaylarını al
-                            if (v2Res && v2Res.data && v2Res.data.livestream) {
-                                streamTitle = v2Res.data.livestream.session_title || streamTitle;
-                                streamGame = v2Res.data.livestream.categories?.[0]?.name || streamGame;
+                            if (v2Res && v2Res.data) {
+                                const channelData = v2Res.data;
+                                profilePic = channelData.user?.profile_pic || channelData.profile_pic;
+                                followerCount = channelData.followersCount || channelData.followers_count || 0;
+
+                                if (channelData.livestream) {
+                                    streamTitle = channelData.livestream.session_title || streamTitle;
+                                    streamGame = channelData.livestream.categories?.[0]?.name ||
+                                        channelData.livestream.category?.name || streamGame;
+                                    viewerCount = channelData.livestream.viewer_count || 0;
+                                    thumbnailUrl = channelData.livestream.thumbnail?.url;
+                                }
                             }
 
+                            // Thumbnail yoksa varsayılan kullan
+                            if (!thumbnailUrl) {
+                                thumbnailUrl = `https://kick.com/api/v2/channels/${chan.username}/thumbnail?t=${Date.now()}`;
+                            }
+
+                            // Premium Discord Embed
                             await axios.post(webhookUrl, {
-                                content: `@everyone ${chan.username} KICK'TE YAYINDA! 🔴\nhttps://kick.com/${chan.username}`,
+                                content: `🔴 **${chan.username.toUpperCase()}** KICK'TE YAYINDA!`,
                                 embeds: [{
-                                    title: streamTitle,
+                                    title: `🎬 ${streamTitle}`,
                                     url: `https://kick.com/${chan.username}`,
-                                    color: 5763719, // Kick Green
+                                    color: 0x53FC18, // Kick yeşili
+                                    author: {
+                                        name: `${chan.username} yayına başladı!`,
+                                        icon_url: profilePic || "https://kick.com/favicon.ico",
+                                        url: `https://kick.com/${chan.username}`
+                                    },
                                     fields: [
-                                        { name: "Oyun/Kategori", value: streamGame, inline: true }
+                                        {
+                                            name: "🎮 Kategori",
+                                            value: streamGame,
+                                            inline: true
+                                        },
+                                        {
+                                            name: "👥 İzleyici",
+                                            value: viewerCount > 0 ? viewerCount.toLocaleString() : "Yeni başladı!",
+                                            inline: true
+                                        },
+                                        {
+                                            name: "❤️ Takipçi",
+                                            value: followerCount > 0 ? followerCount.toLocaleString() : "-",
+                                            inline: true
+                                        }
                                     ],
-                                    thumbnail: { url: `https://kick.com/api/v2/channels/${chan.username}/thumbnail` },
+                                    image: {
+                                        url: thumbnailUrl
+                                    },
+                                    thumbnail: {
+                                        url: profilePic || "https://kick.com/favicon.ico"
+                                    },
+                                    footer: {
+                                        text: "🟢 Kick.com",
+                                        icon_url: "https://kick.com/favicon.ico"
+                                    },
                                     timestamp: new Date().toISOString()
+                                }],
+                                components: [{
+                                    type: 1,
+                                    components: [{
+                                        type: 2,
+                                        style: 5,
+                                        label: "🎥 Yayını İzle",
+                                        url: `https://kick.com/${chan.username}`
+                                    }]
                                 }]
                             });
                             console.log(`✅ [Watch] ${chan.username} için Discord bildirimi GÖNDERİLDİ!`);
