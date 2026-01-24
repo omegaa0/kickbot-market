@@ -4039,8 +4039,10 @@ async function loadMyBusinesses() {
                         <div style="font-size:0.75rem; color:${maintenanceColor}; margin-top:3px;">${Math.floor(maintenance)}%</div>
                     </div>
                     <div style="background:rgba(0,0,0,0.3); padding:10px; border-radius:8px;">
-                        <div style="font-size:0.7rem; color:#888;">📦 DEPO</div>
-                        <div style="font-size:0.75rem; margin-top:5px;">${inventoryItems || 'Boş'}</div>
+                        <div style="font-size:0.7rem; color:#888;">🎯 REKLAM</div>
+                        <div style="font-size:0.75rem; margin-top:5px; color:${biz.advertising > 0 ? '#00ff88' : '#888'};">
+                            ${biz.advertising > 0 ? `${advertisingData[biz.advertising]?.icon || ''} ${advertisingData[biz.advertising]?.name}` : 'Aktif Değil'}
+                        </div>
                     </div>
                 </div>
 
@@ -4063,7 +4065,9 @@ async function loadMyBusinesses() {
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
                     ${typeInfo.produces ? `<button onclick="businessProduce('${biz.id}')" class="btn-sm" style="background:linear-gradient(135deg, #00ff88, #00cc66);">⚙️ Üret</button>` : ''}
                     <button onclick="businessUpgrade('${biz.id}')" class="btn-sm" style="background:linear-gradient(135deg, #aa44ff, #8822cc);">⬆️ Yükselt</button>
-                    <button disabled class="btn-sm" style="background:#333; color:#666; cursor:not-allowed; opacity:0.5;">🎯 Reklam (Yakında)</button>
+                    <button onclick="manageBusinessAdvertising('${biz.id}', ${biz.advertising || 0})" class="btn-sm" style="background:linear-gradient(135deg, #4488ff, #2266cc);">
+                        🎯 Reklam
+                    </button>
                 </div>
 
                 <div style="margin-top:15px; padding-top:15px; border-top:1px solid rgba(255,255,255,0.1); font-size:0.75rem; color:#666;">
@@ -4637,6 +4641,73 @@ async function businessUpgrade(bizId) {
         showToast('Hata: ' + e.message, 'error');
     }
 }
+
+// Reklam Yönetimi
+async function manageBusinessAdvertising(bizId, currentAdIndex) {
+    if (!currentUser) return;
+
+    try {
+        let optionsHtml = Object.entries(advertisingData).map(([index, ad]) => {
+            const isCurrent = parseInt(index) === parseInt(currentAdIndex);
+            return `
+                <div onclick="setBusinessAdvertising('${bizId}', ${index})" 
+                     style="background:rgba(0,0,0,0.3); padding:15px; border-radius:12px; cursor:pointer; border:1px solid ${isCurrent ? 'var(--primary)' : 'rgba(255,255,255,0.05)'}; transition:all 0.2s; position:relative; margin-bottom:10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div style="display:flex; gap:12px; align-items:center;">
+                            <div style="font-size:2rem;">${ad.icon || '🎯'}</div>
+                            <div>
+                                <div style="font-weight:700; font-size:1.1rem;">${ad.name}</div>
+                                <div style="font-size:0.8rem; color:#888;">Gider: ${ad.costPerDay?.toLocaleString() || 0}💰 / Gün</div>
+                            </div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="color:var(--primary); font-weight:700;">+${((ad.salesBonus || 0) * 100).toFixed(0)}%</div>
+                            <div style="font-size:0.6rem; color:#888;">Satış Bonusu</div>
+                        </div>
+                    </div>
+                    ${isCurrent ? '<div style="position:absolute; top:-8px; right:10px; background:var(--primary); color:black; font-size:0.6rem; padding:2px 8px; border-radius:10px; font-weight:800;">AKTİF</div>' : ''}
+                </div>
+            `;
+        }).join('');
+
+        showCustomModal(`
+            <div style="text-align:left;">
+                <h3 style="margin:0 0 10px 0;">🎯 Reklam Kampanyası</h3>
+                <p style="font-size:0.85rem; color:#aaa; margin-bottom:20px;">
+                    Reklam vererek satış hızını ve müşteri çekme oranını artırabilirsin.<br>
+                    <span style="color:#ffaa00;">⚠️ Günlük ücret bakiyenden otomatik düşülür.</span>
+                </p>
+                <div style="max-height:400px; overflow-y:auto; padding-right:5px;">
+                    ${optionsHtml}
+                </div>
+            </div>
+        `);
+    } catch (e) {
+        showToast("Hata: " + e.message, "error");
+    }
+}
+
+async function setBusinessAdvertising(bizId, level) {
+    try {
+        const res = await fetch('/api/business/set-advertising', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser, businessId: bizId, level: level })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            showToast(data.message, "success");
+            closeModal();
+            loadMyBusinesses();
+        } else {
+            showToast(data.error, "error");
+        }
+    } catch (e) {
+        showToast("Bağlantı hatası!", "error");
+    }
+}
+
 
 // Satış modal
 async function showBusinessSellModal(bizId) {
