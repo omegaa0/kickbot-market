@@ -5183,12 +5183,16 @@ async function buyMarketListing(listingId, listingCity, pricePerUnit, buyQty, pr
         const userBaseCity = whData.baseCity;
         const totalItemCost = pricePerUnit * qty;
 
-        // Kargo hesapla (Basit ön gösterim için)
+        // Kargo hesapla (Backend ile uyumlu - Çok ucuz!)
         const distance = calculateCityDistance(listingCity, userBaseCity);
-        let weightFactor = qty / 100;
-        if (weightFactor < 1) weightFactor = 1;
-        const shippingFee = Math.round(distance * 25 * weightFactor); // LOGISTICS_COST_PER_KM = 25 varsayıldı
-        const finalShipping = listingCity === userBaseCity ? 0 : Math.max(500, shippingFee);
+        let shippingFee = 0;
+        if (distance > 0) {
+            if (distance < 200) shippingFee = 5;
+            else if (distance < 500) shippingFee = 10;
+            else if (distance < 1000) shippingFee = 15;
+            else shippingFee = 20;
+        }
+        const finalShipping = listingCity === userBaseCity ? 0 : shippingFee;
 
         const confirmed = await showConfirm(`🛒 Satın Alma Onayı`, `
             <div style="text-align:left;">

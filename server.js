@@ -1788,7 +1788,7 @@ function getBaseSaleTime(businessType, productCode) {
 }
 
 // Satış süresini hesapla (fiyat, kalite, bakım, ÜRÜN BAZLI etkisi ile)
-function calculateSaleTime(businessType, productCode, price, quality, maintenance) {
+function calculateSaleTime(businessType, productCode, price, quality, maintenance, advertising = 0) {
     const baseTime = getBaseSaleTime(businessType, productCode);
     const product = PRODUCTS[productCode];
     const marketPrice = product?.price || 100;
@@ -1802,15 +1802,18 @@ function calculateSaleTime(businessType, productCode, price, quality, maintenanc
     // Bakım cezası: Düşük bakım = yavaş satış (max %30 yavaşlatma)
     const maintenancePenalty = (1 - maintenance / 100) * 0.3;
 
-    // ÜRÜN BAZLI HIZ ÇARPANI: Bazı ürünler doğal olarak daha hızlı/yavaş satılır
-    // Çarpan > 1.0 = daha hızlı (süreyi böler), çarpan < 1.0 = daha yavaş (süreyi çarpar)
+    // Reklam bonusu: Reklam seviyesine göre hızlanma
+    const adLevel = ADVERTISING_LEVELS[advertising || 0];
+    const adBonus = adLevel ? adLevel.salesBonus : 0;
+
+    // ÜRÜN BAZLI HIZ ÇARPANI
     const productSpeedMultiplier = PRODUCT_SALE_SPEED_MULTIPLIERS[productCode] || 1.0;
 
-    // Final süre hesapla - ÜRÜN ÇARPANI EKLENDI
-    const finalTime = (baseTime * priceMultiplier * (1 - qualityBonus) * (1 + maintenancePenalty)) / productSpeedMultiplier;
+    // Final süre hesapla
+    const finalTime = (baseTime * priceMultiplier * (1 - qualityBonus) * (1 + maintenancePenalty)) / (productSpeedMultiplier * (1 + adBonus));
 
-    // Minimum 20 dakika, maksimum 240 dakika
-    return Math.max(20, Math.min(240, Math.round(finalTime)));
+    // Minimum 5 dakika, maksimum 180 dakika (Hızlandırıldı!)
+    return Math.max(5, Math.min(180, Math.round(finalTime)));
 }
 
 // Otomatik işletme satışlarını işle
@@ -1841,7 +1844,7 @@ async function processBusinessSales() {
                 const quality = slot.quality || 50;
 
                 // Satış süresi hesapla
-                const saleInterval = calculateSaleTime(biz.type, slot.productCode, slot.price, quality, maintenance);
+                const saleInterval = calculateSaleTime(biz.type, slot.productCode, slot.price, quality, maintenance, biz.advertising || 0);
                 const millisSinceLastSale = now - lastSale;
                 const requiredMillis = saleInterval * 60 * 1000;
 
