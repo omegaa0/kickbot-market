@@ -1809,11 +1809,47 @@ function calculateSaleTime(businessType, productCode, price, quality, maintenanc
     // ÜRÜN BAZLI HIZ ÇARPANI
     const productSpeedMultiplier = PRODUCT_SALE_SPEED_MULTIPLIERS[productCode] || 1.0;
 
-    // Final süre hesapla
-    const finalTime = (baseTime * priceMultiplier * (1 - qualityBonus) * (1 + maintenancePenalty)) / (productSpeedMultiplier * (1 + adBonus));
+    // Piyasa Etkisi: Talep ve Olaylar
+    let marketSpeedMultiplier = 1.0;
 
-    // Minimum 5 dakika, maksimum 180 dakika (Hızlandırıldı!)
-    return Math.max(5, Math.min(180, Math.round(finalTime)));
+    // 1. Ürün bazlı talep çarpanı (0.5 - 1.5 arası haftalık değişir)
+    if (currentMarketConditions.demandMultipliers && currentMarketConditions.demandMultipliers[productCode]) {
+        marketSpeedMultiplier *= currentMarketConditions.demandMultipliers[productCode];
+    }
+
+    // 2. Aktif Piyasa Olayları
+    if (currentMarketConditions.activeEvents) {
+        for (const event of currentMarketConditions.activeEvents) {
+            // Süresi geçmiş olayları atla
+            if (Date.now() > event.endTime) continue;
+
+            const effect = event.effect;
+            const bizInfo = BUSINESS_TYPES[businessType];
+
+            // Genel satış etkisi (Tüm piyasa)
+            if (effect.all && effect.sales) {
+                marketSpeedMultiplier *= effect.sales;
+            }
+            // Kategori bazlı etki (Perakende, Tarım vb.)
+            else if (effect.category && bizInfo && bizInfo.category === effect.category && effect.sales) {
+                marketSpeedMultiplier *= effect.sales;
+            }
+            // Ürün bazlı etki (Domates, Et vb.)
+            else if (effect.products && effect.products.includes(productCode) && effect.sales) {
+                marketSpeedMultiplier *= effect.sales;
+            }
+            // İşletme tipi bazlı etki (Restoran, Kafe vb.)
+            else if (effect.businesses && effect.businesses.includes(businessType) && effect.sales) {
+                marketSpeedMultiplier *= effect.sales;
+            }
+        }
+    }
+
+    // Final süre hesapla
+    const finalTime = (baseTime * priceMultiplier * (1 - qualityBonus) * (1 + maintenancePenalty)) / (productSpeedMultiplier * (1 + adBonus) * marketSpeedMultiplier);
+
+    // Minimum 5 dakika, maksimum 240 dakika
+    return Math.max(5, Math.min(240, Math.round(finalTime)));
 }
 
 // Otomatik işletme satışlarını işle

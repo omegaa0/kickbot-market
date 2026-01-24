@@ -3727,6 +3727,7 @@ let levelData = {};
 let advertisingData = {};
 let marketPrices = {};
 let marketEvents = [];
+let marketDetailedConditions = { demandMultipliers: {}, activeEvents: [] };
 let userLicenses = [];
 
 // --- SHARED UTILS (Hoisted) ---
@@ -3762,6 +3763,7 @@ async function loadBusinessData() {
         if (marketData.success) {
             marketPrices = marketData.prices || {};
             marketEvents = marketData.events || [];
+            marketDetailedConditions = marketData.conditions || { demandMultipliers: {}, activeEvents: [] };
             renderMarketEvents();
         }
     } catch (e) {
@@ -5940,8 +5942,31 @@ function calculateSaleTime(businessType, productCode, price, quality, maintenanc
     const adLevel = advertisingData[advertising || 0];
     const adBonus = adLevel ? adLevel.salesBonus : 0;
     const productSpeedMultiplier = PRODUCT_SALE_SPEED_MULTIPLIERS[productCode] || 1.0;
-    const finalTime = (baseTime * priceMultiplier * (1 - qualityBonus) * (1 + maintenancePenalty)) / (productSpeedMultiplier * (1 + adBonus));
-    return Math.max(5, Math.min(180, Math.round(finalTime)));
+
+    // Piyasa Etkisi: Talep ve Olaylar
+    let marketSpeedMultiplier = 1.0;
+
+    // 1. Ürün bazlı talep çarpanı
+    if (marketDetailedConditions.demandMultipliers && marketDetailedConditions.demandMultipliers[productCode]) {
+        marketSpeedMultiplier *= marketDetailedConditions.demandMultipliers[productCode];
+    }
+
+    // 2. Aktif Piyasa Olayları
+    if (marketDetailedConditions.activeEvents) {
+        for (const event of marketDetailedConditions.activeEvents) {
+            if (Date.now() > event.endTime) continue;
+            const effect = event.effect;
+            const bizInfo = businessTypes[businessType];
+
+            if (effect.all && effect.sales) marketSpeedMultiplier *= effect.sales;
+            else if (effect.category && bizInfo && bizInfo.category === effect.category && effect.sales) marketSpeedMultiplier *= effect.sales;
+            else if (effect.products && effect.products.includes(productCode) && effect.sales) marketSpeedMultiplier *= effect.sales;
+            else if (effect.businesses && effect.businesses.includes(businessType) && effect.sales) marketSpeedMultiplier *= effect.sales;
+        }
+    }
+
+    const finalTime = (baseTime * priceMultiplier * (1 - qualityBonus) * (1 + maintenancePenalty)) / (productSpeedMultiplier * (1 + adBonus) * marketSpeedMultiplier);
+    return Math.max(5, Math.min(240, Math.round(finalTime)));
 }
 
 function calculateStockFinishTime(interval, stock) {
