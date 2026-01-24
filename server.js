@@ -8056,12 +8056,22 @@ app.post('/admin-api/distribute-balance', authAdmin, hasPerm('users'), async (re
     const addAmt = parseInt(amount);
     if (isNaN(addAmt) || addAmt <= 0) return res.json({ success: false, error: 'Geçersiz miktar' });
 
+    console.log(`[Para Dağıtım] Başlatılıyor: channelId=${channelId}, miktar=${addAmt}`);
+
     const usersSnap = await db.ref('users').once('value');
     const allUsers = usersSnap.val() || {};
     let count = 0;
+    let checkedCount = 0;
+
+    // channelId'yi normalize et (hem string hem number olabilir)
+    const normalizedChannelId = String(channelId).toLowerCase().trim();
 
     for (const [username, data] of Object.entries(allUsers)) {
-        if (data.last_channel && String(data.last_channel) === String(channelId)) {
+        checkedCount++;
+        const userChannel = data.last_channel ? String(data.last_channel).toLowerCase().trim() : null;
+
+        // Eşleşme kontrolü (daha esnek)
+        if (userChannel && (userChannel === normalizedChannelId || userChannel.includes(normalizedChannelId) || normalizedChannelId.includes(userChannel))) {
             await db.ref('users/' + username).transaction(u => {
                 if (u) u.balance = (parseInt(u.balance) || 0) + addAmt;
                 return u;
@@ -8069,8 +8079,10 @@ app.post('/admin-api/distribute-balance', authAdmin, hasPerm('users'), async (re
             count++;
         }
     }
+
+    console.log(`[Para Dağıtım] Tamamlandı: ${count}/${checkedCount} kullanıcıya +${addAmt} 💰 verildi (channelId: ${normalizedChannelId})`);
     addLog("Toplu Para Dağıtımı", `${count} kullanıcıya +${addAmt} 💰 verildi.`, channelId);
-    res.json({ success: true, count });
+    res.json({ success: true, count, message: `${count} kullanıcıya para dağıtıldı.` });
 });
 
 // KANAL DUYURUSU (Tek kanala mesaj gönder)
