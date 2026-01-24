@@ -1913,7 +1913,6 @@ async function loadGangs() {
     }
 
     const gangId = userData?.gang;
-    console.log("Gangs Login Check:", { currentUser, gangId, hasUserData: !!userData });
 
     if (!gangId) {
         // Not in a gang -> Show Lobby
