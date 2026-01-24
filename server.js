@@ -8231,6 +8231,58 @@ app.post('/admin-api/toggle-infinite', authAdmin, hasPerm('users'), async (req, 
     res.json({ success: true });
 });
 
+// === WEBHOOK TEST ENDPOINT ===
+app.post('/admin-api/test-webhook', authAdmin, hasPerm('channels'), async (req, res) => {
+    const { channelId } = req.body;
+    try {
+        const settingsSnap = await db.ref(`channels/${channelId}/settings`).once('value');
+        const settings = settingsSnap.val() || {};
+        const webhookUrl = settings.discord_live_webhook;
+
+        if (!webhookUrl) {
+            return res.json({ success: false, error: 'discord_live_webhook ayarlanmamış!' });
+        }
+
+        const chanSnap = await db.ref(`channels/${channelId}`).once('value');
+        const chan = chanSnap.val() || {};
+        const username = chan.username || 'test-channel';
+
+        await axios.post(webhookUrl, {
+            content: `🧪 **TEST BİLDİRİMİ** - ${username} için webhook çalışıyor!`,
+            embeds: [{
+                title: "Test Bildirimi",
+                description: "Bu bir test bildirimidir. Gerçek yayın başladığında benzer bir bildirim alacaksınız.",
+                url: `https://kick.com/${username}`,
+                color: 16753920, // Orange
+                timestamp: new Date().toISOString()
+            }]
+        });
+
+        console.log(`✅ [Test Webhook] ${username} için test bildirimi gönderildi!`);
+        addLog("Webhook Test", `Test bildirimi gönderildi`, channelId);
+        res.json({ success: true, message: 'Test bildirimi gönderildi!' });
+    } catch (e) {
+        console.error(`❌ [Test Webhook] Hata:`, e.response?.data || e.message);
+        res.json({ success: false, error: e.message });
+    }
+});
+
+// === YAYIN DURUMU SIFIRLAMA (Bildirimi tekrar tetiklemek için) ===
+app.post('/admin-api/reset-live-status', authAdmin, hasPerm('channels'), async (req, res) => {
+    const { channelId } = req.body;
+    try {
+        await db.ref(`channels/${channelId}/stats`).update({
+            is_live: false,
+            last_live_notification: 0
+        });
+        console.log(`🔄 [Reset] ${channelId} yayın durumu sıfırlandı`);
+        addLog("Yayın Durumu Sıfırlandı", `Bir sonraki watch döngüsünde bildirim gönderilecek`, channelId);
+        res.json({ success: true, message: 'Yayın durumu sıfırlandı. Bir sonraki kontrol döngüsünde bildirim gönderilecek.' });
+    } catch (e) {
+        res.json({ success: false, error: e.message });
+    }
+});
+
 app.post('/admin-api/set-job', authAdmin, hasPerm('users'), async (req, res) => {
     const { user, job } = req.body;
     await db.ref(`users/${user.toLowerCase()}`).update({ job });
@@ -8506,9 +8558,17 @@ async function trackWatchTime() {
                 const statsSnap = await db.ref(`channels/${chanId}/stats`).once('value');
                 const currentStats = statsSnap.val() || { is_live: false };
                 const wasLive = currentStats.is_live || false;
+                const lastNotified = currentStats.last_live_notification || 0;
+                const timeSinceNotify = Date.now() - lastNotified;
+                const NOTIFY_COOLDOWN = 4 * 60 * 60 * 1000; // 4 saat cooldown
 
-                // Yayın durumu değişti mi? (HAYIR -> EVET)
-                if (isLive && !wasLive) {
+                // DEBUG: Durum değişikliğini logla
+                console.log(`[Watch] ${chan.username} - isLive: ${isLive}, wasLive: ${wasLive}, Son Bildirim: ${lastNotified > 0 ? Math.floor(timeSinceNotify / 60000) + ' dk önce' : 'HİÇ'}`);
+
+                // Yayın durumu değişti mi? (HAYIR -> EVET) VEYA 4 saatten uzun süredir bildirim gönderilmedi
+                const shouldNotify = isLive && (!wasLive || timeSinceNotify > NOTIFY_COOLDOWN);
+
+                if (shouldNotify) {
                     console.log(`🎥 [Watch] ${chan.username} yayına girdi! Discord bildirimi kontrol ediliyor...`);
 
                     // Webhook URL'yi ayarlardan al
@@ -8543,6 +8603,8 @@ async function trackWatchTime() {
                             });
                             console.log(`✅ [Watch] ${chan.username} için Discord bildirimi GÖNDERİLDİ!`);
                             addLog("Discord Bildirim", `Yayın başladı bildirimi gönderildi (Watch).`, chanId);
+                            // Son bildirim zamanını kaydet
+                            await db.ref(`channels/${chanId}/stats`).update({ last_live_notification: Date.now() });
                         } catch (webhookErr) {
                             console.error(`❌ [Watch] ${chan.username} Webhook hatası:`, webhookErr.response?.data || webhookErr.message);
                         }
