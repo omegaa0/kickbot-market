@@ -3457,9 +3457,16 @@ function showInput(title, desc, placeholder) {
     });
 }
 
-function showConfirm(title, message, callback) {
-    // Legacy Callback support
-    if (typeof message === 'function') {
+function showConfirm(title, message, callback, okLabel = "Evet", cancelLabel = "İptal", hideCancel = false) {
+    // Single argument mode (HTML content only)
+    if (arguments.length === 1 && typeof title === 'string') {
+        message = title;
+        title = "Bilgi";
+        hideCancel = true;
+        okLabel = "Tamam";
+    }
+    // Legacy mapping (message is callback)
+    else if (typeof message === 'function') {
         callback = message;
         message = title;
         title = "Onay";
@@ -3476,15 +3483,20 @@ function showConfirm(title, message, callback) {
 
         const titleEl = document.getElementById('confirm-modal-title');
         const msgEl = document.getElementById('confirm-modal-message');
+        const yesBtn = document.getElementById('confirm-modal-yes');
+        const noBtn = document.getElementById('confirm-modal-cancel');
 
         if (titleEl) titleEl.innerHTML = title;
         if (msgEl) msgEl.innerHTML = message;
 
+        if (yesBtn) yesBtn.innerText = okLabel;
+        if (noBtn) {
+            noBtn.innerText = cancelLabel;
+            noBtn.style.display = hideCancel ? 'none' : 'block';
+        }
+
         modal.classList.remove('hidden');
         modal.style.display = 'flex';
-
-        const yesBtn = document.getElementById('confirm-modal-yes');
-        const noBtn = document.getElementById('confirm-modal-cancel');
 
         const newYes = yesBtn.cloneNode(true);
         const newNo = noBtn.cloneNode(true);
@@ -3504,6 +3516,26 @@ function showConfirm(title, message, callback) {
             if (callback) callback(false);
             resolve(false);
         };
+    });
+}
+
+// Modal Takma Adları (Geriye Uyumluluk için)
+function showCustomModal(content) {
+    return showConfirm("Bilgi", content, null, "Tamam", "", true);
+}
+
+async function showConfirmDialog(content) {
+    return await showConfirm("Onay", content);
+}
+
+function closeModal() {
+    const modals = ['confirm-modal', 'alert-modal', 'input-modal'];
+    modals.forEach(id => {
+        const modal = document.getElementById(id);
+        if (modal) {
+            modal.style.display = 'none';
+            modal.classList.add('hidden');
+        }
     });
 }
 
