@@ -12490,22 +12490,29 @@ app.get('/api/marketplace/listings', async (req, res) => {
         }
 
         // --- SABİT SİSTEM ÜRÜNLERİ ---
-        const sysStockSnap = await db.ref('marketplace_system_stocks').once('value');
-        const sysStocks = sysStockSnap.val() || {};
+        // Sistem stoklarını çekmeye çalış (izin yoksa boş obje kullan)
+        let sysStocks = {};
+        try {
+            const sysStockSnap = await db.ref('marketplace_system_stocks').once('value');
+            sysStocks = sysStockSnap.val() || {};
+        } catch (e) {
+            console.log('marketplace_system_stocks erişim hatası, varsayılan stoklar kullanılıyor');
+        }
 
         const ALL_CITIES_LIST = EMLAK_CITIES.map(c => c.name);
 
         for (const [code, product] of Object.entries(PRODUCTS)) {
             ALL_CITIES_LIST.forEach(c => {
                 const stockId = `system_${code}_${c}`;
-                let qty = sysStocks[stockId];
 
+                // Stok miktarını al veya varsayılan hesapla
+                let qty = sysStocks[stockId];
                 if (qty === undefined) {
                     const seed = code.length * 133 + c.length * 77 + (product.basePrice || 0);
                     qty = 10000 + (seed % 40001);
                 }
 
-                if (qty <= 0) return;
+                if (qty <= 0) return; // Stok bittiyse gösterme
 
                 listings.push({
                     id: stockId,
