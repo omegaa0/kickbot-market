@@ -1767,20 +1767,20 @@ function getBaseSaleTime(businessType, productCode) {
         const furnitureProducts = ['mobilya', 'masa', 'sandalye', 'koltuk', 'dolap'];
 
         if (foodProducts.some(p => bizType.products?.includes(p))) {
-            baseTime = 20; // Gıda = 20 dakika
+            baseTime = 40; // Gıda = 40 dakika
         } else if (luxuryProducts.some(p => bizType.products?.includes(p))) {
-            baseTime = 60; // Lüks = 60 dakika
+            baseTime = 120; // Lüks = 120 dakika
         } else if (electronicsProducts.some(p => bizType.products?.includes(p))) {
-            baseTime = 45; // Elektronik = 45 dakika
+            baseTime = 90; // Elektronik = 90 dakika
         } else if (furnitureProducts.some(p => bizType.products?.includes(p))) {
-            baseTime = 50; // Mobilya = 50 dakika
+            baseTime = 100; // Mobilya = 100 dakika
         } else {
-            baseTime = 30; // Diğer perakende = 30 dakika
+            baseTime = 60; // Diğer perakende = 60 dakika
         }
     } else if (bizType.category === 'production') {
-        baseTime = 120; // Fabrika = 120 dakika
+        baseTime = 240; // Fabrika = 240 dakika
     } else if (bizType.category === 'farming' || bizType.category === 'livestock') {
-        baseTime = 180; // Tarım/Hayvancılık = 180 dakika
+        baseTime = 360; // Tarım/Hayvancılık = 360 dakika
     }
 
     return baseTime;
@@ -1792,11 +1792,14 @@ function calculateSaleTime(businessType, productCode, price, quality, maintenanc
     const product = PRODUCTS[productCode];
     const marketPrice = product?.basePrice || 100;
 
-    // Fiyat etkisi: Pahalı = yavaş, ucuz = hızlı
-    const priceMultiplier = price / marketPrice;
+    // Fiyat etkisi: Pahalı = yavaş, ucuz = hızlı (Eksponansiyel ceza)
+    let priceMultiplier = price / marketPrice;
+    if (priceMultiplier > 1) {
+        priceMultiplier = Math.pow(priceMultiplier, 2); // 2 kat fiyat = 4 kat süre
+    }
 
-    // Kalite bonusu: Yüksek kalite = hızlı satış (max %50 hızlandırma)
-    const qualityBonus = (quality / 100) * 0.5;
+    // Kalite bonusu: Yüksek kalite = hızlı satış (max %70 hızlandırma)
+    const qualityBonus = (quality / 100) * 0.7;
 
     // Bakım cezası: Düşük bakım = yavaş satış (max %30 yavaşlatma)
     const maintenancePenalty = (1 - maintenance / 100) * 0.3;

@@ -5922,13 +5922,13 @@ function getBaseSaleTime(businessType, productCode) {
         const luxuryProducts = ['altin', 'mucevher', 'inci', 'araba', 'at'];
         const electronicsProducts = ['elektronik', 'telefon', 'tablet', 'bilgisayar'];
         const furnitureProducts = ['mobilya', 'masa', 'sandalye', 'koltuk', 'dolap'];
-        if (foodProducts.includes(productCode)) baseTime = 20;
-        else if (luxuryProducts.includes(productCode)) baseTime = 60;
-        else if (electronicsProducts.includes(productCode)) baseTime = 45;
-        else if (furnitureProducts.includes(productCode)) baseTime = 50;
-        else baseTime = 30;
-    } else if (bizType.category === 'production') baseTime = 120;
-    else if (bizType.category === 'farming' || bizType.category === 'livestock') baseTime = 180;
+        if (foodProducts.includes(productCode)) baseTime = 40;
+        else if (luxuryProducts.includes(productCode)) baseTime = 120;
+        else if (electronicsProducts.includes(productCode)) baseTime = 90;
+        else if (furnitureProducts.includes(productCode)) baseTime = 100;
+        else baseTime = 60;
+    } else if (bizType.category === 'production') baseTime = 240;
+    else if (bizType.category === 'farming' || bizType.category === 'livestock') baseTime = 360;
     return baseTime;
 }
 
@@ -5936,8 +5936,12 @@ function calculateSaleTime(businessType, productCode, price, quality, maintenanc
     const baseTime = getBaseSaleTime(businessType, productCode);
     const product = productData[productCode];
     const marketPrice = product?.basePrice || 100;
-    const priceMultiplier = price / marketPrice;
-    const qualityBonus = (quality / 100) * 0.5;
+    let priceMultiplier = price / marketPrice;
+    if (priceMultiplier > 1) {
+        priceMultiplier = Math.pow(priceMultiplier, 2); // Exponential penalty
+    }
+
+    const qualityBonus = (quality / 100) * 0.7; // Max %70 speedup
     const maintenancePenalty = (1 - maintenance / 100) * 0.3;
     const adLevel = advertisingData[advertising || 0];
     const adBonus = adLevel ? adLevel.salesBonus : 0;
