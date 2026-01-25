@@ -1790,7 +1790,7 @@ function getBaseSaleTime(businessType, productCode) {
 function calculateSaleTime(businessType, productCode, price, quality, maintenance, advertising = 0) {
     const baseTime = getBaseSaleTime(businessType, productCode);
     const product = PRODUCTS[productCode];
-    const marketPrice = product?.price || 100;
+    const marketPrice = product?.basePrice || 100;
 
     // Fiyat etkisi: Pahalı = yavaş, ucuz = hızlı
     const priceMultiplier = price / marketPrice;
@@ -1847,8 +1847,8 @@ function calculateSaleTime(businessType, productCode, price, quality, maintenanc
     // Final süre hesapla
     const finalTime = (baseTime * priceMultiplier * (1 - qualityBonus) * (1 + maintenancePenalty)) / (productSpeedMultiplier * (1 + adBonus) * marketSpeedMultiplier);
 
-    // Minimum 5 dakika, maksimum 240 dakika
-    return Math.max(5, Math.min(240, Math.round(finalTime)));
+    // Maksimum süreyi 2 güne (2880 dk) çıkardık ki uçuk fiyatlar çok geç satılsın
+    return Math.max(5, Math.min(2880, Math.round(finalTime)));
 }
 
 // Otomatik işletme satışlarını işle

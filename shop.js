@@ -5640,7 +5640,7 @@ async function showAddSlotModal(bizId) {
         let productsHTML = availableProducts.map(code => {
             const product = productData[code];
             const stock = inventory[code] || 0;
-            const marketPrice = product?.price || 100;
+            const marketPrice = marketPrices[code] || product?.basePrice || 100;
 
             return `
                 <div onclick="selectProductForSlot('${bizId}', '${code}', ${stock}, ${marketPrice})"
@@ -5935,7 +5935,7 @@ function getBaseSaleTime(businessType, productCode) {
 function calculateSaleTime(businessType, productCode, price, quality, maintenance, advertising = 0) {
     const baseTime = getBaseSaleTime(businessType, productCode);
     const product = productData[productCode];
-    const marketPrice = product?.price || 100;
+    const marketPrice = product?.basePrice || 100;
     const priceMultiplier = price / marketPrice;
     const qualityBonus = (quality / 100) * 0.5;
     const maintenancePenalty = (1 - maintenance / 100) * 0.3;
@@ -5966,15 +5966,26 @@ function calculateSaleTime(businessType, productCode, price, quality, maintenanc
     }
 
     const finalTime = (baseTime * priceMultiplier * (1 - qualityBonus) * (1 + maintenancePenalty)) / (productSpeedMultiplier * (1 + adBonus) * marketSpeedMultiplier);
-    return Math.max(5, Math.min(240, Math.round(finalTime)));
+    // Maksimum süreyi 2 güne (2880 dk) çıkardık ki uçuk fiyatlar çok geç satılsın
+    return Math.max(5, Math.min(2880, Math.round(finalTime)));
 }
 
 function calculateStockFinishTime(interval, stock) {
     if (stock <= 0) return "Tükendi";
-    // Ortalama satış miktarı 12.5 adet (5-20 arası)
-    const avgSalePerInterval = 12.5;
-    const totalMinutes = (stock / avgSalePerInterval) * interval;
 
+    const avgSalePerInterval = 12.5;
+
+    // EĞER STOK ORTALAMA SATIŞ MİKTARINDAN AZSA:
+    // İlk satış (interval süresi) sonunda stok bitecektir.
+    if (stock <= avgSalePerInterval) {
+        return calculateStockDisplayTime(interval);
+    }
+
+    const totalMinutes = (stock / avgSalePerInterval) * interval;
+    return calculateStockDisplayTime(totalMinutes);
+}
+
+function calculateStockDisplayTime(totalMinutes) {
     if (totalMinutes < 60) return `~${Math.round(totalMinutes)} dk`;
     const hours = Math.floor(totalMinutes / 60);
     const mins = Math.round(totalMinutes % 60);
