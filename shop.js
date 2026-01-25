@@ -5966,8 +5966,8 @@ function calculateSaleTime(businessType, productCode, price, quality, maintenanc
     }
 
     const finalTime = (baseTime * priceMultiplier * (1 - qualityBonus) * (1 + maintenancePenalty)) / (productSpeedMultiplier * (1 + adBonus) * marketSpeedMultiplier);
-    // Maksimum süreyi 2 güne (2880 dk) çıkardık ki uçuk fiyatlar çok geç satılsın
-    return Math.max(5, Math.min(2880, Math.round(finalTime)));
+    // Maksimum süreyi 7 güne (10080 dk) çıkardık ki uçuk fiyatlar çok geç satılsın
+    return Math.max(5, Math.min(10080, Math.round(finalTime)));
 }
 
 function calculateStockFinishTime(interval, stock) {

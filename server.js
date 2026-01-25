@@ -1847,14 +1847,13 @@ function calculateSaleTime(businessType, productCode, price, quality, maintenanc
     // Final süre hesapla
     const finalTime = (baseTime * priceMultiplier * (1 - qualityBonus) * (1 + maintenancePenalty)) / (productSpeedMultiplier * (1 + adBonus) * marketSpeedMultiplier);
 
-    // Maksimum süreyi 2 güne (2880 dk) çıkardık ki uçuk fiyatlar çok geç satılsın
-    return Math.max(5, Math.min(2880, Math.round(finalTime)));
+    // Maksimum süreyi 7 güne (10080 dk) çıkardık ki uçuk fiyatlar çok geç satılsın
+    return Math.max(5, Math.min(10080, Math.round(finalTime)));
 }
 
 // Otomatik işletme satışlarını işle
 async function processBusinessSales() {
     try {
-        console.log('[Business Sales] 🛒 Satış kontrolü başlatılıyor...');
         const now = Date.now();
 
         // Tüm işletmeleri çek
@@ -1884,6 +1883,12 @@ async function processBusinessSales() {
                 const requiredMillis = saleInterval * 60 * 1000;
 
                 // Satış zamanı geldiyse
+                // EĞER lastSale 0 ise (yeni slot) ilk intervali bekletmek için şimdiye eşitle
+                if (lastSale === 0) {
+                    await db.ref(`businesses/${bizId}/sales_slots/${slotId}/lastSale`).set(now);
+                    continue;
+                }
+
                 if (millisSinceLastSale >= requiredMillis) {
                     // Satış yap - Daha fazla miktar sat (5-20 adet)
                     const saleAmount = Math.min(slot.stock, Math.floor(Math.random() * 16) + 5); // 5-20 adet sat
@@ -1905,16 +1910,10 @@ async function processBusinessSales() {
                     await db.ref().update(updates);
 
                     salesCount++;
-                    console.log(`[Business Sales] ✅ ${biz.type} (${bizId}) - ${saleAmount}x ${slot.productCode} satıldı (+${revenue}₺)`);
                 }
             }
         }
 
-        if (salesCount > 0) {
-            console.log(`[Business Sales] 🎉 Toplam ${salesCount} satış işlendi!`);
-        } else {
-            console.log(`[Business Sales] ⏳ Henüz satış zamanı gelmedi.`);
-        }
     } catch (e) {
         console.error('[Business Sales] ❌ Hata:', e);
     }
@@ -13061,7 +13060,7 @@ app.post('/api/business/add-slot', transactionLimiter, async (req, res) => {
             price: parseInt(price),
             stock,
             quality,
-            lastSale: 0,
+            lastSale: Date.now(),
             totalSold: 0,
             createdAt: Date.now()
         };
