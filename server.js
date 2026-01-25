@@ -12509,7 +12509,7 @@ app.get('/api/marketplace/listings', async (req, res) => {
                 let qty = sysStocks[stockId];
                 if (qty === undefined) {
                     const seed = code.length * 133 + c.length * 77 + (product.basePrice || 0);
-                    qty = 10000 + (seed % 40001);
+                    qty = 4000 + (seed % 16001); // 4000-20000 arası stok
                 }
 
                 if (qty <= 0) return; // Stok bittiyse gösterme
