@@ -10425,8 +10425,9 @@ app.post('/admin-api/businesses/update', authAdmin, async (req, res) => {
     }
 
     try {
-        await db.ref(`businesses/${businessId}`).update({ health: parseInt(health) });
-        addLog('İşletme Güncelleme', `İşletme ${businessId} sağlığı ${health}% olarak güncellendi`);
+        // maintenance olarak kaydet
+        await db.ref(`businesses/${businessId}`).update({ maintenance: parseInt(health) });
+        addLog('İşletme Güncelleme', `İşletme ${businessId} bakımı ${health}% olarak güncellendi`);
         res.json({ success: true });
     } catch (e) {
         console.error('Business update error:', e);
@@ -10469,14 +10470,14 @@ app.post('/admin-api/businesses/update-full', authAdmin, async (req, res) => {
         if (owner !== undefined) updates.owner = owner;
         if (city !== undefined) updates.city = city;
         if (level !== undefined) updates.level = parseInt(level);
-        if (health !== undefined) updates.health = parseInt(health);
+        // health olarak gelen değeri maintenance olarak kaydet
+        if (health !== undefined) updates.maintenance = parseInt(health);
         if (balance !== undefined) updates.balance = parseFloat(balance);
-        if (total_profit !== undefined) updates.total_profit = parseFloat(total_profit);
-        if (inventory !== undefined) updates.inventory = inventory;
+        if (total_profit !== undefined) updates.total_revenue = parseFloat(total_profit);
 
         await db.ref(`businesses/${businessId}`).update(updates);
 
-        addLog('İşletme Tam Güncelleme', `İşletme ${businessId} güncellendi (Sahip: ${owner}, Seviye: ${level}, Sağlık: ${health}%)`);
+        addLog('İşletme Tam Güncelleme', `İşletme ${businessId} güncellendi (Sahip: ${owner}, Seviye: ${level}, Bakım: ${health}%)`);
         res.json({ success: true });
     } catch (e) {
         console.error('Business full update error:', e);
@@ -10535,6 +10536,40 @@ app.post('/admin-api/marketplace/delete', authAdmin, async (req, res) => {
         res.json({ success: true });
     } catch (e) {
         console.error('Listing delete error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// Admin - Sistem Stokları getir
+app.post('/admin-api/marketplace/system-stocks', authAdmin, async (req, res) => {
+    try {
+        const stocksSnap = await db.ref('marketplace_system_stocks').once('value');
+        const stocks = stocksSnap.val() || {};
+        res.json({ success: true, stocks });
+    } catch (e) {
+        console.error('System stocks load error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// Admin - Sistem Stoku güncelle
+app.post('/admin-api/marketplace/update-system-stock', authAdmin, async (req, res) => {
+    const { productCode, amount } = req.body;
+
+    if (!productCode) {
+        return res.status(400).json({ success: false, error: 'Ürün kodu gerekli' });
+    }
+
+    if (amount === undefined || amount < 0) {
+        return res.status(400).json({ success: false, error: 'Geçersiz miktar' });
+    }
+
+    try {
+        await db.ref(`marketplace_system_stocks/${productCode}`).set(parseInt(amount));
+        addLog('Sistem Stok Güncelleme', `${productCode}: ${amount} adet`);
+        res.json({ success: true });
+    } catch (e) {
+        console.error('System stock update error:', e);
         res.status(500).json({ success: false, error: e.message });
     }
 });

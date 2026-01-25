@@ -579,7 +579,7 @@
             <button id="tab-channels" class="tab-btn active" onclick="showTab('channels')">📡 Kanallar</button>
             <button id="tab-users" class="tab-btn" onclick="showTab('users')">👥 Kullanıcılar</button>
             <button id="tab-businesses" class="tab-btn" onclick="showTab('businesses'); loadAllBusinesses();">🏢 İşletmeler</button>
-            <button id="tab-marketplace" class="tab-btn" onclick="showTab('marketplace'); loadAllListings();">🛒 Pazar Yeri</button>
+            <button id="tab-marketplace" class="tab-btn" onclick="showTab('marketplace'); loadAllListings(); loadSystemStocks();">🛒 Pazar Yeri</button>
             <button id="tab-troll" class="tab-btn" onclick="showTab('troll'); loadActiveRigs();">🤡 Troll & Rig</button>
             <button id="tab-logs" class="tab-btn" onclick="showTab('logs')">📋 İşlem Kayıtları</button>
             <button id="tab-quests" class="tab-btn" onclick="showTab('quests')">🎯 Görevler</button>
@@ -724,7 +724,7 @@
         <div id="businesses" class="section">
             <h2>🏢 İşletme Yönetimi</h2>
             <div style="display:flex; gap:15px; margin-bottom:20px;">
-                <input type="text" id="businessSearch" class="inp" placeholder="İşletme sahibi veya ID ara..." style="flex:1; margin:0;">
+                <input type="text" id="businessSearch" class="inp" placeholder="İşletme sahibi veya ID ara..." style="flex:1; margin:0; padding:12px; font-size:1rem;">
                 <button class="btn" onclick="loadAllBusinesses()">🔍 ARA</button>
             </div>
             <div style="overflow-x:auto;">
@@ -754,12 +754,30 @@
         <!-- MARKETPLACE -->
         <div id="marketplace" class="section">
             <h2>🛒 Pazar Yeri Yönetimi</h2>
+
+            <!-- Sistem Stok Kontrolü -->
+            <div class="card" style="margin-bottom:20px; padding:15px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                    <h3 style="margin:0;">📦 Sistem Stokları</h3>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn btn-small" onclick="loadSystemStocks()">🔄 Yenile</button>
+                        <button class="btn btn-small" onclick="openSystemStockModal()">➕ Stok Ekle</button>
+                    </div>
+                </div>
+                <input type="text" id="systemStockSearch" class="inp" placeholder="Ürün kodu ara..." style="width:100%; margin-bottom:15px; padding:12px; font-size:1rem;">
+                <div id="system-stocks-container" style="max-height:300px; overflow-y:auto;">
+                    <p style="color:#666; text-align:center;">Yükleniyor...</p>
+                </div>
+            </div>
+
+            <!-- İlan Listesi -->
+            <h3 style="margin-bottom:15px;">📋 İlanlar</h3>
             <div style="display:flex; gap:15px; margin-bottom:20px;">
-                <input type="text" id="listingSearch" class="inp" placeholder="Satıcı veya ürün ara..." style="flex:1; margin:0;">
-                <select id="listingTypeFilter" class="inp" style="width:200px; margin:0;">
-                    <option value="all">Tüm İlanlar</option>
-                    <option value="user">Kullanıcı İlanları</option>
-                    <option value="system">Sistem İlanları</option>
+                <input type="text" id="listingSearch" class="inp" placeholder="Satıcı veya ürün ara..." style="flex:1; margin:0; padding:12px; font-size:1rem;">
+                <select id="listingTypeFilter" class="inp" style="width:220px; margin:0; padding:12px; font-size:1rem;" onchange="loadAllListings()">
+                    <option value="all">📋 Tüm İlanlar</option>
+                    <option value="user">👤 Oyuncu İlanları</option>
+                    <option value="system">🤖 Sistem İlanları</option>
                 </select>
                 <button class="btn" onclick="loadAllListings()">🔍 ARA</button>
             </div>
@@ -1237,6 +1255,21 @@
                 <div style="display:flex; gap:10px; margin-top:20px;">
                     <button class="btn" id="saveBizBtn">💾 KAYDET</button>
                     <button class="btn btn-danger" onclick="closeModal('businessModal')">❌ İPTAL</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SYSTEM STOCK MODAL -->
+        <div id="systemStockModal" class="modal">
+            <div class="card" style="width:400px;">
+                <h3>📦 Sistem Stoku Düzenle</h3>
+                <label>Ürün Kodu</label>
+                <input type="text" id="sysStockProduct" class="inp" placeholder="Örn: altin, ekmek" style="text-transform:lowercase;">
+                <label>Stok Miktarı</label>
+                <input type="number" id="sysStockAmount" class="inp" value="10000" min="0">
+                <div style="display:flex; gap:10px; margin-top:15px;">
+                    <button class="btn" onclick="saveSystemStock()">💾 KAYDET</button>
+                    <button class="btn btn-danger" onclick="closeModal('systemStockModal')">❌ İPTAL</button>
                 </div>
             </div>
         </div>
@@ -2059,22 +2092,29 @@
 
                     tbody.innerHTML = data.businesses.map(biz => {
                         const lastProd = biz.last_production ? new Date(biz.last_production).toLocaleString('tr-TR') : 'Hiç üretim yapılmadı';
-                        const health = biz.health || 100;
-                        const healthColor = health >= 80 ? '#4ade80' : health >= 50 ? '#fbbf24' : '#ef4444';
+                        // Bakım (maintenance) kullan, health yoksa fallback
+                        const maintenance = biz.maintenance !== undefined ? biz.maintenance : (biz.health || 100);
+                        const maintenanceColor = maintenance >= 80 ? '#4ade80' : maintenance >= 50 ? '#fbbf24' : '#ef4444';
 
                         // Bakiye
                         const balance = (biz.balance || 0).toLocaleString();
 
-                        // Envanter özeti
-                        const inventory = biz.inventory || {};
-                        const invCount = Object.keys(inventory).length;
-                        const invTotal = Object.values(inventory).reduce((sum, val) => sum + (val || 0), 0);
-                        const invText = invCount > 0 ? `${invCount} ürün (${invTotal} adet)` : 'Boş';
+                        // Envanter özeti - sales_slots içindeki stokları hesapla
+                        const salesSlots = biz.sales_slots || {};
+                        let slotProducts = [];
+                        let totalSlotStock = 0;
+                        Object.values(salesSlots).forEach(slot => {
+                            if (slot.stock > 0) {
+                                slotProducts.push(slot.productCode);
+                                totalSlotStock += slot.stock;
+                            }
+                        });
+                        const invText = slotProducts.length > 0 ? `${slotProducts.length} ürün (${totalSlotStock} adet)` : 'Boş';
 
-                        // Kâr/Zarar
-                        const profit = biz.total_profit || 0;
-                        const profitColor = profit >= 0 ? '#4ade80' : '#ef4444';
-                        const profitText = profit >= 0 ? `+${profit.toLocaleString()}` : profit.toLocaleString();
+                        // Kâr/Zarar - total_revenue kullan
+                        const totalRevenue = biz.total_revenue || 0;
+                        const profitColor = totalRevenue >= 0 ? '#4ade80' : '#ef4444';
+                        const profitText = totalRevenue >= 0 ? `+${totalRevenue.toLocaleString()}` : totalRevenue.toLocaleString();
 
                         return `
                             <tr>
@@ -2083,7 +2123,7 @@
                                 <td>${biz.typeData?.name || biz.type}</td>
                                 <td>${biz.city || 'N/A'}</td>
                                 <td>${biz.level || 1}</td>
-                                <td style="color:${healthColor}"><b>${health}%</b></td>
+                                <td style="color:${maintenanceColor}"><b>${maintenance}%</b></td>
                                 <td><b>${balance} 💰</b></td>
                                 <td><small>${invText}</small></td>
                                 <td style="color:${profitColor}"><b>${profitText} 💰</b></td>
@@ -2144,10 +2184,20 @@
                 document.getElementById('bizOwner').value = biz.owner || '';
                 document.getElementById('bizCity').value = biz.city || '';
                 document.getElementById('bizLevel').value = biz.level || 1;
-                document.getElementById('bizHealth').value = biz.health || 100;
+                // maintenance kullan, health yoksa fallback
+                document.getElementById('bizHealth').value = biz.maintenance !== undefined ? biz.maintenance : (biz.health || 100);
                 document.getElementById('bizBalance').value = biz.balance || 0;
-                document.getElementById('bizProfit').value = biz.total_profit || 0;
-                document.getElementById('bizInventory').value = JSON.stringify(biz.inventory || {}, null, 2);
+                document.getElementById('bizProfit').value = biz.total_revenue || 0;
+
+                // Sales slots içindeki ürünleri envanter olarak göster
+                const salesSlots = biz.sales_slots || {};
+                const slotsInventory = {};
+                Object.entries(salesSlots).forEach(([slotId, slot]) => {
+                    if (slot.productCode && slot.stock > 0) {
+                        slotsInventory[slot.productCode] = (slotsInventory[slot.productCode] || 0) + slot.stock;
+                    }
+                });
+                document.getElementById('bizInventory').value = JSON.stringify(slotsInventory, null, 2);
 
                 document.getElementById('biz-modal-title').innerText = `🏢 ${biz.type || 'İşletme'} - ${bizId}`;
 
@@ -2295,6 +2345,121 @@
                     loadAllListings();
                 } else {
                     await showAdminAlert('Hata: ' + (data.error || 'Bilinmeyen hata'), '❌ Hata');
+                }
+            }
+
+            // Sistem Stok Yönetimi
+            let allSystemStocks = {};
+
+            async function loadSystemStocks() {
+                try {
+                    const res = await fetch('/admin-api/marketplace/system-stocks', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ key: sessionKey })
+                    });
+                    const data = await res.json();
+
+                    if (!data.success) {
+                        document.getElementById('system-stocks-container').innerHTML = '<p style="color:#ef4444; text-align:center;">Stoklar yüklenemedi!</p>';
+                        return;
+                    }
+
+                    allSystemStocks = data.stocks || {};
+                    renderSystemStocks();
+                } catch (e) {
+                    console.error('System stocks load error:', e);
+                    document.getElementById('system-stocks-container').innerHTML = '<p style="color:#ef4444; text-align:center;">Hata: ' + e.message + '</p>';
+                }
+            }
+
+            function renderSystemStocks() {
+                const container = document.getElementById('system-stocks-container');
+                const search = (document.getElementById('systemStockSearch')?.value || '').toLowerCase();
+
+                let filtered = Object.entries(allSystemStocks);
+                if (search) {
+                    filtered = filtered.filter(([code]) => code.toLowerCase().includes(search));
+                }
+
+                if (filtered.length === 0) {
+                    container.innerHTML = '<p style="color:#666; text-align:center;">Stok bulunamadı.</p>';
+                    return;
+                }
+
+                // Stok miktarına göre sırala (düşükten yükseğe)
+                filtered.sort((a, b) => a[1] - b[1]);
+
+                container.innerHTML = `
+                    <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap:10px;">
+                        ${filtered.map(([code, qty]) => {
+                            const color = qty < 1000 ? '#ef4444' : qty < 5000 ? '#fbbf24' : '#4ade80';
+                            return `
+                                <div style="background:rgba(255,255,255,0.03); border:1px solid #333; border-radius:8px; padding:10px; display:flex; justify-content:space-between; align-items:center;">
+                                    <div>
+                                        <div style="font-weight:bold; font-size:0.9rem;">${code}</div>
+                                        <div style="color:${color}; font-size:0.85rem;">${qty.toLocaleString()} adet</div>
+                                    </div>
+                                    <button class="btn btn-small" onclick="editSystemStock('${code}', ${qty})" style="padding:5px 10px;">✏️</button>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            }
+
+            // Arama için event listener
+            document.addEventListener('DOMContentLoaded', () => {
+                const sysStockSearchInput = document.getElementById('systemStockSearch');
+                if (sysStockSearchInput) {
+                    sysStockSearchInput.addEventListener('input', renderSystemStocks);
+                }
+            });
+
+            function openSystemStockModal() {
+                document.getElementById('sysStockProduct').value = '';
+                document.getElementById('sysStockAmount').value = 10000;
+                document.getElementById('systemStockModal').style.display = 'flex';
+            }
+
+            function editSystemStock(code, qty) {
+                document.getElementById('sysStockProduct').value = code;
+                document.getElementById('sysStockAmount').value = qty;
+                document.getElementById('systemStockModal').style.display = 'flex';
+            }
+
+            async function saveSystemStock() {
+                const productCode = document.getElementById('sysStockProduct').value.trim().toLowerCase();
+                const amount = parseInt(document.getElementById('sysStockAmount').value);
+
+                if (!productCode) {
+                    await showAdminAlert('Ürün kodu boş olamaz!', '⚠️ Uyarı');
+                    return;
+                }
+
+                if (isNaN(amount) || amount < 0) {
+                    await showAdminAlert('Geçersiz miktar!', '⚠️ Uyarı');
+                    return;
+                }
+
+                try {
+                    const res = await fetch('/admin-api/marketplace/update-system-stock', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ key: sessionKey, productCode, amount })
+                    });
+
+                    const data = await res.json();
+                    if (data.success) {
+                        await showAdminAlert(`${productCode} stoku ${amount.toLocaleString()} olarak güncellendi!`, '✅ Başarılı');
+                        closeModal('systemStockModal');
+                        loadSystemStocks();
+                    } else {
+                        await showAdminAlert('Hata: ' + (data.error || 'Bilinmeyen hata'), '❌ Hata');
+                    }
+                } catch (e) {
+                    console.error('Save system stock error:', e);
+                    await showAdminAlert('Bir hata oluştu!', '❌ Hata');
                 }
             }
 
