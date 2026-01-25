@@ -8941,44 +8941,24 @@ async function trackWatchTime() {
                             }
 
                             // Premium Discord Embed
+                            // Premium Discord Embed
                             await axios.post(webhookUrl, {
-                                content: `🔴 **${chan.username.toUpperCase()}** KICK'TE YAYINDA!`,
+                                content: "@everyone",
+                                username: "Kick Bildirim",
+                                avatar_url: profilePic || "https://kick.com/favicon.ico",
                                 embeds: [{
-                                    title: `🎬 ${streamTitle}`,
+                                    title: "🟢 ALOSKEGANG KICK'TE YAYINDA!",
+                                    description: `**${streamTitle}**`,
                                     url: `https://kick.com/${chan.username}`,
                                     color: 0x53FC18, // Kick yeşili
-                                    author: {
-                                        name: `${chan.username} yayına başladı!`,
-                                        icon_url: profilePic || "https://kick.com/favicon.ico",
-                                        url: `https://kick.com/${chan.username}`
-                                    },
                                     fields: [
-                                        {
-                                            name: "🎮 Kategori",
-                                            value: streamGame,
-                                            inline: true
-                                        },
-                                        {
-                                            name: "👥 İzleyici",
-                                            value: viewerCount > 0 ? viewerCount.toLocaleString() : "Yeni başladı!",
-                                            inline: true
-                                        },
-                                        {
-                                            name: "❤️ Takipçi",
-                                            value: followerCount > 0 ? followerCount.toLocaleString() : "-",
-                                            inline: true
-                                        }
+                                        { name: "🎮 Kategori", value: streamGame, inline: true },
+                                        { name: "👥 İzleyici", value: viewerCount > 0 ? viewerCount.toLocaleString() : "Yeni başladı!", inline: true },
+                                        { name: "❤️ Takipçi", value: (followerCount > 0 ? followerCount.toLocaleString() : "-"), inline: true }
                                     ],
-                                    image: {
-                                        url: thumbnailUrl
-                                    },
-                                    thumbnail: {
-                                        url: profilePic || "https://kick.com/favicon.ico"
-                                    },
-                                    footer: {
-                                        text: "🟢 Kick.com",
-                                        icon_url: "https://kick.com/favicon.ico"
-                                    },
+                                    image: thumbnailUrl ? { url: thumbnailUrl.replace('{width}', '1920').replace('{height}', '1080') + "?t=" + Date.now() } : undefined,
+                                    thumbnail: { url: profilePic || "https://kick.com/favicon.ico" },
+                                    footer: { text: "Aloskegang şuan yayında! • Kick.com", icon_url: "https://kick.com/favicon.ico" },
                                     timestamp: new Date().toISOString()
                                 }],
                                 components: [{
@@ -8991,6 +8971,7 @@ async function trackWatchTime() {
                                     }]
                                 }]
                             });
+
                             console.log(`✅ [Watch] ${chan.username} için Discord bildirimi GÖNDERİLDİ!`);
                             addLog("Discord Bildirim", `Yayın başladı bildirimi gönderildi (Watch).`, chanId);
                             // Son bildirim zamanını kaydet
@@ -9163,16 +9144,32 @@ async function syncSingleChannelStats(chanId, chan) {
                         const thumbUrl = gql.livestream.thumbnail?.url || "https://kick.com/favicon.ico";
 
                         await axios.post(webhookUrl, {
-                            content: `@everyone ${username} KICK'TE YAYINDA! 🔴\nhttps://kick.com/${username}`,
+                            content: "@everyone",
+                            username: "Kick Bildirim",
+                            avatar_url: chan.profile_pic || "https://kick.com/favicon.ico",
                             embeds: [{
-                                title: streamTitle,
+                                title: "🟢 ALOSKEGANG KICK'TE YAYINDA!",
+                                description: `**${streamTitle}**`,
                                 url: `https://kick.com/${username}`,
-                                color: 5763719, // Kick Greenish
+                                color: 0x53FC18, // Kick Green
                                 fields: [
-                                    { name: "Oyun/Kategori", value: streamGame, inline: true }
+                                    { name: "🎮 Kategori", value: streamGame, inline: true },
+                                    { name: "👥 İzleyici", value: (gql.livestream.viewer_count || 0) > 0 ? gql.livestream.viewer_count.toLocaleString() : "Yeni başladı!", inline: true },
+                                    { name: "❤️ Takipçi", value: (gql.followersCount || 0) > 0 ? gql.followersCount.toLocaleString() : "-", inline: true }
                                 ],
-                                image: { url: thumbUrl },
+                                image: thumbUrl ? { url: thumbUrl.replace('{width}', '1920').replace('{height}', '1080') + "?t=" + Date.now() } : undefined,
+                                thumbnail: { url: chan.profile_pic || "https://kick.com/favicon.ico" },
+                                footer: { text: "Aloskegang şuan yayında! • Kick.com", icon_url: "https://kick.com/favicon.ico" },
                                 timestamp: new Date().toISOString()
+                            }],
+                            components: [{
+                                type: 1,
+                                components: [{
+                                    type: 2,
+                                    style: 5,
+                                    label: "🎥 Yayını İzle",
+                                    url: `https://kick.com/${username}`
+                                }]
                             }]
                         });
                         console.log(`✅ [Webhook] ${username} için Discord bildirimi GÖNDERİLDİ!`);
@@ -12492,36 +12489,39 @@ app.get('/api/marketplace/listings', async (req, res) => {
             }
         }
 
-        // --- SABİT SİSTEM ÜRÜNLERİ (OTOMATİK TÜM ÜRÜNLER) ---
-        const SYSTEM_BASE = [];
-        for (const [code, product] of Object.entries(PRODUCTS)) {
-            SYSTEM_BASE.push({
-                code: code,
-                qty: 100000,
-                price: product.basePrice || 10
-            });
-        }
+        // --- SABİT SİSTEM ÜRÜNLERİ ---
+        const sysStockSnap = await db.ref('marketplace_system_stocks').once('value');
+        const sysStocks = sysStockSnap.val() || {};
 
         const ALL_CITIES_LIST = EMLAK_CITIES.map(c => c.name);
 
-        // Her şehir için sistem ilanlarını ekle (Kalite %10 - Düşük kalite)
-        SYSTEM_BASE.forEach(p => {
+        for (const [code, product] of Object.entries(PRODUCTS)) {
             ALL_CITIES_LIST.forEach(c => {
+                const stockId = `system_${code}_${c}`;
+                let qty = sysStocks[stockId];
+
+                if (qty === undefined) {
+                    const seed = code.length * 133 + c.length * 77 + (product.basePrice || 0);
+                    qty = 10000 + (seed % 40001);
+                }
+
+                if (qty <= 0) return;
+
                 listings.push({
-                    id: `system_${p.code}_${c}`,
+                    id: stockId,
                     seller: 'SYSTEM',
-                    productCode: p.code,
-                    quantity: p.qty,
-                    pricePerUnit: p.price,
-                    totalPrice: p.qty * p.price,
-                    quality: 10, // Sistem ürünleri %10 kalite
+                    productCode: code,
+                    quantity: qty,
+                    pricePerUnit: product.basePrice || 10,
+                    totalPrice: qty * (product.basePrice || 10),
+                    quality: 10,
                     qualityName: "Çok Düşük",
                     city: c,
                     shopType: (() => {
-                        const prod = PRODUCTS[p.code];
+                        const prod = PRODUCTS[code];
                         const cat = prod?.category;
                         const name = (prod?.name || '').toLowerCase();
-                        const code = p.code.toLowerCase();
+                        const pCode = code.toLowerCase();
 
                         // Manav - Taze sebze meyve (fresh kategorisi)
                         if (cat === 'fresh') {
@@ -12682,7 +12682,7 @@ app.get('/api/marketplace/listings', async (req, res) => {
                     createdAt: 0
                 });
             });
-        });
+        }
 
         // Filtreleme
         if (category && category !== 'all') {
@@ -12847,14 +12847,26 @@ app.post('/api/marketplace/buy-listing', transactionLimiter, async (req, res) =>
             const product = PRODUCTS[code];
             if (!product) return res.json({ success: false, error: 'Ürün bulunamadı!' });
 
+            // Sistem stok kontrolü (Persistent)
+            const sysStockSnap = await db.ref(`marketplace_system_stocks/${listingId}`).once('value');
+            let currentStock = sysStockSnap.val();
+
+            if (currentStock === null) {
+                // İlk defa satın alınıyorsa varsayılan stoku belirle
+                const seed = code.length * 133 + city.length * 77 + (product.basePrice || 0);
+                currentStock = 10000 + (seed % 40001);
+            }
+
+            if (purchaseQty > currentStock) return res.json({ success: false, error: 'Sistemde yeterli stok kalmadı!' });
+
             listing = {
                 id: listingId,
                 seller: 'SYSTEM',
                 productCode: code,
                 city: city,
-                pricePerUnit: product.basePrice,
-                quantity: 99999999,
-                quality: 10 // Sistem ürünleri %10 kalite
+                pricePerUnit: product.basePrice || 10,
+                quantity: currentStock,
+                quality: 10
             };
         } else {
             const snap = await db.ref('marketplace/' + listingId).once('value');
@@ -12933,9 +12945,24 @@ app.post('/api/marketplace/buy-listing', transactionLimiter, async (req, res) =>
 
             // İlanı güncelle veya sil
             if (purchaseQty === listing.quantity) {
-                await db.ref('marketplace/' + listingId).set(null);
+                if (isSystem) {
+                    await db.ref(`marketplace_system_stocks/${listingId}`).set(0);
+                } else {
+                    await db.ref('marketplace/' + listingId).set(null);
+                }
             } else {
-                await db.ref('marketplace/' + listingId + '/quantity').set(listing.quantity - purchaseQty);
+                if (isSystem) {
+                    await db.ref(`marketplace_system_stocks/${listingId}`).set(listing.quantity - purchaseQty);
+                } else {
+                    await db.ref('marketplace/' + listingId + '/quantity').set(listing.quantity - purchaseQty);
+                }
+            }
+        } else {
+            // Sistem ilanıysa sadece stok düş (ödeme zaten yukarıda balance'dan düşüldü, sistem parayı almaz)
+            if (purchaseQty === listing.quantity) {
+                await db.ref(`marketplace_system_stocks/${listingId}`).set(0);
+            } else {
+                await db.ref(`marketplace_system_stocks/${listingId}`).set(listing.quantity - purchaseQty);
             }
         }
 
