@@ -5670,31 +5670,72 @@ app.post('/webhook/kick', async (req, res) => {
                 console.log(`[Webhook Debug] Env webhook: ${process.env.DISCORD_WEBHOOK ? 'VAR' : 'YOK'}`);
                 console.log(`[Webhook Debug] Kullanılacak webhook: ${targetWebhook ? 'VAR' : 'YOK'}`);
 
-                if (targetWebhook) {
+                if (isLive) {
                     try {
-                        const embedColor = isLive ? 5238290 : 2829099; // Yeşil / Gri
-                        const statusText = isLive ? "🔴 YAYIN BAŞLADI!" : "⚫ YAYIN SONLANDI";
-                        const desc = isLive
-                            ? `**${streamTitle}**\n\n📺 **Kategori:** ${category}\n🔗 [Yayına Git](https://kick.com/${channelData.slug || broadcasterId})`
-                            : `Yayın sona erdi. İzleyen herkese teşekkürler! 👋`;
+                        // Daha zengin veri için GraphQL'den taze bilgileri çek
+                        const slug = channelData.slug || channelData.username || broadcasterId;
+                        const gqlData = await fetchKickGraphQL(slug);
+
+                        let currentFollowers = "-";
+                        let currentViewers = "Yeni başladı!";
+                        let finalTitle = streamTitle;
+                        let finalCategory = category;
+                        let finalThumbnail = thumbnail;
+
+                        if (gqlData) {
+                            currentFollowers = gqlData.followersCount?.toLocaleString() || "-";
+                            if (gqlData.livestream && gqlData.livestream.is_live) {
+                                currentViewers = gqlData.livestream.viewer_count?.toLocaleString() || "Yeni başladı!";
+                                if (gqlData.livestream.session_title) finalTitle = gqlData.livestream.session_title;
+                                // Thumbnail URL'sini Kick formatına dönüştür (e-at-large gibi placeholderları temizle)
+                                if (thumbnail && thumbnail.includes('{width}') && thumbnail.includes('{height}')) {
+                                    finalThumbnail = thumbnail.replace('{width}', '1920').replace('{height}', '1080');
+                                }
+                            }
+                        }
+
+                        const embedColor = 5238290; // Yeşil
+                        const statusText = "🟢 ALOSKEGANG KICK'TE YAYINDA!";
 
                         // Send Discord Message
                         await axios.post(targetWebhook, {
-                            username: "Kick Bot Bildirim",
-                            avatar_url: "https://kick.com/favicon.ico",
+                            content: "@everyone",
+                            username: "Kick Bildirim",
+                            avatar_url: channelData.profile_pic || "https://kick.com/favicon.ico",
                             embeds: [{
                                 title: statusText,
-                                description: desc,
+                                description: `**${finalTitle}**`,
                                 color: embedColor,
-                                thumbnail: { url: channelData.profile_pic || "https://kick.com/favicon.ico" },
-                                image: (isLive && thumbnail) ? { url: thumbnail } : undefined,
-                                footer: { text: `Kick Kanalı: ${channelData.username || broadcasterId}` },
+                                fields: [
+                                    { name: "🎮 Kategori", value: finalCategory, inline: true },
+                                    { name: "👥 İzleyici", value: currentViewers, inline: true },
+                                    { name: "❤️ Takipçi", value: currentFollowers, inline: true }
+                                ],
+                                image: (finalThumbnail) ? { url: `${finalThumbnail}?t=${Date.now()}` } : undefined,
+                                footer: { text: `Aloskegang şuan yayında! • Kick.com` },
+                                timestamp: new Date().toISOString(),
+                                url: `https://kick.com/${slug}`
+                            }]
+                        });
+                        console.log(`[Webhook] 🔔 Zengin Discord bildirimi gönderildi -> ${slug}`);
+                    } catch (e) {
+                        console.error("[Webhook] Discord Rich Notification Error:", e.message);
+                    }
+                } else {
+                    // YAYIN KAPANDI BİLDİRİMİ
+                    try {
+                        await axios.post(targetWebhook, {
+                            username: "Kick Bildirim",
+                            avatar_url: channelData.profile_pic || "https://kick.com/favicon.ico",
+                            embeds: [{
+                                title: "⚫ YAYIN SONLANDI",
+                                description: "Yayın sona erdi. İzleyen herkese teşekkürler! 👋",
+                                color: 2829099, // Gri
                                 timestamp: new Date().toISOString()
                             }]
                         });
-                        console.log(`[Webhook] 🔔 Discord bildirimi (${isLive ? 'LIVE' : 'OFFLINE'}) -> ${targetWebhook === process.env.DISCORD_WEBHOOK ? 'Global' : 'Custom'}`);
                     } catch (e) {
-                        console.error("[Webhook] Discord Error:", e.message);
+                        console.error("[Webhook] Discord Offline Notification Error:", e.message);
                     }
                 }
 
@@ -13162,13 +13203,22 @@ app.post('/api/business/withdraw', transactionLimiter, async (req, res) => {
             return res.json({ success: false, error: 'İşletme kasasında yeterli para yok!' });
         }
 
+        // %15 Vergi hesapla
+        const tax = Math.floor(withdrawAmount * 0.15);
+        const netAmount = withdrawAmount - tax;
+
         // Para transferi
         await db.ref(`businesses/${bizId}/balance`).set(bizBalance - withdrawAmount);
-        await db.ref(`users/${username}/balance`).transaction(val => (val || 0) + withdrawAmount);
+        await db.ref(`users/${username}/balance`).transaction(val => (val || 0) + netAmount);
+
+        // Vergiyi havuza ekle
+        if (tax > 0) {
+            await db.ref('tax_system/pool').transaction(pool => (pool || 0) + tax);
+        }
 
         res.json({
             success: true,
-            message: `${withdrawAmount.toLocaleString()}₺ çekildi!`,
+            message: `${netAmount.toLocaleString()}₺ bakiyene eklendi (%15 vergi: ${tax.toLocaleString()}₺ kesildi)`,
             newBalance: bizBalance - withdrawAmount
         });
     } catch (e) {

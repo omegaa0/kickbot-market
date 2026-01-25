@@ -5798,18 +5798,25 @@ async function showWithdrawModal(bizId, balance) {
                 <div style="font-size:1.8rem; font-weight:900; color:#ffcc00;">${balance.toLocaleString()}💰</div>
             </div>
 
+            <div style="background:rgba(255,100,100,0.1); padding:10px; border-radius:8px; margin-bottom:15px; border:1px solid rgba(255,100,100,0.2);">
+                <div style="font-size:0.85rem; color:#ff4444; font-weight:bold;">⚠️ %15 Gelir Vergisi</div>
+                <div style="font-size:0.75rem; color:#aaa;">Çektiğin miktardan otomatik olarak kesilir.</div>
+            </div>
+
             <label style="display:block; text-align:left; margin-bottom:5px; font-size:0.9rem;">Çekilecek Miktar:</label>
             <input type="number" id="withdraw-amount-input" value="${balance}" min="1" max="${balance}"
+                   oninput="updateWithdrawTax(this.value)"
                    style="width:100%; padding:12px; background:rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.2); border-radius:8px; color:white; font-size:1rem; margin-bottom:10px;">
 
-            <button onclick="document.getElementById('withdraw-amount-input').value=${balance}"
+            <div id="withdraw-tax-info" style="text-align:left; margin-bottom:15px; font-size:0.85rem; padding: 0 5px;">
+                <div style="color:#aaa;">Kesilecek Vergi: <span style="color:#ff4444;">${Math.floor(balance * 0.15).toLocaleString()} 💰</span></div>
+                <div style="color:#aaa;">Cüzdana Gelecek: <span style="color:#00ff88;">${(balance - Math.floor(balance * 0.15)).toLocaleString()} 💰</span></div>
+            </div>
+
+            <button onclick="document.getElementById('withdraw-amount-input').value=${balance}; updateWithdrawTax(${balance});"
                     style="width:100%; padding:8px; background:rgba(255,255,255,0.1); border:none; border-radius:6px; color:#aaa; cursor:pointer; margin-bottom:15px;">
                 Tamamını Çek
             </button>
-
-            <div style="font-size:0.75rem; color:#aaa;">
-                Para cüzdanına aktarılacak
-            </div>
         </div>
     `);
 
@@ -6010,4 +6017,16 @@ function calculateCityDistance(city1, city2) {
     const dx = (c2.x - c1.x) * 16; // xScale
     const dy = (c2.y - c1.y) * 6;  // yScale
     return Math.round(Math.sqrt(dx * dx + dy * dy));
+}
+
+function updateWithdrawTax(amount) {
+    const infoDiv = document.getElementById('withdraw-tax-info');
+    if (!infoDiv) return;
+    const val = parseInt(amount) || 0;
+    const tax = Math.floor(val * 0.15);
+    const net = val - tax;
+    infoDiv.innerHTML = `
+        <div style="color:#aaa;">Kesilecek Vergi: <span style="color:#ff4444;">${tax.toLocaleString()} 💰</span></div>
+        <div style="color:#aaa;">Cüzdana Gelecek: <span style="color:#00ff88;">${net.toLocaleString()} 💰</span></div>
+    `;
 }
