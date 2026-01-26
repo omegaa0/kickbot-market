@@ -4007,17 +4007,23 @@ async function loadMyBusinesses() {
                     if (i < slotEntries.length) {
                         const [slotId, slot] = slotEntries[i];
                         const product = productData[slot.productCode];
+                        const isOutOfStock = (slot.stock || 0) <= 0;
+                        const slotBg = isOutOfStock ? 'rgba(255,68,68,0.15)' : 'rgba(0,255,136,0.1)';
+                        const slotBorder = isOutOfStock ? 'rgba(255,68,68,0.4)' : 'rgba(0,255,136,0.3)';
+                        const stockColor = isOutOfStock ? '#ff4444' : '#888';
+                        const stockText = isOutOfStock ? '⚠️ Stok Tükendi!' : `⏱️ Stok Tahmini: ${calculateStockFinishTime(calculateSaleTime(biz.type, slot.productCode, slot.price, slot.quality, maintenance, biz.advertising || 0), slot.stock)} biter`;
+                        const stockTextColor = isOutOfStock ? '#ff6666' : 'var(--primary)';
                         slotsHTML += `
-                            <div style="background:rgba(0,255,136,0.1); border:1px solid rgba(0,255,136,0.3); padding:10px; border-radius:8px;">
+                            <div style="background:${slotBg}; border:1px solid ${slotBorder}; padding:10px; border-radius:8px;">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
                                     <div style="font-size:1.2rem;">${product?.icon || '📦'}</div>
                                     <button onclick="removeBusinessSlot('${biz.id}', '${slotId}')" style="background:rgba(255,68,68,0.2); border:none; color:#ff4444; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.7rem;">✕</button>
                                 </div>
                                 <div style="font-size:0.75rem; font-weight:600; margin-bottom:3px;">${product?.name || slot.productCode}</div>
-                                <div style="font-size:0.7rem; color:#888;">Stok: ${slot.stock} • Fiyat: ${slot.price}💰</div>
+                                <div style="font-size:0.7rem; color:${stockColor};">Stok: ${slot.stock} • Fiyat: ${slot.price}💰</div>
                                 <div style="font-size:0.7rem; color:#aaa;">Kalite: %${slot.quality} • Satılan: ${slot.totalSold || 0}</div>
-                                <div style="font-size:0.65rem; color:var(--primary); margin-top:3px; font-weight:700;">
-                                    ⏱️ Stok Tahmini: ${calculateStockFinishTime(calculateSaleTime(biz.type, slot.productCode, slot.price, slot.quality, maintenance, biz.advertising || 0), slot.stock)} biter
+                                <div style="font-size:0.65rem; color:${stockTextColor}; margin-top:3px; font-weight:700;">
+                                    ${stockText}
                                 </div>
                             </div>
                         `;
