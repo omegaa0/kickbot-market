@@ -13527,9 +13527,9 @@ app.post('/api/business/repair', transactionLimiter, async (req, res) => {
             return res.json({ success: false, error: 'Bakım zaten maksimumda!' });
         }
 
-        // Onarım maliyeti: Her %1 için 1000₺
+        // Onarım maliyeti: Her %1 için 250₺
         const repairNeeded = 100 - currentMaintenance;
-        const repairCost = Math.ceil(repairNeeded * 1000);
+        const repairCost = Math.ceil(repairNeeded * 250);
 
         // Kullanıcı bakiyesi kontrolü
         const userSnap = await db.ref(`users/${username}/balance`).once('value');

@@ -5905,7 +5905,7 @@ async function showRepairModal(bizId, currentMaintenance) {
     }
 
     const neededRepair = 100 - Math.floor(currentMaintenance);
-    const repairCost = neededRepair * 1000;
+    const repairCost = neededRepair * 250;
 
     const confirmed = await showConfirmDialog(`
         <div style="text-align:center;">
@@ -5919,7 +5919,7 @@ async function showRepairModal(bizId, currentMaintenance) {
             <div style="background:rgba(255,136,0,0.1); border:1px solid rgba(255,136,0,0.3); padding:15px; border-radius:8px; margin-bottom:15px;">
                 <div style="margin-bottom:8px;">🔧 Gerekli Onarım: <b>%${neededRepair}</b></div>
                 <div style="margin-bottom:8px;">💰 Maliyet: <b>${repairCost.toLocaleString()}💰</b></div>
-                <div style="font-size:0.8rem; color:#888;">(Her %1 = 1,000💰)</div>
+                <div style="font-size:0.8rem; color:#888;">(Her %1 = 250💰)</div>
             </div>
 
             <div style="font-size:0.75rem; color:#aaa;">
