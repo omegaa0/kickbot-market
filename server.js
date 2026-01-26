@@ -7207,8 +7207,47 @@ EK TALİMAT: ${aiInst}`;
                 });
 
                 const replyText = response.data.choices[0].message.content;
-                const finalReply = replyText.length > 400 ? replyText.substring(0, 397) + "..." : replyText;
-                await reply(`🤖 @${user}: ${finalReply}`);
+                const maxLen = 350; // Kick mesaj limiti için güvenli uzunluk
+
+                if (replyText.length <= maxLen) {
+                    // Tek mesajda sığıyor
+                    await reply(`🤖 @${user}: ${replyText}`);
+                } else {
+                    // Mesajı parçalara böl
+                    const parts = [];
+                    let remaining = replyText;
+
+                    while (remaining.length > 0) {
+                        if (remaining.length <= maxLen) {
+                            parts.push(remaining);
+                            break;
+                        }
+
+                        // En yakın cümle sonunu veya boşluğu bul
+                        let cutIndex = remaining.lastIndexOf('. ', maxLen);
+                        if (cutIndex === -1 || cutIndex < maxLen * 0.5) {
+                            cutIndex = remaining.lastIndexOf(' ', maxLen);
+                        }
+                        if (cutIndex === -1 || cutIndex < maxLen * 0.5) {
+                            cutIndex = maxLen;
+                        }
+
+                        parts.push(remaining.substring(0, cutIndex + 1).trim());
+                        remaining = remaining.substring(cutIndex + 1).trim();
+                    }
+
+                    // Maksimum 3 parça gönder
+                    const maxParts = Math.min(parts.length, 3);
+                    for (let i = 0; i < maxParts; i++) {
+                        const partText = parts[i];
+                        if (i === 0) {
+                            await reply(`🤖 @${user}: ${partText}`);
+                        } else {
+                            await new Promise(r => setTimeout(r, 1000)); // Rate limit için bekle
+                            await reply(`🤖 (devam ${i+1}/${maxParts}): ${partText}`);
+                        }
+                    }
+                }
             } catch (error) {
                 console.error("Grok API Error:", error.response?.data || error.message);
                 await reply(`❌ @${user}, AI şu an dinleniyor, daha sonra tekrar dene!`);
