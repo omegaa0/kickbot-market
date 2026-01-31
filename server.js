@@ -12775,7 +12775,7 @@ app.get('/api/marketplace/listings', async (req, res) => {
                     qty = 4000 + (seed % 16001); // 4000-20000 arası stok
                 }
 
-                if (qty <= 0) return; // Stok bittiyse gösterme
+                if (qty <= 0) return; // Stok bittiyse gösterme (forEach içinde return = continue gibi çalışır)
 
                 listings.push({
                     id: stockId,
