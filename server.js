@@ -538,11 +538,30 @@ app.get('/admin', (req, res) => {
     res.status(404).send('Not Found');
 });
 
-// GÖRSELLERİ VE GIFLERİ KÖK DİZİNDEN SERV ET
+// GÖRSELLERİ VE GIFLERİ KÖK DİZİNDEN SERV ET (Path Traversal Korumalı)
 app.get('/:filename', (req, res, next) => {
-    const ext = path.extname(req.params.filename).toLowerCase();
+    const filename = req.params.filename;
+
+    // Path traversal koruması - ../ veya encoded versiyonları engelle
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\') ||
+        filename.includes('%2e') || filename.includes('%2f') || filename.includes('%5c')) {
+        return next();
+    }
+
+    // Sadece basit dosya adlarına izin ver (harf, rakam, tire, alt çizgi, nokta)
+    if (!/^[\w\-\.]+$/.test(filename)) {
+        return next();
+    }
+
+    const ext = path.extname(filename).toLowerCase();
     if (['.gif', '.png', '.jpg', '.jpeg', '.webp', '.ico'].includes(ext)) {
-        const filePath = path.join(__dirname, req.params.filename);
+        const filePath = path.join(__dirname, filename);
+
+        // Dosya yolunun __dirname içinde olduğunu doğrula
+        if (!filePath.startsWith(__dirname)) {
+            return next();
+        }
+
         if (fs.existsSync(filePath)) {
             return res.sendFile(filePath);
         }
@@ -909,9 +928,16 @@ async function initAdminUsers() {
         const adminRef = db.ref('admin_users');
         const snap = await adminRef.once('value');
 
-        // Şifreler artık .env dosyasından okunuyor (düz metin kodda saklanmıyor!)
-        const omegaPass = process.env.ADMIN_PASS_OMEGA || 'change_me_immediately';
-        const arvenPass = process.env.ADMIN_PASS_ARVEN || 'change_me_immediately';
+        // Şifreler Render environment variables'dan okunuyor
+        const omegaPass = process.env.ADMIN_PASS_OMEGA;
+        const arvenPass = process.env.ADMIN_PASS_ARVEN;
+
+        // Güvenlik: Şifreler tanımlı değilse başlatma
+        if (!omegaPass || !arvenPass) {
+            console.warn("⚠️ ADMIN_PASS_OMEGA veya ADMIN_PASS_ARVEN environment variable tanımlı değil!");
+            console.warn("⚠️ Admin kullanıcıları oluşturulamadı. Render Dashboard'dan env vars ekleyin.");
+            return;
+        }
 
         if (!snap.exists()) {
             // İlk kurulumda hash'li şifrelerle oluştur
@@ -5740,7 +5766,7 @@ app.post('/webhook/kick', async (req, res) => {
                                 const v2Data = v2Res.data;
                                 // Takipçi sayısı
                                 currentFollowers = (v2Data.followers_count || v2Data.followersCount ||
-                                                   v2Data.follower_count || 0).toLocaleString();
+                                    v2Data.follower_count || 0).toLocaleString();
 
                                 // Livestream verileri
                                 if (v2Data.livestream) {
@@ -5752,10 +5778,10 @@ app.post('/webhook/kick', async (req, res) => {
                                     finalTitle = ls.session_title || ls.title || ls.stream_title || finalTitle;
                                     // Kategori
                                     finalCategory = ls.categories?.[0]?.name || ls.category?.name ||
-                                                   ls.game_name || ls.category_name || finalCategory;
+                                        ls.game_name || ls.category_name || finalCategory;
                                     // Thumbnail
                                     finalThumbnail = ls.thumbnail?.url || ls.thumbnail?.src || ls.thumbnail_url ||
-                                                    ls.preview_url || (ls.thumbnail && typeof ls.thumbnail === 'string' ? ls.thumbnail : null);
+                                        ls.preview_url || (ls.thumbnail && typeof ls.thumbnail === 'string' ? ls.thumbnail : null);
                                 }
                                 console.log(`[Webhook Status] V2 API başarılı - Takipçi: ${currentFollowers}, İzleyici: ${currentViewers}, Başlık: ${finalTitle}`);
                             }
@@ -7244,7 +7270,7 @@ EK TALİMAT: ${aiInst}`;
                             await reply(`🤖 @${user}: ${partText}`);
                         } else {
                             await new Promise(r => setTimeout(r, 1000)); // Rate limit için bekle
-                            await reply(`🤖 (devam ${i+1}/${maxParts}): ${partText}`);
+                            await reply(`🤖 (devam ${i + 1}/${maxParts}): ${partText}`);
                         }
                     }
                 }
@@ -9055,7 +9081,7 @@ async function trackWatchTime() {
 
                                 // Takipçi sayısı - farklı field isimlerini dene
                                 followerCount = channelData.followers_count || channelData.followersCount ||
-                                               channelData.follower_count || channelData.subscriber_count || 0;
+                                    channelData.follower_count || channelData.subscriber_count || 0;
 
                                 if (channelData.livestream) {
                                     const ls = channelData.livestream;
@@ -9065,19 +9091,19 @@ async function trackWatchTime() {
 
                                     // Kategori/Oyun
                                     streamGame = ls.categories?.[0]?.name ||
-                                                ls.category?.name ||
-                                                ls.game_name ||
-                                                ls.category_name || streamGame;
+                                        ls.category?.name ||
+                                        ls.game_name ||
+                                        ls.category_name || streamGame;
 
                                     // İzleyici sayısı
                                     viewerCount = ls.viewer_count || ls.viewers || ls.viewerCount || 0;
 
                                     // Thumbnail - farklı formatları dene
                                     thumbnailUrl = ls.thumbnail?.url ||
-                                                  ls.thumbnail?.src ||
-                                                  ls.thumbnail_url ||
-                                                  ls.preview_url ||
-                                                  (ls.thumbnail && typeof ls.thumbnail === 'string' ? ls.thumbnail : null);
+                                        ls.thumbnail?.src ||
+                                        ls.thumbnail_url ||
+                                        ls.preview_url ||
+                                        (ls.thumbnail && typeof ls.thumbnail === 'string' ? ls.thumbnail : null);
                                 }
 
                                 // DEBUG: Alınan verileri logla
@@ -9298,7 +9324,7 @@ async function syncSingleChannelStats(chanId, chan) {
 
                         // Thumbnail URL - farklı formatları dene
                         let thumbUrl = ls.thumbnail?.url || ls.thumbnail?.src || ls.thumbnail_url ||
-                                      (ls.thumbnail && typeof ls.thumbnail === 'string' ? ls.thumbnail : null);
+                            (ls.thumbnail && typeof ls.thumbnail === 'string' ? ls.thumbnail : null);
 
                         if (!thumbUrl) {
                             thumbUrl = `https://stream.kick.com/thumbnails/livestream/${username}/thumb.jpg?t=${Date.now()}`;
@@ -12932,7 +12958,9 @@ app.get('/api/marketplace/listings', async (req, res) => {
         if (category && category !== 'all') {
             listings = listings.filter(l => {
                 const prod = PRODUCTS[l.productCode];
-                return prod && prod.category === category;
+                // Eğer ürün PRODUCTS'ta yoksa, kategori filtresi uygulanmaz (kullanıcı ilanları için)
+                if (!prod) return true; // Bilinmeyen ürünleri göster
+                return prod.category === category;
             });
         }
         if (city && city !== 'all') {
@@ -12948,7 +12976,11 @@ app.get('/api/marketplace/listings', async (req, res) => {
             const query = q.toLowerCase();
             listings = listings.filter(l => {
                 const prod = PRODUCTS[l.productCode];
-                return prod && prod.name.toLowerCase().includes(query);
+                // Eğer ürün PRODUCTS'ta yoksa, productCode ile arama yap
+                if (!prod) {
+                    return l.productCode.toLowerCase().includes(query);
+                }
+                return prod.name.toLowerCase().includes(query);
             });
         }
 
