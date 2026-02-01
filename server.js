@@ -12984,11 +12984,27 @@ app.get('/api/marketplace/listings', async (req, res) => {
             });
         }
 
-        // Sıralama (En yeni önce, sistem ürünleri en sonda)
+        // Sıralama (Kullanıcı ilanları önce, sistem ilanları alfabetik)
         listings.sort((a, b) => {
+            // Kullanıcı ilanları her zaman öne
             if (a.isSystem && !b.isSystem) return 1;
             if (!a.isSystem && b.isSystem) return -1;
-            return b.createdAt - a.createdAt;
+
+            // Kullanıcı ilanları arasında: Yeni ilanlar öne
+            if (!a.isSystem && !b.isSystem) {
+                return b.createdAt - a.createdAt;
+            }
+
+            // Sistem ilanları arasında: Alfabetik sıralama (ürün adına göre)
+            if (a.isSystem && b.isSystem) {
+                const prodA = PRODUCTS[a.productCode];
+                const prodB = PRODUCTS[b.productCode];
+                const nameA = prodA?.name || a.productCode;
+                const nameB = prodB?.name || b.productCode;
+                return nameA.localeCompare(nameB, 'tr');
+            }
+
+            return 0;
         });
 
         // Sayfalama
