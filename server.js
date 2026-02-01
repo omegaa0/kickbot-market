@@ -12748,7 +12748,7 @@ app.get('/api/marketplace/listings', async (req, res) => {
         let listings = [];
         for (const [id, listing] of Object.entries(allListings)) {
             if (listing.status === 'active') {
-                listings.push({ id, ...listing });
+                listings.push({ id, ...listing, isSystem: false }); // Kullanıcı ilanı olarak işaretle
             }
         }
 
@@ -13133,9 +13133,18 @@ app.post('/api/marketplace/buy-listing', transactionLimiter, async (req, res) =>
 
         if (listingId.startsWith('system_')) {
             isSystem = true;
-            const parts = listingId.split('_');
-            const code = parts[1];
-            const city = parts[2];
+            // Format: system_PRODUCTCODE_CITY
+            // Ama PRODUCTCODE içinde _ olabilir (örn: kaz_eti)
+            // Bu yüzden son _ 'yi bulup oradan ayırmalıyız
+            const withoutPrefix = listingId.substring(7); // "system_" kısmını kaldır
+            const lastUnderscoreIndex = withoutPrefix.lastIndexOf('_');
+
+            if (lastUnderscoreIndex === -1) {
+                return res.json({ success: false, error: 'Geçersiz sistem ilan ID!' });
+            }
+
+            const code = withoutPrefix.substring(0, lastUnderscoreIndex);
+            const city = withoutPrefix.substring(lastUnderscoreIndex + 1);
 
             const product = PRODUCTS[code];
             if (!product) return res.json({ success: false, error: 'Ürün bulunamadı!' });
